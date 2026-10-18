@@ -30,6 +30,13 @@
       preview: "sidebar",
     },
     {
+      pref: "spaces",
+      default: false,
+      label: "Spaces",
+      description: "Separate sets of tabs, switched from the bar under the sidebar. Pinned tabs show in every space.",
+      preview: "spaces",
+    },
+    {
       pref: "floating-urlbar",
       default: true,
       label: "Floating address bar",
@@ -134,6 +141,23 @@
             "div",
             { class: "fz-mock-body" },
             h("div", { class: "fz-mock-side" }, h("span"), h("span"), h("span")),
+            h("div", { class: "fz-mock-page" })
+          )
+        );
+        break;
+      case "spaces":
+        mock.append(
+          h(
+            "div",
+            { class: "fz-mock-body" },
+            h(
+              "div",
+              { class: "fz-mock-side fz-mock-spaces-side" },
+              h("span"),
+              h("span"),
+              h("span"),
+              h("div", { class: "fz-mock-spaces-bar" }, h("i"), h("i"), h("i"))
+            ),
             h("div", { class: "fz-mock-page" })
           )
         );

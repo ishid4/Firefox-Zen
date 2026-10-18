@@ -1,0 +1,123 @@
+/* Spaces (built by JS/firefox-zen-spaces.uc.js). On with firefox-zen.spaces */
+
+/* #vertical-tabs is a XUL <box> (a row), which put the bar beside the tab
+ * list. Stack it under the tabs instead; the tab list keeps the rest. */
+#vertical-tabs:has(> #tabbrowser-tabs[expanded]):has(> #fz-spaces-bar:not([hidden])) {
+  flex-direction: column !important;
+
+  & > #tabbrowser-tabs {
+    flex: 1 !important;
+    min-height: 0 !important;
+    width: auto !important;
+  }
+}
+
+#fz-spaces-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: none;
+  padding: 8px var(--tab-margin-inline-inner, 6px) 6px;
+  border-top: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+  color: var(--toolbox-text-color, inherit);
+  font: menu;
+
+  &[hidden] {
+    display: none;
+  }
+}
+
+.fz-space-name {
+  padding-inline: 4px;
+  font-weight: 600;
+  font-size: 0.9em;
+  opacity: 0.75;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fz-space-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.fz-space {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font-size: 15px;
+  line-height: 1;
+  opacity: 0.6;
+  transition: background-color 0.15s ease, opacity 0.15s ease;
+
+  &:hover {
+    background: var(--toolbarbutton-hover-background, color-mix(in srgb, currentColor 10%, transparent));
+    opacity: 1;
+  }
+
+  &[aria-pressed="true"] {
+    background: var(--toolbarbutton-active-background, color-mix(in srgb, currentColor 16%, transparent));
+    opacity: 1;
+  }
+
+  &:focus-visible {
+    outline: var(--focus-outline, 2px solid AccentColor);
+    outline-offset: 1px;
+  }
+}
+
+.fz-space-add {
+  font-size: 18px;
+}
+
+/* Collapsed sidebar: no space bar (and keep the tab list's native layout) */
+#vertical-tabs:has(> #tabbrowser-tabs:not([expanded])) {
+  & > #fz-spaces-bar {
+    display: none;
+  }
+}
+
+/* Inline rename (double-click the space name) */
+.fz-space-name-input {
+  appearance: none;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 2px 4px;
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-radius: 6px;
+  background: var(--toolbar-field-background-color, transparent);
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.9em;
+
+  &:focus-visible {
+    outline: var(--focus-outline, 2px solid AccentColor);
+    outline-offset: 0;
+  }
+}
+
+.fz-space-name {
+  cursor: text;
+}
+
+/* A tab group whose tabs are all in other spaces would otherwise leave an
+ * empty group label behind */
+@media -moz-pref("firefox-zen.spaces") {
+  tab-group:not(:has(.tabbrowser-tab:not([hidden]))) {
+    display: none !important;
+  }
+}
