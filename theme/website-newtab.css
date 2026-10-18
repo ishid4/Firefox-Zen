@@ -47,14 +47,6 @@ url-prefix("about:home") {
 }
 
 @-moz-document url(about:newtab), url(about:home){
-  .logo-and-wordmark > .logo{
-   background-image: url("icons/arc.svg") !important;
-   scale: 1.5;
-  }
-  .logo-and-wordmark > .wordmark{
-    visibility: collapse !important;
-  }
-
   /* Custom GTK colours. */
   @media (-moz-gtk-csd-available) {
     :root:not([lwt-newtab]):not([style*="color"]) {

@@ -99,6 +99,37 @@ toolbar .toolbarbutton-1 {
   display: none !important;
 }
 
+/* Compact mode: hide the navbar until the toolbox is hovered.
+ * Expands instantly; collapses only after a short delay, so brief hover gaps
+ * (tooltips, gaps between buttons, window controls) don't make it flicker.
+ * Stays open while the URL bar, a toolbar menu or a panel is open.
+ * On with firefox-zen.compact-mode */
+@media -moz-pref("firefox-zen.compact-mode") {
+  #navigator-toolbox {
+    background: var(--lwt-accent-color) !important;
+  }
+
+  #nav-bar:not([customizing]) {
+    /* Numeric so the collapse below can be delayed (none can't transition) */
+    max-height: 100px;
+    transition: max-height 0s, opacity 0.15s ease !important;
+  }
+
+  #navigator-toolbox:not(
+      :hover,
+      :focus-within,
+      :has([open], #urlbar:is([focused], [popover-open]))
+    )
+    #nav-bar:not([customizing]) {
+    max-height: 8px !important;
+    min-height: 0 !important;
+    overflow: clip !important;
+    opacity: 0 !important;
+    transition: max-height 0s linear 0.35s, opacity 0.15s ease 0.2s !important;
+  }
+}
+
+
 
 
 
@@ -120,20 +151,6 @@ toolbar .toolbarbutton-1 {
   outline: none !important;
 }
 
-/* Adjust vertical tabs margins (regular tabs, expanded sidebar only).
- * Firefox marks the expanded state with [expanded]; there is no [collapsed]. */
-#tabbrowser-tabs[orient="vertical"][expanded] {
-  & .tabbrowser-tab:not([pinned]) {
-    padding-block: 3px !important;
-
-    & .tab-background {
-      margin-inline: calc(var(--tab-inner-inline-margin) - 2px) !important;
-      margin-block: calc(var(--tab-block-margin) - 2px) !important;
-      min-height: calc(var(--tab-min-height) + 3px) !important;
-    }
-  }
-}
-
 /* Expand-on-hover lists pinned tabs as full rows (1fr), but the container
  * keeps the splitter's saved inline height (one icon row), so it scrolls.
  * Let it fit its content instead. */
@@ -144,30 +161,10 @@ toolbar .toolbarbutton-1 {
   }
 }
 
-/* Pinned tabs keep Firefox's native row height, otherwise the pinned
- * container overflows and shows a scrollbar */
-#pinned-tabs-container {
-  #tabbrowser-tabs[expanded] > & {
-    padding-inline: calc(
-      var(--tab-pinned-container-margin-inline-expanded) - 1px
-    ) !important;
-  }
-}
-#pinned-tabs-container {
-  #tabbrowser-tabs[expanded] > & {
-    & .tab-background {
-      margin-inline: calc(var(--space-xsmall) * 1.1) !important;
-    }
-  }
-}
-
-/* Add top padding to pinned tabs in fullscreen mode */
-#main-window[inFullscreen="true"] {
-  #pinned-tabs-container {
-    #tabbrowser-tabs[expanded] > & {
-      padding-block-start: 8px;
-    }
-  }
+/* Add top padding to pinned tabs in fullscreen mode (both sidebar states,
+ * so tabs don't shift when the sidebar expands on hover) */
+#main-window[inFullscreen="true"] #pinned-tabs-container {
+  padding-block-start: 8px;
 }
 
 /* Hide the collapsed sidebar when it's not hovered */
@@ -183,15 +180,8 @@ toolbar .toolbarbutton-1 {
     &:hover {
       width: initial !important;
       opacity: 1 !important;
-      padding-block-start: 6px !important;
-      margin-block-start: -4px !important;
       box-shadow: var(--content-area-shadow) !important;
       border-radius: var(--border-radius-medium) !important;
-      #vertical-tabs {
-        padding-block-start: 3px !important;
-        margin-block-start: -3px !important;
-        border: 2px var(--lwt-text-color) !important;
-      }
     }
     #sidebar-box {
       padding-inline-end: 8px !important;
@@ -279,7 +269,6 @@ toolbar .toolbarbutton-1 {
   #identity-box,
   #tracking-protection-icon-container,
   #page-action-buttons,
-  #urlbar-searchmode-switcher,
   #urlbar-revert-button-container,
   #translations-button,
   #reader-mode-button {
@@ -288,8 +277,7 @@ toolbar .toolbarbutton-1 {
 }
 
 /* Remove bookmark button in URL bar */
-#star-button-box,
-#searchmode-switcher-dropmarker {
+#star-button-box {
   display: none !important;
 }
 
@@ -301,38 +289,13 @@ toolbar .toolbarbutton-1 {
   )
   > .identity-box-button,
 #urlbar-label-box,
-#urlbar-background {
+#urlbar > .urlbar-background {
   background-color: transparent !important;
 }
 
-/* Adjust styling for search mode switcher when URL bar is not expanded  */
-@media -moz-pref("browser.urlbar.searchModeSwitcher.featureGate") or -moz-pref("browser.urlbar.scotchBonnet.enableOverride") {
-  @media not -moz-pref("browser.urlbar.unifiedSearchButton.always") {
-    #urlbar-searchmode-switcher {
-      background-color: transparent !important;
-      transition: 0.2s ease !important;
-    }
-    #urlbar-searchmode-switcher:hover {
-      background-color: var(--urlbar-box-bgcolor) !important;
-    }
-    #searchmode-switcher-chicklet {
-      padding-inline-start: calc(
-        var(--urlbar-searchmodeswitcher-margin-inline-end) + 3px
-      );
-      border-radius: 10px !important;
-      font-size: 80% !important;
-      height: 80% !important;
-      margin-block-start: calc(
-        var(--urlbar-searchmodeswitcher-margin-inline-end) / 2
-      );
-    }
-  }
-}
-
 /* Set rounder border radius for URL bar and the search switcher button */
-#urlbar-background,
+#urlbar > .urlbar-background,
 #searchbar,
-#urlbar-searchmode-switcher,
 #urlbar-revert-button-container,
 #notification-popup-box,
 .identity-box-button,
@@ -346,7 +309,7 @@ toolbar .toolbarbutton-1 {
 /* Reorder tracking protection + page action buttons */
 /* Center the URL text and when it is not expanded */
 #urlbar {
-  &:not([breakout][breakout-extend]) {
+  &:not([popover-open], [focused]) {
     .sharing-icon,
     #identity-icon,
     #tracking-protection-icon,
@@ -365,11 +328,10 @@ toolbar .toolbarbutton-1 {
     /* Hide all icons inside it except site security & addons page action buttons when it is not expanded */
     #star-button-box,
     #urlbar-zoom-button,
-    #shopping-sidebar-button,
     #picture-in-picture-button {
       display: none !important;
     }
-    #urlbar-background,
+    & > .urlbar-background,
     #searchbar {
       border: none !important;
     }
@@ -385,94 +347,102 @@ toolbar .toolbarbutton-1 {
   }
 }
 
-/* URL bar stylings when it is popped up */
-#urlbar:is([breakout][breakout-extend], [breakout][usertyping][focused]) {
-  /* Move its position to center of the screen */
-  top: 30% !important;
-  left: 20% !important;
-  right: 20% !important;
-  width: 60% !important;
-
-  /* Adjust padding inside the URL bar background */
-  padding-block-start: 8px !important;
-  padding-block-end: 9px !important;
-  padding-inline: 6px !important;
-  --urlbar-height: 35px !important;
-
-  /* Tweaks for current URL text */
-  #urlbar-input {
-    font-size: 20px !important;
-    margin-left: 3px !important;
-    padding-right: 6px !important;
+/* Floating (centered) URL bar, Arc command bar style.
+ * Firefox 158: <moz-urlbar id="urlbar"> gets [focused] / [popover-open]; the
+ * results list (.urlbarView) is a top-layer popover anchored to
+ * .urlbar-input-container (anchor-name: --urlbar-anchor).
+ * JS/firefox-zen-floating-urlbar.uc.js shows the input container as a manual
+ * popover while active, putting it in the top layer too; the results follow it.
+ * On by default; off with firefox-zen.floating-urlbar = false */
+@media -moz-pref("firefox-zen.floating-urlbar") {
+  #urlbar {
+    --fz-urlbar-top: 22vh;
+    --fz-urlbar-width: min(680px, 70vw);
+    --fz-urlbar-height: 48px;
   }
 
-  /* Move separator below the current URL a bit */
-  .urlbarView-body-inner {
-    margin-top: 6px !important;
+  #urlbar > .urlbar-input-container:popover-open {
+    /* Undo the UA [popover] defaults */
+    inset: auto;
+    height: auto;
+    border: none;
+    color: inherit;
+    overflow: clip;
+
+    position: fixed !important;
+    inset-block-start: var(--fz-urlbar-top) !important;
+    inset-inline-start: 50% !important;
+    translate: -50% 0;
+    width: var(--fz-urlbar-width) !important;
+    height: var(--fz-urlbar-height) !important;
+    margin: 0 !important;
+    padding-block: 6px !important;
+    padding-inline: 10px !important;
+    border-radius: 12px !important;
+    outline: none !important;
+    background-color: var(--urlbar-background-color-focus, var(--toolbar-field-focus-background-color)) !important;
+    box-shadow: 0 16px 48px rgb(0 0 0 / 0.35), 0 0 0 1px color-mix(in srgb, currentColor 12%, transparent) !important;
   }
 
-  /* Then, move the search/history results below the separator */
-  .urlbarView-results {
-    padding-top: 9px !important;
+  /* Results list: Firefox anchors it to the input container, but the anchor
+   * enters the top layer after the list, so the anchor is ignored. Place it
+   * with the same geometry instead. */
+  #urlbar:has(> .urlbar-input-container:popover-open) > .urlbarView:popover-open {
+    position-area: none !important;
+    position-anchor: none !important;
+    justify-self: auto !important;
+    inset: auto !important;
+    inset-block-start: calc(var(--fz-urlbar-top) + var(--fz-urlbar-height)) !important;
+    inset-inline-start: 50% !important;
+    translate: -50% 0;
+    width: var(--fz-urlbar-width) !important;
+    max-height: calc(100vh - var(--fz-urlbar-top) - var(--fz-urlbar-height) - 24px) !important;
+    margin: 0 !important;
   }
 
-  /* Increase border radius of the URL float panel, and set distinguishable background-color */
-  #urlbar-background {
-    background-color: var(--lwt-accent-color) !important;
-    border-radius: 10px !important;
+  /* Join the input with the results list below it */
+  #urlbar[popover-open] > .urlbar-input-container:popover-open {
+    border-end-start-radius: 0 !important;
+    border-end-end-radius: 0 !important;
   }
 
-  /* Reveal the search switcher & address bar revert button */
-  #urlbar-searchmode-switcher,
-  #urlbar-revert-button-container {
-    opacity: 1 !important;
-    background-color: var(--toolbarbutton-hover-background) !important;
-  }
+  #urlbar:is([popover-open], [focused]) {
+    /* Keep the toolbar slot from collapsing while the input floats */
+    min-height: var(--urlbar-height);
 
-  /* Reveal other icons */
-  #identity-box,
-  #tracking-protection-icon-container,
-  #page-action-buttons,
-  #translations-button,
-  #reader-mode-button {
-    opacity: 1 !important;
-  }
+    /* The in-toolbar background would otherwise draw a ghost box */
+    & > .urlbar-background {
+      opacity: 0 !important;
+    }
 
-  /* Scale up again all buttons inside URL bar when popping up */
-  #star-button-box,
-  #tracking-protection-icon-container,
-  #reader-mode-button,
-  #page-action-buttons,
-  #identity-box,
-  #urlbar-zoom-button,
-  #shopping-sidebar-button,
-  #translations-button,
-  #picture-in-picture-button {
-    scale: 1 !important;
-  }
+    /* Larger URL text */
+    #urlbar-input {
+      font-size: 18px !important;
+    }
 
-  /* Add paddings to search engine switcher chicklet */
-  #searchmode-switcher-chicklet {
-    background-color: var(--lwt-accent-color) !important;
-    padding-inline-start: var(--urlbar-searchmodeswitcher-margin-inline-end);
-    margin-inline-start: calc(
-      var(--urlbar-searchmodeswitcher-margin-inline-end) / 1.25
-    );
-    margin-inline-end: var(--urlbar-searchmodeswitcher-margin-inline-end);
-    border-radius: 10px !important;
-    height: 105% !important;
-  }
+    /* Reveal and restore the icons hidden in the compact toolbar state */
+    #identity-box,
+    #tracking-protection-icon-container,
+    #page-action-buttons,
+    #urlbar-revert-button-container,
+    #translations-button,
+    #reader-mode-button,
+    #star-button-box,
+    #urlbar-zoom-button,
+    #picture-in-picture-button {
+      opacity: 1 !important;
+      scale: 1 !important;
+    }
 
-  /* Adjust position of search entry categories */
-  .urlbarView-row[label] {
-    &::before {
+    /* Adjust position of search entry categories */
+    .urlbarView-row[label]::before {
       top: calc(var(--urlbarView-labeled-row-label-top) - 2px) !important;
     }
   }
 }
 
 /* Change focus outline colors from blue to --toolbar-bgcolor for more cohesive look */
-#urlbar[focused]:not([suppress-focus-border]) > #urlbar-background,
+#urlbar[focused]:not([suppress-focus-border]) > .urlbar-background,
 #searchbar:focus-within {
   outline-color: color-mix(
     in srgb,

@@ -1,0 +1,317 @@
+/* Firefox-Zen settings panel (built by JS/firefox-zen-settings.uc.js) */
+
+#firefox-zen-settings-button {
+  list-style-image: url("icons/customize.svg") !important;
+}
+
+#firefox-zen-settings-panel {
+  --fz-accent: var(--color-accent-primary, AccentColor);
+  --fz-muted: var(--text-color-deemphasized, color-mix(in srgb, currentColor 65%, transparent));
+  --fz-surface: color-mix(in srgb, currentColor 6%, transparent);
+  --fz-surface-hover: color-mix(in srgb, currentColor 10%, transparent);
+  --fz-line: color-mix(in srgb, currentColor 14%, transparent);
+  --fz-radius: 10px;
+}
+
+.fz-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 440px;
+  padding: 14px;
+  font: menu;
+}
+
+.fz-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+
+  & h2 {
+    margin: 0;
+    font-size: 1.15em;
+    font-weight: 600;
+  }
+}
+
+.fz-subtitle,
+.fz-hint,
+.fz-card-desc {
+  color: var(--fz-muted);
+  font-size: 0.9em;
+}
+
+.fz-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.fz-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border-radius: var(--fz-radius);
+  background: var(--fz-surface);
+  outline: 1px solid transparent;
+  transition: background-color 0.15s ease, outline-color 0.15s ease;
+
+  &:hover {
+    background: var(--fz-surface-hover);
+  }
+
+  &[data-on] {
+    outline-color: color-mix(in srgb, var(--fz-accent) 55%, transparent);
+  }
+
+  &:focus-within {
+    outline: var(--focus-outline, 2px solid var(--fz-accent));
+  }
+}
+
+.fz-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.fz-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.fz-card-title {
+  font-weight: 600;
+}
+
+.fz-card-desc {
+  margin: 0;
+  line-height: 1.3;
+}
+
+/* ---- Switch ---- */
+.fz-switch {
+  appearance: none;
+  flex: none;
+  position: relative;
+  width: 30px;
+  height: 16px;
+  margin: 0;
+  border-radius: 8px;
+  background: var(--fz-line);
+  transition: background-color 0.15s ease;
+
+  &::before {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--arrowpanel-background, Canvas);
+    transition: translate 0.15s ease;
+  }
+
+  &:checked {
+    background: var(--fz-accent);
+
+    &::before {
+      translate: 14px 0;
+    }
+  }
+
+  &:focus-visible {
+    outline: none;
+  }
+}
+
+.fz-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.fz-reset {
+  appearance: none;
+  padding: 4px 10px;
+  border: 1px solid var(--fz-line);
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+
+  &:hover {
+    background: var(--fz-surface-hover);
+  }
+
+  &:focus-visible {
+    outline: var(--focus-outline, 2px solid var(--fz-accent));
+  }
+}
+
+/* ---- Preview mockups ---- */
+.fz-mock {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 78px;
+  overflow: hidden;
+  border-radius: 7px;
+  border: 1px solid var(--fz-line);
+  background: var(--toolbar-bgcolor, var(--fz-surface));
+}
+
+.fz-mock-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 16px;
+  flex: none;
+  transition: height 0.2s ease, opacity 0.2s ease;
+}
+
+.fz-mock-urlbar {
+  width: 55%;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--fz-line);
+}
+
+.fz-mock-page {
+  flex: 1;
+  margin: 0 4px 4px;
+  border-radius: 4px;
+  background: var(--fz-surface-hover);
+}
+
+/* Compact: toolbar collapses to a sliver */
+.fz-card[data-on] .fz-preview-compact .fz-mock-toolbar {
+  height: 4px;
+  opacity: 0;
+}
+
+/* Floating urlbar: centered command bar over the page */
+.fz-mock-float {
+  position: absolute;
+  inset: 26px 18% auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 4px;
+  border-radius: 5px;
+  background: var(--arrowpanel-background, Canvas);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.25);
+  opacity: 0;
+  translate: 0 4px;
+  transition: opacity 0.2s ease, translate 0.2s ease;
+
+  & > div {
+    height: 4px;
+    border-radius: 2px;
+    background: var(--fz-line);
+
+    &:first-child {
+      height: 7px;
+      background: color-mix(in srgb, var(--fz-accent) 35%, transparent);
+    }
+  }
+}
+
+.fz-card[data-on] .fz-mock-float {
+  opacity: 1;
+  translate: 0 0;
+}
+
+/* Rows used by folder + menu previews */
+.fz-preview-folders,
+.fz-preview-menu {
+  justify-content: center;
+  gap: 5px;
+  padding: 6px 10px;
+}
+
+.fz-mock-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fz-mock-icon {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  background: center / contain no-repeat;
+  -moz-context-properties: fill;
+  fill: currentColor;
+  transition: opacity 0.2s ease, width 0.2s ease;
+}
+
+.fz-mock-line {
+  height: 5px;
+  flex: 1;
+  border-radius: 3px;
+  background: var(--fz-line);
+}
+
+.fz-mock-row:nth-child(2) .fz-mock-line { flex: 0.7; }
+.fz-mock-row:nth-child(3) .fz-mock-line { flex: 0.85; }
+.fz-mock-row:nth-child(4) .fz-mock-line { flex: 0.6; }
+
+/* Folders: default Firefox shows a plain colored dot */
+.fz-preview-folders .fz-mock-icon {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-inline: 2px;
+  background-color: var(--tab-group-color-blue, #0069cc);
+}
+.fz-preview-folders .fz-mock-row:nth-child(2) .fz-mock-icon {
+  background-color: var(--tab-group-color-green, #2ac3a2);
+}
+.fz-preview-folders .fz-mock-row:nth-child(3) .fz-mock-icon {
+  background-color: var(--tab-group-color-purple, #9059ff);
+}
+
+.fz-card[data-on] .fz-preview-folders {
+  & .fz-mock-icon {
+    width: 13px;
+    height: 13px;
+    border-radius: 0;
+    margin-inline: 0;
+    background-color: transparent;
+    background-image: url("icons/folder/folder-closed-blue.svg");
+  }
+  & .fz-mock-row:nth-child(2) .fz-mock-icon {
+    background-image: url("icons/folder/folder-closed-green.svg");
+  }
+  & .fz-mock-row:nth-child(3) .fz-mock-icon {
+    background-image: url("icons/folder/folder-open-purple.svg");
+  }
+}
+
+/* Menu: icons fade in */
+.fz-preview-menu {
+  background: var(--arrowpanel-background, Canvas);
+  & .fz-mock-icon {
+    opacity: 0;
+  }
+  & .fz-mock-row:nth-child(1) .fz-mock-icon { background-image: url("icons/back.svg"); }
+  & .fz-mock-row:nth-child(2) .fz-mock-icon { background-image: url("icons/reload.svg"); }
+  & .fz-mock-row:nth-child(3) .fz-mock-icon { background-image: url("icons/save.svg"); }
+  & .fz-mock-row:nth-child(4) .fz-mock-icon { background-image: url("icons/inspect.svg"); }
+}
+
+.fz-card[data-on] .fz-preview-menu .fz-mock-icon {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #firefox-zen-settings-panel * {
+    transition: none !important;
+  }
+}

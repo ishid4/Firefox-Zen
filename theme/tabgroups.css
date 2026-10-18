@@ -64,7 +64,6 @@ tab-group[style*="--tab-group-color: var(--tab-group-yellow)"] {
 
 /* Folder stylings */
 
-/* Tweaks for EXPANDED FF sidebar */
 tab-group {
   & .tab-group-label-container {
     & label {
@@ -73,14 +72,7 @@ tab-group {
       color: var(--lwt-text-color) !important;
     }
 
-    /* Add EXPANDED tab folder icon from Arc */
-    & label::before {
-      content: var(--folder-icon-open) !important;
-    }
-  }
-
-  /* Add colors to tab group label background when hovered */
-  & .tab-group-label-container {
+    /* Add colors to tab group label background when hovered */
     & label:hover {
       background: color-mix(
         in srgb,
@@ -96,56 +88,87 @@ tab-group {
   }
 }
 
-/* Add COLLAPSED tab folder icon from Arc */
-tab-group[collapsed] {
-  & .tab-group-label-container {
-    & label::before {
-      content: var(--folder-icon-closed) !important;
-    }
+/* Arc folder icons. On with firefox-zen.show-folder-icons */
+@media -moz-pref("firefox-zen.show-folder-icons") {
+  /* Horizontal tabs: icon inline before the label text */
+  tab-group .tab-group-label-container label::before {
+    content: var(--folder-icon-open) !important;
   }
-}
 
-/* EXPANDED FF Sidebar */
-sidebar-main:has([expanded]) {
-  tab-group {
+  tab-group[collapsed] .tab-group-label-container label::before {
+    content: var(--folder-icon-closed) !important;
+  }
+
+  /* Vertical tabs: draw the icon on the label container at the collapsed tab
+   * column's fixed offset, in BOTH sidebar states. The label chip is smaller
+   * than the icon (it would clip it), and a fixed offset keeps the icon still
+   * while the sidebar animates between collapsed and expanded. */
+  #tabbrowser-tabs[orient="vertical"] tab-group {
+    --fz-folder-column-center: calc(var(--tab-margin-inline-inner) + var(--tab-collapsed-background-width) / 2);
+
+    /* Expanded, Firefox indents the label container by --space-medium (for the
+     * group line); measure from the same column as the collapsed state */
+    #tabbrowser-tabs[expanded] & {
+      --fz-folder-column-center: calc(var(--tab-margin-inline-inner) + var(--tab-collapsed-background-width) / 2 - var(--space-medium));
+    }
+
     & .tab-group-label-container {
-      & label {
-        position: relative !important;
-        padding-left: 38px !important;
-        padding-right: 10px !important;
-        transition: 0.3s ease !important;
-      }
+      background-image: var(--folder-icon-open) !important;
+      background-position: calc(var(--fz-folder-column-center) - 10px) center !important;
+      background-repeat: no-repeat !important;
+      background-size: 20px auto !important;
 
       & label::before {
-        position: absolute !important;
-        margin-left: 4px !important;
-        left: 0px !important;
-        width: 23px !important;
-        height: 23px !important;
+        content: none !important;
       }
+    }
+
+    &[collapsed] .tab-group-label-container {
+      background-image: var(--folder-icon-closed) !important;
+      background-position: calc(var(--fz-folder-column-center) - 9px) center !important;
+      background-size: 18px auto !important;
+    }
+  }
+
+  /* Expanded: start the label text just after the icon */
+  #tabbrowser-tabs[orient="vertical"][expanded] tab-group .tab-group-label-container {
+    padding-inline-start: 0 !important;
+
+    & .tab-group-label-hover-highlight {
+      margin-inline-start: calc(var(--fz-folder-column-center) + 16px) !important;
+    }
+
+    & label {
+      padding-inline: 6px 10px !important;
+    }
+  }
+
+  /* Collapsed: only the icon; the label stays as an invisible click/focus
+   * target, and its hover fill would cover the icon (the group tints on hover
+   * instead, rule below) */
+  #tabbrowser-tabs[orient="vertical"]:not([expanded]) tab-group {
+    & .tab-group-label-hover-highlight {
+      background-color: transparent !important;
+      box-shadow: none !important;
+    }
+
+    & .tab-group-label-container label {
+      color: transparent !important;
+      background: transparent !important;
     }
   }
 }
 
-/* COLLAPSED FF sidebar */
-sidebar-main:not([expanded]) {
-  /* Adjust paddings, margins, add ease transitions */
-  tab-group {
-    padding-block: calc(var(--tab-inline-padding) / 2) !important;
-    margin-block: 0 !important;
-    transition: 0.3s ease !important;
-  }
-
-  /* Add colors to tab group label background when hovered */
-  tab-group:hover {
-    background: color-mix(
-      in srgb,
-      light-dark(var(--tab-group-color), var(--tab-group-color-invert)) 20%,
-      transparent
-    ) !important;
-    color: light-dark(
-      var(--tab-group-color),
-      var(--tab-group-color-invert)
-    ) !important;
-  }
+/* Collapsed sidebar: tint the whole group on hover. Spacing is left native so
+ * groups don't shift when the sidebar expands on hover. */
+#tabbrowser-tabs[orient="vertical"]:not([expanded]) tab-group:hover {
+  background: color-mix(
+    in srgb,
+    light-dark(var(--tab-group-color), var(--tab-group-color-invert)) 20%,
+    transparent
+  ) !important;
+  color: light-dark(
+    var(--tab-group-color),
+    var(--tab-group-color-invert)
+  ) !important;
 }
