@@ -22,10 +22,7 @@
   .toolbarbutton-icon {
   list-style-image: url(./icons/sidebars-right.svg);
 }
-:is(
-    .webextension-browser-action,
-    .eom-addon-button
-  )[data-extensionid="{3c078156-979c-498b-8990-85f7987dd929}"]
+"]
   .toolbarbutton-icon {
   list-style-image: url(./icons/sidebars.svg);
 }
@@ -105,41 +102,9 @@ toolbar .toolbarbutton-1 {
 
 
 
-/* Compact Mode - hide navbar when not hovered */
-@media -moz-pref("uc.tweak.compactmode") {
-  #navigator-toolbox,
-  #nav-bar,
-  #urlbar {
-    transition: min-height 0.2s ease !important;
-  }
-
-  #navigator-toolbox {
-    background: var(--lwt-accent-color) !important;
-  }
-
-  #navigator-toolbox:not(:hover) {
-    #nav-bar:not([customizing]),
-    #urlbar:not([breakout][breakout-extend], [breakout][usertyping][focused]) {
-      opacity: 0 !important;
-      height: 0 !important;
-      min-height: 8px !important;
-    }
-  }
-}
-
 /* sidebar.css ============================================= */
 
 /* [TAB SIDEBAR ZONE] */
-/* Move new tab button above regular tabs */
-@media -moz-pref("uc.tweak.top-newtab-button") {
-  #pinned-tabs-container {
-    order: -2 !important;
-  }
-  #vertical-tabs-newtab-button {
-    order: -1 !important;
-  }
-}
-
 /* Better indicator of unloaded tabs */
 .tabbrowser-tab[pending="true"] {
   .tab-icon-stack {
@@ -228,9 +193,7 @@ toolbar .toolbarbutton-1 {
         border: 2px var(--lwt-text-color) !important;
       }
     }
-    #sidebar-box:not(
-        [sidebarcommand="_3c078156-979c-498b-8990-85f7987dd929_-sidebar-action"]
-      ) {
+    #sidebar-box {
       padding-inline-end: 8px !important;
     }
   }
@@ -277,71 +240,6 @@ toolbar .toolbarbutton-1 {
   #sidebar {
     @media -moz-pref("sidebar.revamp") {
       border-radius: 0px !important;
-    }
-  }
-}
-
-/* Hide the tabs toolbar if Sidebery is active */
-:root:not([customizing]):has(
-    #sidebar-box[sidebarcommand="_3c078156-979c-498b-8990-85f7987dd929_-sidebar-action"]:not(
-        [hidden]
-      )
-  ) {
-  #sidebar {
-    @media -moz-pref("sidebar.revamp") {
-      outline: 0 !important;
-      border: 0 !important;
-      box-shadow: none !important;
-      @media -moz-pref("sidebar.position_start") {
-        padding-inline-start: 9px !important;
-      }
-      @media not -moz-pref("sidebar.position_start") {
-        padding-inline-end: 9px !important;
-      }
-      background-color: var(--lwt-accent-color) !important;
-    }
-  }
-  #sidebar-main {
-    visibility: collapse;
-  }
-}
-
-/* By default, when enabling 'Sidebar expand on hover', if tab sidebar is pinned, other sidebars would be moved to right side.
-/* With this code, if Sidebery + 'Sidebar expand on hover' is enabled, Sidebery will be moved to left side when pinned */
-@media -moz-pref("sidebar.visibility","expand-on-hover") {
-  @media -moz-pref("sidebar.position_start") {
-    #sidebar-box[sidebarcommand="_3c078156-979c-498b-8990-85f7987dd929_-sidebar-action"] {
-      order: -1 !important;
-    }
-  }
-  :root:not([customizing]):has(
-      #sidebar-box[sidebarcommand="_3c078156-979c-498b-8990-85f7987dd929_-sidebar-action"]:not(
-          [hidden]
-        )
-    ) {
-    #sidebar {
-      @media -moz-pref("sidebar.revamp") {
-        background-color: var(--lwt-accent-color) !important;
-        outline: 0 !important;
-        border: 0 !important;
-        box-shadow: none !important;
-        @media -moz-pref("sidebar.position_start") {
-          padding-inline-end: 7px !important;
-        }
-        @media not -moz-pref("sidebar.position_start") {
-          padding-inline-start: 0px !important;
-        }
-      }
-    }
-    #sidebar-box {
-      @media -moz-pref("sidebar.revamp") {
-        @media -moz-pref("sidebar.position_start") {
-          padding-inline-end: 0px !important;
-        }
-        @media not -moz-pref("sidebar.position_start") {
-          padding-inline-start: 0px !important;
-        }
-      }
     }
   }
 }
@@ -569,15 +467,6 @@ toolbar .toolbarbutton-1 {
   .urlbarView-row[label] {
     &::before {
       top: calc(var(--urlbarView-labeled-row-label-top) - 2px) !important;
-    }
-  }
-}
-
-/* Add tweak to use different popup URL bar color. Less compatible with image/animated FF themes */
-@media -moz-pref("uc.tweak.alt-urlbar-color") {
-  #urlbar:is([breakout][breakout-extend], [breakout][usertyping][focused]) {
-    #urlbar-background {
-      background-color: var(--toolbar-bgcolor) !important;
     }
   }
 }

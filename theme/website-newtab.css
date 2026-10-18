@@ -44,6 +44,7 @@ url-prefix("about:home") {
     --newtab-wordmark-color: #fff !important;
     --newtab-status-success: #50B080 !important;
   }
+}
 
 @-moz-document url(about:newtab), url(about:home){
   .logo-and-wordmark > .logo{
@@ -195,15 +196,6 @@ url-prefix("about:home") {
     padding: 30px !important;
   }
 
-  @media -moz-pref("uc.tweak.hide-newtab-logo") {
-    .logo-and-wordmark {
-      display: none !important;
-    }
-
-    .outer-wrapper:not(.fixed-search) .search-wrapper {
-      padding-top: 0 !important;
-    }
-  }
 }
 
 /* private browsing newtab */
@@ -287,5 +279,4 @@ url-prefix("about:home") {
     background: center / contain url("icons/account-private.svg");
     border-radius: 99px;
   }
-}
 }
