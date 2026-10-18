@@ -65,7 +65,8 @@
     outline-color: color-mix(in srgb, var(--fz-accent) 55%, transparent);
   }
 
-  &:focus-within {
+  /* Keyboard focus only; a mouse click on the card shouldn't draw a ring */
+  &:has(:focus-visible) {
     outline: var(--focus-outline, 2px solid var(--fz-accent));
   }
 }
@@ -192,6 +193,40 @@
 /* Compact: toolbar collapses to a sliver */
 .fz-card[data-on] .fz-preview-compact .fz-mock-toolbar {
   height: 4px;
+  opacity: 0;
+}
+
+/* Compact sidebar: tab strip slides out to a sliver at the edge */
+.fz-mock-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.fz-preview-sidebar .fz-mock-page {
+  margin-inline-start: 0;
+}
+
+.fz-mock-side {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: none;
+  width: 26px;
+  padding: 2px 4px 4px;
+  overflow: hidden;
+  transition: width 0.2s ease, padding 0.2s ease, opacity 0.2s ease;
+
+  & > span {
+    height: 6px;
+    border-radius: 3px;
+    background: var(--fz-line);
+  }
+}
+
+.fz-card[data-on] .fz-mock-side {
+  width: 3px;
+  padding-inline: 0;
   opacity: 0;
 }
 

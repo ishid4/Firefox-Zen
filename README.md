@@ -14,10 +14,16 @@ Then open `about:support`, click **Clear startup cache…**, and restart.
 
 | Pref | Default | Effect |
 | --- | --- | --- |
-| `firefox-zen.compact-mode` | false | Hide the toolbar until hovered |
+| `firefox-zen.compact-toolbar` | false | Hide the toolbar until hovered |
+| `firefox-zen.compact-sidebar` | false | Hide the vertical tabs sidebar until its edge is hovered |
 | `firefox-zen.floating-urlbar` | true | Open the address bar centered, like a command bar |
 | `firefox-zen.show-folder-icons` | true | Arc folder icons on tab groups |
 | `firefox-zen.show-menu-icons` | true | Icons in context menus |
+
+Compact sidebar replaces Firefox's own "Expand sidebar on hover" (the two fight
+at the window edge): turning it on saves your `sidebar.visibility` and switches
+it to "always show"; turning it off restores it. Re-enabling "Expand sidebar on
+hover" while compact sidebar is on turns compact sidebar off.
 
 Prefs that default to `true` are written by the settings script on first run.
 Without the loader they stay unset and read as `false`.

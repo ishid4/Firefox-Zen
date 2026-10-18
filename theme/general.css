@@ -99,12 +99,12 @@ toolbar .toolbarbutton-1 {
   display: none !important;
 }
 
-/* Compact mode: hide the navbar until the toolbox is hovered.
+/* Compact toolbar: hide the navbar until the toolbox is hovered.
  * Expands instantly; collapses only after a short delay, so brief hover gaps
  * (tooltips, gaps between buttons, window controls) don't make it flicker.
  * Stays open while the URL bar, a toolbar menu or a panel is open.
- * On with firefox-zen.compact-mode */
-@media -moz-pref("firefox-zen.compact-mode") {
+ * On with firefox-zen.compact-toolbar */
+@media -moz-pref("firefox-zen.compact-toolbar") {
   #navigator-toolbox {
     background: var(--lwt-accent-color) !important;
   }
@@ -132,6 +132,57 @@ toolbar .toolbarbutton-1 {
 
 
 
+
+/* Compact sidebar: slide the vertical tabs sidebar out of view, leaving a thin
+ * invisible strip at the window edge; hovering it slides the sidebar back in
+ * over the page (like Firefox's own expand-on-hover overlay), so the page
+ * keeps its full width. Hides after a short delay to avoid flicker.
+ * On with firefox-zen.compact-sidebar */
+@media -moz-pref("firefox-zen.compact-sidebar") and -moz-pref("sidebar.verticalTabs") {
+  #browser {
+    position: relative;
+  }
+
+  #sidebar-container {
+    --fz-sidebar-peek: 6px;
+
+    position: absolute !important;
+    inset-block: 0 !important;
+    inset-inline: 0 auto !important;
+    z-index: var(--browser-area-z-index-sidebar-expand-on-hover, 4) !important;
+    /* Opaque, matching the toolbox, since it now covers the page */
+    background-color: var(--toolbox-background-color, var(--lwt-accent-color)) !important;
+    box-shadow: 0 0 16px rgb(0 0 0 / 0.25);
+    translate: 0 !important;
+    opacity: 1;
+    transition: translate 0.2s ease, opacity 0.15s ease !important;
+
+    &[sidebar-positionend] {
+      inset-inline: auto 0 !important;
+    }
+
+    &:not(:hover, :focus-within) {
+      translate: calc(-100% + var(--fz-sidebar-peek)) 0 !important;
+      opacity: 0;
+      box-shadow: none;
+      transition: translate 0.2s ease 0.35s, opacity 0.15s ease 0.35s, box-shadow 0s 0.55s !important;
+
+      &[sidebar-positionend] {
+        translate: calc(100% - var(--fz-sidebar-peek)) 0 !important;
+      }
+    }
+  }
+
+  /* The sidebar no longer takes layout space: drop Firefox's compensation
+   * margin and the launcher's resize splitter */
+  #tabbrowser-tabbox {
+    margin-inline: 0 !important;
+  }
+
+  #sidebar-launcher-splitter {
+    display: none !important;
+  }
+}
 
 /* sidebar.css ============================================= */
 

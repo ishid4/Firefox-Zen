@@ -16,11 +16,18 @@
   // Settings that default to true get written once on first run (see applyDefaults).
   const SETTINGS = [
     {
-      pref: "compact-mode",
+      pref: "compact-toolbar",
       default: false,
-      label: "Compact mode",
+      label: "Compact toolbar",
       description: "Hide the toolbar until you hover the top of the window.",
       preview: "compact",
+    },
+    {
+      pref: "compact-sidebar",
+      default: false,
+      label: "Compact sidebar",
+      description: "Hide the tabs sidebar until you hover the edge of the window.",
+      preview: "sidebar",
     },
     {
       pref: "floating-urlbar",
@@ -45,12 +52,13 @@
     },
   ];
 
-  // Old inverted prefs -> new positive prefs.
-  const MIGRATIONS = {
-    "native-urlbar": "floating-urlbar",
-    "hide-folder-icons": "show-folder-icons",
-    "hide-menu-icons": "show-menu-icons",
-  };
+  // Renamed prefs: old name -> new name, and whether the meaning flipped.
+  const MIGRATIONS = [
+    { from: "native-urlbar", to: "floating-urlbar", invert: true },
+    { from: "hide-folder-icons", to: "show-folder-icons", invert: true },
+    { from: "hide-menu-icons", to: "show-menu-icons", invert: true },
+    { from: "compact-mode", to: "compact-toolbar", invert: false },
+  ];
 
   const isOn = s => Services.prefs.getBoolPref(PREF_BRANCH + s.pref, false);
 
@@ -82,10 +90,10 @@
       }
     }
 
-    for (const [oldPref, newPref] of Object.entries(MIGRATIONS)) {
-      const oldName = PREF_BRANCH + oldPref;
+    for (const { from, to, invert } of MIGRATIONS) {
+      const oldName = PREF_BRANCH + from;
       if (Services.prefs.prefHasUserValue(oldName)) {
-        Services.prefs.setBoolPref(PREF_BRANCH + newPref, !Services.prefs.getBoolPref(oldName));
+        Services.prefs.setBoolPref(PREF_BRANCH + to, Services.prefs.getBoolPref(oldName) !== invert);
         Services.prefs.clearUserPref(oldName);
       }
     }
@@ -117,6 +125,17 @@
         mock.append(
           h("div", { class: "fz-mock-toolbar" }, h("div", { class: "fz-mock-urlbar" })),
           h("div", { class: "fz-mock-page" })
+        );
+        break;
+      case "sidebar":
+        mock.append(
+          h("div", { class: "fz-mock-toolbar" }, h("div", { class: "fz-mock-urlbar" })),
+          h(
+            "div",
+            { class: "fz-mock-body" },
+            h("div", { class: "fz-mock-side" }, h("span"), h("span"), h("span")),
+            h("div", { class: "fz-mock-page" })
+          )
         );
         break;
       case "urlbar":
@@ -223,14 +242,60 @@
     panel.openPopup(anchor, "bottomright topright");
   }
 
+  // ---- compact sidebar vs. Firefox's "Expand sidebar on hover" ----
+  // Both reveal the sidebar on hover and fight at the window edge (the sidebar
+  // flickers open/closed). Compact sidebar takes over while it's on: the user's
+  // sidebar.visibility is saved and restored when compact sidebar is turned
+  // off. Every step is idempotent, so running it in each window is harmless.
+  const COMPACT_SIDEBAR_PREF = PREF_BRANCH + "compact-sidebar";
+  const SAVED_VISIBILITY_PREF = PREF_BRANCH + "saved-sidebar-visibility";
+  const VISIBILITY_PREF = "sidebar.visibility";
+  const EXPAND_ON_HOVER = "expand-on-hover";
+
+  function syncSidebarVisibility(changed) {
+    const compact = Services.prefs.getBoolPref(COMPACT_SIDEBAR_PREF, false);
+    const visibility = Services.prefs.getStringPref(VISIBILITY_PREF, "");
+
+    // User turned expand-on-hover back on while compact: their newest choice wins.
+    if (changed === VISIBILITY_PREF && compact && visibility === EXPAND_ON_HOVER) {
+      Services.prefs.clearUserPref(SAVED_VISIBILITY_PREF);
+      Services.prefs.clearUserPref(COMPACT_SIDEBAR_PREF);
+      return;
+    }
+
+    if (compact && visibility === EXPAND_ON_HOVER) {
+      Services.prefs.setStringPref(SAVED_VISIBILITY_PREF, visibility);
+      Services.prefs.setStringPref(VISIBILITY_PREF, "always-show");
+    } else if (!compact && Services.prefs.prefHasUserValue(SAVED_VISIBILITY_PREF)) {
+      Services.prefs.setStringPref(VISIBILITY_PREF, Services.prefs.getStringPref(SAVED_VISIBILITY_PREF));
+      Services.prefs.clearUserPref(SAVED_VISIBILITY_PREF);
+    }
+  }
+
   // ---- per-window setup ----
   applyDefaults();
+  syncSidebarVisibility();
   const panel = buildPanel();
   sync(panel);
 
-  const observer = { observe: () => sync(panel) };
+  const observer = {
+    observe(_subject, _topic, name) {
+      if (name === COMPACT_SIDEBAR_PREF || name === VISIBILITY_PREF) {
+        syncSidebarVisibility(name);
+      }
+      sync(panel);
+    },
+  };
   Services.prefs.addObserver(PREF_BRANCH, observer);
-  window.addEventListener("unload", () => Services.prefs.removeObserver(PREF_BRANCH, observer), { once: true });
+  Services.prefs.addObserver(VISIBILITY_PREF, observer);
+  window.addEventListener(
+    "unload",
+    () => {
+      Services.prefs.removeObserver(PREF_BRANCH, observer);
+      Services.prefs.removeObserver(VISIBILITY_PREF, observer);
+    },
+    { once: true }
+  );
 
   // ---- one-time widget registration (shared across windows) ----
   if (CustomizableUI.getWidget(WIDGET_ID)?.provider !== CustomizableUI.PROVIDER_API) {
