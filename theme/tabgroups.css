@@ -1,0 +1,151 @@
+/* Folder icons per tab group color.
+ * Firefox sets inline style "--tab-group-color: var(--tab-group-<color>)"
+ * on <tab-group> (no color attribute), so match on that. Blue is the fallback. */
+tab-group {
+  --folder-icon-closed: url("icons/folder/folder-closed-blue.svg");
+  --folder-icon-open: url("icons/folder/folder-open-blue.svg");
+}
+tab-group[style*="--tab-group-color: var(--tab-group-blue)"] {
+  --folder-icon-closed: url("icons/folder/folder-closed-blue.svg");
+  --folder-icon-open: url("icons/folder/folder-open-blue.svg");
+}
+tab-group[style*="--tab-group-color: var(--tab-group-cyan)"] {
+  --folder-icon-closed: url("icons/folder/folder-closed-cyan.svg");
+  --folder-icon-open: url("icons/folder/folder-open-cyan.svg");
+}
+tab-group[style*="--tab-group-color: var(--tab-group-gray)"] {
+  --folder-icon-closed: url("icons/folder/folder-closed-gray.svg");
+  --folder-icon-open: url("icons/folder/folder-open-gray.svg");
+}
+tab-group[style*="--tab-group-color: var(--tab-group-green)"] {
+  --folder-icon-closed: url("icons/folder/folder-closed-green.svg");
+  --folder-icon-open: url("icons/folder/folder-open-green.svg");
+}
+tab-group[style*="--tab-group-color: var(--tab-group-orange)"] {
+  --folder-icon-closed: url("icons/folder/folder-closed-orange.svg");
+  --folder-icon-open: url("icons/folder/folder-open-orange.svg");
+}
+tab-group[style*="--tab-group-color: var(--tab-group-pink)"] {
+  --folder-icon-closed: url("icons/folder/folder-closed-pink.svg");
+  --folder-icon-open: url("icons/folder/folder-open-pink.svg");
+}
+tab-group[style*="--tab-group-color: var(--tab-group-purple)"] {
+  --folder-icon-closed: url("icons/folder/folder-closed-purple.svg");
+  --folder-icon-open: url("icons/folder/folder-open-purple.svg");
+}
+tab-group[style*="--tab-group-color: var(--tab-group-red)"] {
+  --folder-icon-closed: url("icons/folder/folder-closed-red.svg");
+  --folder-icon-open: url("icons/folder/folder-open-red.svg");
+}
+tab-group[style*="--tab-group-color: var(--tab-group-yellow)"] {
+  --folder-icon-closed: url("icons/folder/folder-closed-yellow.svg");
+  --folder-icon-open: url("icons/folder/folder-open-yellow.svg");
+}
+
+:root {
+  --transition-duration: 0.38s; /* Easily adjust timing here */
+  --translate-distance: 75px; /* Control vertical translation amount */
+}
+
+/* Strip default Firefox tab group stylings */
+
+/* Remove outline from tab group labels */
+.tab-group-label {
+  tab-group[collapsed] > .tab-group-label-container & {
+    outline: none !important;
+  }
+}
+
+@media -moz-pref("sidebar.verticalTabs") {
+  tab-group:not([collapsed]) {
+    margin-block-end: 0 !important;
+  }
+}
+
+/* Folder stylings */
+
+/* Tweaks for EXPANDED FF sidebar */
+tab-group {
+  & .tab-group-label-container {
+    & label {
+      /* Unify tab group label background and text color */
+      background: transparent !important;
+      color: var(--lwt-text-color) !important;
+    }
+
+    /* Add EXPANDED tab folder icon from Arc */
+    & label::before {
+      content: var(--folder-icon-open) !important;
+    }
+  }
+
+  /* Add colors to tab group label background when hovered */
+  & .tab-group-label-container {
+    & label:hover {
+      background: color-mix(
+        in srgb,
+        light-dark(var(--tab-group-color), var(--tab-group-color-invert)) 20%,
+        transparent
+      ) !important;
+      color: light-dark(
+        var(--tab-group-color),
+        var(--tab-group-color-invert)
+      ) !important;
+      border-radius: 9px !important;
+    }
+  }
+}
+
+/* Add COLLAPSED tab folder icon from Arc */
+tab-group[collapsed] {
+  & .tab-group-label-container {
+    & label::before {
+      content: var(--folder-icon-closed) !important;
+    }
+  }
+}
+
+/* EXPANDED FF Sidebar */
+sidebar-main:has([expanded]) {
+  tab-group {
+    & .tab-group-label-container {
+      & label {
+        position: relative !important;
+        padding-left: 38px !important;
+        padding-right: 10px !important;
+        transition: 0.3s ease !important;
+      }
+
+      & label::before {
+        position: absolute !important;
+        margin-left: 4px !important;
+        left: 0px !important;
+        width: 23px !important;
+        height: 23px !important;
+      }
+    }
+  }
+}
+
+/* COLLAPSED FF sidebar */
+sidebar-main:not([expanded]) {
+  /* Adjust paddings, margins, add ease transitions */
+  tab-group {
+    padding-block: calc(var(--tab-inline-padding) / 2) !important;
+    margin-block: 0 !important;
+    transition: 0.3s ease !important;
+  }
+
+  /* Add colors to tab group label background when hovered */
+  tab-group:hover {
+    background: color-mix(
+      in srgb,
+      light-dark(var(--tab-group-color), var(--tab-group-color-invert)) 20%,
+      transparent
+    ) !important;
+    color: light-dark(
+      var(--tab-group-color),
+      var(--tab-group-color-invert)
+    ) !important;
+  }
+}

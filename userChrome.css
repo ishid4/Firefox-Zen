@@ -1,0 +1,16 @@
+/*
+- CREDITS
+Specific icons from The Browser Company
+Fluent icons from Microsoft
+Fluent icons implementation and menu spacing from github.com/bmFtZQ/edge-frfox
+Tab group implementations from github.com/Anoms12/Advanced-Tab-Groups
+Folder icons from github.com/ferrocyante/Arc-H
+Better unloaded tabs styling from github.com/Felkazz/zen-browser-better-unloaded-tabs
+*/
+
+@import url("theme/icons.css");
+@import url("theme/tabgroups.css");
+@import url("theme/theme-sidebar.css");
+
+/* All the previous userChrome.css' content */
+@import url("theme/general.css");
