@@ -64,7 +64,24 @@
     }
   }
 
+  // The theme's icons are file:// SVGs using context-fill. Firefox only honors
+  // context-fill for chrome:// / resource:// images unless this pref is on, so
+  // without it every icon renders black (invisible in dark mode).
+  // toolkit.legacyUserProfileCustomizations.stylesheets: without it Firefox
+  // doesn't load userChrome.css / userContent.css at all.
+  const REQUIRED_PREFS = [
+    "toolkit.legacyUserProfileCustomizations.stylesheets",
+    "svg.context-properties.content.enabled",
+  ];
+
   function applyDefaults() {
+    // Takes effect on the next restart.
+    for (const name of REQUIRED_PREFS) {
+      if (!Services.prefs.getBoolPref(name, false)) {
+        Services.prefs.setBoolPref(name, true);
+      }
+    }
+
     for (const [oldPref, newPref] of Object.entries(MIGRATIONS)) {
       const oldName = PREF_BRANCH + oldPref;
       if (Services.prefs.prefHasUserValue(oldName)) {

@@ -41,6 +41,16 @@
   fill: currentColor !important;
 }
 
+/* Set the fill on the icon element itself: something in Firefox's panel
+ * styles dims it, which made the theme's icons near-invisible in dark mode.
+ * Follows the item's text color, so disabled items still look disabled. */
+.subviewbutton > .toolbarbutton-icon,
+.subviewbutton > .toolbarbutton-badge-stack > .toolbarbutton-icon {
+  -moz-context-properties: fill, fill-opacity !important;
+  fill: currentColor !important;
+  fill-opacity: 1 !important;
+}
+
 /* App menu: fixed 16px icon slot + gap, so text lines up whether or not
  * an item has an icon */
 #appMenu-popup .subviewbutton:not(.subviewbutton-back, .subviewbutton-iconic) > .toolbarbutton-icon {
@@ -420,6 +430,20 @@
 }
 
 /* tab icons */
+/* The replacement SVGs use context-fill; Firefox doesn't pass a fill to these
+ * favicons, so it falls back to black. Use the tab's text color instead, so
+ * they follow light/dark mode and themes. */
+.tab-icon-image:is(
+    [src="chrome://branding/content/icon32.png"],
+    [src="chrome://browser/skin/privatebrowsing/favicon.svg"],
+    [src="chrome://global/skin/icons/settings.svg"],
+    [src="chrome://mozapps/skin/extensions/extension.svg"],
+    [src="chrome://browser/skin/customize.svg"]
+  ) {
+  -moz-context-properties: fill, fill-opacity !important;
+  fill: currentColor !important;
+}
+
 .tab-icon-image[src="chrome://branding/content/icon32.png"],
 .tab-icon-image[src="chrome://browser/skin/privatebrowsing/favicon.svg"] {
   content: url("icons/new-tab-image.svg") !important;
@@ -979,6 +1003,8 @@
 
 /* Tree items used for side bar and library windows */
 treechildren::-moz-tree-image {
+  -moz-context-properties: fill, fill-opacity !important;
+  fill: currentColor !important;
   fill-opacity: 1 !important;
 }
 

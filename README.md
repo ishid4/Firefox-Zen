@@ -21,3 +21,15 @@ Then open `about:support`, click **Clear startup cache…**, and restart.
 
 Prefs that default to `true` are written by the settings script on first run.
 Without the loader they stay unset and read as `false`.
+
+### Required prefs
+
+Both must be `true` (the settings script turns them on; without the loader, set
+them in `about:config`). Restart Firefox afterwards.
+
+- `toolkit.legacyUserProfileCustomizations.stylesheets`: lets Firefox load
+  `userChrome.css` and `userContent.css` at all.
+- `svg.context-properties.content.enabled`: the theme's icons are SVGs that take
+  Firefox's text color (`context-fill`). Firefox ignores that for icons loaded
+  from the profile folder unless this pref is on, so icons render black and
+  disappear in dark mode.
