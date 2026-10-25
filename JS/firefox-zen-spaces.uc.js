@@ -6,7 +6,9 @@
 
 // Model
 // - Space list (global, all windows): JSON in pref firefox-zen.spaces.list
-//   [{ id, name, icon }]. Prefs always persist, even without session restore.
+//   [{ id, name, icon, container }]. Prefs always persist, even without
+//   session restore. container = userContextId new tabs in the space open in
+//   (0/missing = no container).
 // - Tab's space: SessionStore custom tab value (survives restarts/restore).
 // - Window's active space: SessionStore custom window value.
 // - Pinned tabs are global "Essentials": never assigned, never hidden
@@ -23,6 +25,7 @@
   const WINDOW_KEY = "firefox-zen-active-space";
   const HIDE_SOURCE = "firefox-zen-spaces";
   const BAR_ID = "fz-spaces-bar";
+  const HEADER_ID = "fz-space-header";
   const MENU_ID = "fz-spaces-menu";
   const HTML_NS = "http://www.w3.org/1999/xhtml";
   const DEFAULT_ICONS = ["🏠", "💼", "🎮", "📚", "🎵", "🛒", "✈️", "🧪", "🎨"];
@@ -34,6 +37,15 @@
   // Set while replacing a space's last closed tab, so the tab Firefox selects
   // in the meantime doesn't drag us into another space.
   let holdSpace = false;
+
+  // Footer carousel: VISIBLE spaces at a time; hovering the first/last visible
+  // slot scrolls one slot that way.
+  const VISIBLE = 4;
+  const SCROLL_FIRST_DELAY = 250;
+  const SCROLL_REPEAT_DELAY = 350;
+  let viewStart = 0;
+  let lastRenderedActive = null;
+  let scrollTimer = null;
 
   const enabled = () => Services.prefs.getBoolPref(ENABLED_PREF, false);
 
@@ -62,6 +74,51 @@
       writeSpaces(list);
     }
     return list;
+  }
+
+  // ---- containers ----
+
+  // The space's container, if it still exists (it may have been deleted in
+  // Settings since it was chosen).
+  function containerOf(space) {
+    const id = Number(space?.container) || 0;
+    return id && ContextualIdentityService.getPublicIdentityFromId(id) ? id : 0;
+  }
+
+  function setSpaceContainer(id, userContextId) {
+    const list = readSpaces();
+    const space = list.find(s => s.id === id);
+    if (space) {
+      space.container = userContextId || 0;
+      writeSpaces(list);
+    }
+  }
+
+  // New-tab-page tabs (Ctrl+T, the + button, a space's first tab) open in the
+  // active space's container. Firefox's openTab() calls the global
+  // openTrustedLinkIn(url, where, params), so add userContextId there. Only
+  // the new tab page is touched; links, bookmarks etc. keep Firefox's rules.
+  function hookNewTabContainer() {
+    const original = window.openTrustedLinkIn;
+    if (typeof original !== "function" || original.__fzSpaces) {
+      return;
+    }
+    const hooked = function (url, where, params = {}) {
+      if (
+        enabled() &&
+        url === window.BROWSER_NEW_TAB_URL &&
+        (where === "tab" || where === "tabshifted") &&
+        params.userContextId == null
+      ) {
+        const container = containerOf(readSpaces().find(s => s.id === activeId));
+        if (container) {
+          params = { ...params, userContextId: container };
+        }
+      }
+      return original.call(this, url, where, params);
+    };
+    hooked.__fzSpaces = true;
+    window.openTrustedLinkIn = hooked;
   }
 
   // ---- tab / window values ----
@@ -340,19 +397,82 @@
     return el;
   }
 
+  // The footer lives in <sidebar-main>'s (open) shadow root, after Firefox's
+  // tools row, so it ends up below it; userChrome.css can't reach in there, so
+  // theme/spaces-footer.css is loaded into the shadow root too. Falls back to
+  // #vertical-tabs (styled via spaces.css, which imports the same sheet).
+  const FOOTER_CSS_ID = "fz-spaces-footer-css";
+  const FOOTER_CSS_URL = (() => {
+    const dir = Services.dirsvc.get("UChrm", Ci.nsIFile);
+    dir.append("theme");
+    dir.append("spaces-footer.css");
+    return Services.io.newFileURI(dir).spec;
+  })();
+  let barEl = null;
+
+  function sidebarMain() {
+    return document.querySelector("sidebar-main");
+  }
+
   function ensureBar() {
-    let bar = document.getElementById(BAR_ID);
-    if (!bar) {
+    if (!barEl) {
+      barEl = h("div", { id: BAR_ID, role: "toolbar", "aria-label": "Spaces" });
+    }
+    const main = sidebarMain();
+    const wrapper = main?.shadowRoot?.querySelector(".wrapper");
+    if (wrapper) {
+      if (!wrapper.querySelector(`#${FOOTER_CSS_ID}`)) {
+        wrapper.append(h("link", { id: FOOTER_CSS_ID, rel: "stylesheet", href: FOOTER_CSS_URL }));
+      }
+      // Keep it last: after .buttons-wrapper (re-append if the sidebar re-rendered).
+      if (wrapper.lastElementChild !== barEl) {
+        wrapper.append(barEl);
+      }
+    } else if (!barEl.isConnected) {
       const host = document.getElementById("vertical-tabs");
       if (!host) {
         return null;
       }
-      bar = h("div", { id: BAR_ID, role: "toolbar", "aria-label": "Spaces" });
       // Tell CustomizableUI this isn't a widget it should manage.
-      bar.setAttribute("removable", "false");
-      host.append(bar);
+      barEl.setAttribute("removable", "false");
+      host.append(barEl);
     }
-    return bar;
+    return barEl;
+  }
+
+  // Arc-style header with the active space's icon and name, between the
+  // pinned tabs (Essentials) and the space's tabs. #tabbrowser-tabs already
+  // holds non-tab children (drop indicator, splitter), so a sibling of the
+  // tab scroll box is safe.
+  function ensureHeader() {
+    let header = document.getElementById(HEADER_ID);
+    if (!header) {
+      const scrollbox = document.getElementById("tabbrowser-arrowscrollbox");
+      if (!scrollbox) {
+        return null;
+      }
+      header = h("div", { id: HEADER_ID });
+      scrollbox.before(header);
+    }
+    return header;
+  }
+
+  function renderHeader(active) {
+    const header = ensureHeader();
+    if (!header) {
+      return;
+    }
+    header.hidden = !enabled() || !active;
+    if (header.hidden) {
+      return;
+    }
+    const name = h("span", { class: "fz-space-name", text: active.name, title: "Double-click to rename" });
+    name.addEventListener("dblclick", () => startInlineRename(active.id, name));
+    header.replaceChildren(h("span", { class: "fz-space-header-icon", text: active.icon || "" }), name);
+    header.oncontextmenu = e => {
+      e.preventDefault();
+      openMenu(active.id, e);
+    };
   }
 
   function renderBar() {
@@ -362,9 +482,13 @@
     }
     if (!enabled()) {
       bar.hidden = true;
+      sidebarMain()?.removeAttribute("fz-spaces-footer");
+      renderHeader(null);
       return;
     }
     bar.hidden = false;
+    sidebarMain()?.setAttribute("fz-spaces-footer", "");
+    setupToolsRow();
     const list = readSpaces();
     const active = list.find(s => s.id === activeId);
 
@@ -378,10 +502,20 @@
         "data-id": space.id,
         text: space.icon || "•",
       });
+      const container = containerOf(space);
+      if (container) {
+        const identity = ContextualIdentityService.getPublicIdentityFromId(container);
+        btn.classList.add("fz-space-has-container");
+        btn.style.setProperty(
+          "--fz-space-container-color",
+          ContextualIdentityService.getContainerColorCode(identity.color)
+        );
+        btn.title = `${space.name} (${ContextualIdentityService.getUserContextLabel(container)})`;
+      }
       btn.addEventListener("click", () => switchTo(space.id));
-      // The clicks already switched to it, so its name is in the (re-rendered) label.
+      // The clicks already switched to it, so its name is in the (re-rendered) header.
       btn.addEventListener("dblclick", () => {
-        const label = document.querySelector(`#${BAR_ID} .fz-space-name`);
+        const label = document.querySelector(`#${HEADER_ID} .fz-space-name`);
         if (label) {
           startInlineRename(space.id, label);
         }
@@ -393,16 +527,229 @@
       return btn;
     });
 
-    const add = h("button", { class: "fz-space fz-space-add", type: "button", title: "New Space", "aria-label": "New Space", text: "+" });
-    add.addEventListener("click", () => createSpace());
+    const add = h("button", {
+      class: "fz-space fz-space-add",
+      type: "button",
+      title: "Create…",
+      "aria-label": "Create",
+      "aria-haspopup": "menu",
+      text: "+",
+    });
+    add.addEventListener("click", () => openPlusMenu(add));
 
-    const name = h("span", { class: "fz-space-name", text: active?.name ?? "", title: "Double-click to rename" });
-    name.addEventListener("dblclick", () => active && startInlineRename(active.id, name));
+    const history = h("button", {
+      class: "fz-space fz-footer-button fz-history",
+      type: "button",
+      title: "History",
+      "aria-label": "History",
+    });
+    history.addEventListener("click", () => window.SidebarController?.toggle("viewHistorySidebar"));
 
-    bar.replaceChildren(
-      name,
-      h("div", { class: "fz-space-list" }, ...buttons, add)
+    // Keep the window inside the list, and bring the active space into view
+    // when it changes (not on every re-render, so a hover-scroll sticks).
+    const count = list.length;
+    const maxStart = Math.max(0, count - VISIBLE);
+    const activeIndex = list.findIndex(s => s.id === activeId);
+    if (activeId !== lastRenderedActive && activeIndex >= 0) {
+      if (activeIndex < viewStart) {
+        viewStart = activeIndex;
+      } else if (activeIndex >= viewStart + VISIBLE) {
+        viewStart = activeIndex - VISIBLE + 1;
+      }
+      lastRenderedActive = activeId;
+    }
+    viewStart = Math.min(Math.max(viewStart, 0), maxStart);
+
+    const track = h("div", { class: "fz-space-list" }, ...buttons);
+    const viewport = h("div", { class: "fz-space-viewport" }, track);
+    viewport.style.setProperty("--fz-visible-slots", String(Math.min(count, VISIBLE)));
+    updateCarousel(viewport, count);
+    viewport.addEventListener("mousemove", e => onViewportHover(viewport, count, e));
+    viewport.addEventListener("mouseleave", stopScroll);
+
+    bar.replaceChildren(history, viewport, add);
+    renderHeader(active);
+  }
+
+  function updateCarousel(viewport, count) {
+    viewport.style.setProperty("--fz-view-start", String(viewStart));
+    viewport.classList.toggle("fz-more-left", viewStart > 0);
+    viewport.classList.toggle("fz-more-right", viewStart + VISIBLE < count);
+  }
+
+  function stopScroll() {
+    clearTimeout(scrollTimer);
+    scrollTimer = null;
+  }
+
+  // Which slot the pointer is over decides the direction, rather than which
+  // button: buttons slide under a still cursor while scrolling.
+  function onViewportHover(viewport, count, e) {
+    if (count <= VISIBLE) {
+      return;
+    }
+    const rect = viewport.getBoundingClientRect();
+    const slot = Math.floor(((e.clientX - rect.left) / rect.width) * VISIBLE);
+    const dir =
+      slot <= 0 && viewStart > 0 ? -1 : slot >= VISIBLE - 1 && viewStart + VISIBLE < count ? 1 : 0;
+    if (!dir) {
+      stopScroll();
+      return;
+    }
+    if (scrollTimer) {
+      return;
+    }
+    const step = delay => {
+      scrollTimer = setTimeout(() => {
+        const next = viewStart + dir;
+        if (next < 0 || next + VISIBLE > count) {
+          stopScroll();
+          return;
+        }
+        viewStart = next;
+        // The bar may have re-rendered meanwhile; update the live viewport.
+        const live = barEl?.querySelector(".fz-space-viewport");
+        if (live) {
+          updateCarousel(live, count);
+        }
+        step(SCROLL_REPEAT_DELAY);
+      }, delay);
+    };
+    step(SCROLL_FIRST_DELAY);
+  }
+
+  // ---- Firefox's tools row: one row, scrolled by hovering its edges ----
+
+  const edgeScrollAttached = new WeakSet();
+
+  // For a real scroll container (overflow-x: hidden): hovering the first or
+  // last visible item's width scrolls one item that way, repeating while the
+  // pointer stays there. Fade attributes mark hidden items on either side.
+  function attachEdgeScroll(el) {
+    if (edgeScrollAttached.has(el)) {
+      return;
+    }
+    edgeScrollAttached.add(el);
+    let timer = null;
+    const itemWidth = () => {
+      const first = el.firstElementChild;
+      const gap = parseFloat(getComputedStyle(el).columnGap) || 0;
+      return (first?.getBoundingClientRect().width || 32) + gap;
+    };
+    const maxScroll = () => el.scrollWidth - el.clientWidth;
+    const updateFades = () => {
+      el.toggleAttribute("fz-more-left", el.scrollLeft > 1);
+      el.toggleAttribute("fz-more-right", el.scrollLeft < maxScroll() - 1);
+    };
+    const stop = () => {
+      clearTimeout(timer);
+      timer = null;
+    };
+    el.addEventListener("scroll", updateFades);
+    el.addEventListener("mouseleave", stop);
+    el.addEventListener("mousemove", e => {
+      if (maxScroll() <= 1) {
+        stop();
+        return;
+      }
+      const rect = el.getBoundingClientRect();
+      const zone = itemWidth();
+      const x = e.clientX - rect.left;
+      const dir =
+        x < zone && el.scrollLeft > 1 ? -1 : x > rect.width - zone && el.scrollLeft < maxScroll() - 1 ? 1 : 0;
+      if (!dir) {
+        stop();
+        return;
+      }
+      if (timer) {
+        return;
+      }
+      const step = delay => {
+        timer = setTimeout(() => {
+          const atEnd = dir < 0 ? el.scrollLeft <= 1 : el.scrollLeft >= maxScroll() - 1;
+          if (atEnd) {
+            stop();
+            return;
+          }
+          el.scrollBy({ left: dir * itemWidth(), behavior: "smooth" });
+          step(SCROLL_REPEAT_DELAY);
+        }, delay);
+      };
+      step(SCROLL_FIRST_DELAY);
+    });
+    new ResizeObserver(updateFades).observe(el);
+    // Tools/extensions added or removed change the scroll width, not the size.
+    new MutationObserver(updateFades).observe(el, { childList: true });
+    updateFades();
+  }
+
+  function setupToolsRow() {
+    const tools = sidebarMain()?.shadowRoot?.querySelector(".tools-and-extensions:not(.overflow-button)");
+    if (tools) {
+      attachEdgeScroll(tools);
+    }
+  }
+
+  // ---- + button menu: Create Space / Create Folder / New Tab ----
+
+  const PLUS_MENU_ID = "fz-spaces-plus-menu";
+
+  // A Firefox tab group needs a tab: start one in the current space and group
+  // it. A user-triggered metrics context makes Firefox open its own "create
+  // group" panel (name + color), like making a folder in Zen.
+  function createFolder() {
+    openTabInActiveSpace();
+    const tab = gBrowser.selectedTab;
+    const metricsContext = gBrowser.TabMetrics?.userTriggeredContext?.() ?? undefined;
+    gBrowser.addTabGroup([tab], { insertBefore: tab, metricsContext });
+  }
+
+  function ensurePlusMenu() {
+    let menu = document.getElementById(PLUS_MENU_ID);
+    if (menu) {
+      return menu;
+    }
+    menu = document.createXULElement("menupopup");
+    menu.id = PLUS_MENU_ID;
+    const item = (label, icon, action) => {
+      const mi = document.createXULElement("menuitem");
+      mi.setAttribute("label", label);
+      mi.setAttribute("image", icon);
+      mi.classList.add("menuitem-iconic");
+      mi.dataset.action = action;
+      return mi;
+    };
+    menu.append(
+      item("Create Space", "chrome://browser/skin/window.svg", "space"),
+      item("Create Folder", "chrome://browser/skin/tabbrowser/tab-groups.svg", "folder"),
+      document.createXULElement("menuseparator"),
+      item("New Tab", "chrome://global/skin/icons/plus.svg", "tab")
     );
+    menu.addEventListener("command", e => {
+      switch (e.target.dataset.action) {
+        case "space":
+          createSpace();
+          break;
+        case "folder":
+          createFolder();
+          break;
+        case "tab":
+          openTabInActiveSpace();
+          break;
+      }
+    });
+    document.getElementById("mainPopupSet").append(menu);
+    return menu;
+  }
+
+  function openPlusMenu(anchor) {
+    const menu = ensurePlusMenu();
+    menu.querySelector('[data-action="folder"]').hidden = !Services.prefs.getBoolPref(
+      "browser.tabs.groups.enabled",
+      true
+    );
+    // Opens upward from the footer, right-aligned with the + button.
+    menu.openPopup(anchor, "before_end");
   }
 
   function ensureMenu() {
@@ -418,9 +765,44 @@
       mi.dataset.action = action;
       return mi;
     };
+    // Set Container ▸ : Firefox's own container list (same builder as "Open in
+    // New Container Tab"), with "No Container" first.
+    const containerMenu = document.createXULElement("menu");
+    containerMenu.setAttribute("label", "Set Container");
+    containerMenu.dataset.action = "container";
+    const containerPopup = document.createXULElement("menupopup");
+    containerMenu.append(containerPopup);
+    containerPopup.addEventListener("popupshowing", e => {
+      if (e.target !== containerPopup) {
+        return;
+      }
+      createUserContextMenu(e, {
+        isContextMenu: true,
+        showDefaultTab: true,
+        containerSource: "firefox-zen-spaces",
+      });
+      // Mark the space's current container.
+      const space = readSpaces().find(s => s.id === menu.dataset.spaceId);
+      const current = String(containerOf(space));
+      for (const mi of containerPopup.querySelectorAll("menuitem[data-usercontextid]")) {
+        mi.setAttribute("type", "radio");
+        mi.toggleAttribute("checked", mi.getAttribute("data-usercontextid") === current);
+      }
+    });
+    // "Add new container" / "Manage containers" stop their own events; this
+    // only sees the container items.
+    containerPopup.addEventListener("command", e => {
+      const ucid = e.target.getAttribute("data-usercontextid");
+      if (ucid != null) {
+        e.stopPropagation();
+        setSpaceContainer(menu.dataset.spaceId, Number(ucid));
+      }
+    });
+
     menu.append(
       item("Rename Space…", "rename"),
       item("Change Icon…", "icon"),
+      containerMenu,
       item("Unload Space", "unload"),
       document.createXULElement("menuseparator"),
       item("Delete Space…", "delete")
@@ -451,6 +833,10 @@
     menu.dataset.spaceId = id;
     menu.querySelector('[data-action="delete"]').disabled = readSpaces().length < 2;
     menu.querySelector('[data-action="unload"]').disabled = !unloadableTabs(id).length;
+    menu.querySelector('[data-action="container"]').hidden = !Services.prefs.getBoolPref(
+      "privacy.userContext.enabled",
+      false
+    );
     menu.openPopupAtScreen(event.screenX, event.screenY, true, event);
   }
 
@@ -633,6 +1019,17 @@
     tc.addEventListener("SSTabRestoring", () => enabled() && apply());
     window.addEventListener("SSWindowRestored", init);
     ensureTabMenu();
+    hookNewTabContainer();
+
+    // If the sidebar re-renders its template, put the footer back right away.
+    const sidebarRoot = sidebarMain()?.shadowRoot;
+    if (sidebarRoot) {
+      new MutationObserver(() => {
+        if (enabled() && barEl && !barEl.isConnected) {
+          renderBar();
+        }
+      }).observe(sidebarRoot, { childList: true, subtree: true });
+    }
 
     // Pref observers match by prefix: this one also covers LIST_PREF.
     Services.prefs.addObserver(ENABLED_PREF, prefObserver);

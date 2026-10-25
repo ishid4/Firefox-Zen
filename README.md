@@ -17,6 +17,7 @@ Then open `about:support`, click **Clear startup cache…**, and restart.
 | `firefox-zen.compact-toolbar` | false | Hide the toolbar until hovered |
 | `firefox-zen.compact-sidebar` | false | Hide the vertical tabs sidebar until its edge is hovered |
 | `firefox-zen.spaces` | false | Zen-style Spaces (see below) |
+| `firefox-zen.show-customize-button` | true | Firefox's "Customize sidebar" gear in the sidebar tools (toggle it under Customize Sidebar → Tools) |
 | `firefox-zen.floating-urlbar` | true | Open the address bar centered, like a command bar |
 | `firefox-zen.show-folder-icons` | true | Arc folder icons on tab groups |
 | `firefox-zen.show-menu-icons` | true | Icons in context menus |
@@ -35,10 +36,18 @@ Each unpinned tab belongs to one space; switching spaces hides the other
 spaces' tabs (Firefox's own tab hiding, so Ctrl+Tab and the tab strip follow).
 Pinned tabs are global "Essentials" and show in every space.
 
-- Switch, add (+) and manage spaces from the bar under the vertical tabs;
+- The **+** button opens a menu: Create Space, Create Folder (a new tab in a new
+  tab group; Firefox asks for its name and color) and New Tab.
+- While Spaces is on, Firefox's sidebar tools sit in one smaller row above the
+  footer; hover its first/last visible button to scroll it, like the spaces row.
+- Switch and manage spaces from the bar under the vertical tabs;
   right-click a space to rename it, change its icon, unload it (frees memory;
   tabs stay and reload when opened; the tab you're on stays loaded) or delete
   it (its tabs move to a neighboring space, nothing is closed).
+- Right-click a space → **Set Container** (Firefox's own container list) to
+  give it a default container: new tabs in that space (Ctrl+T, +) open in it.
+  Existing tabs keep theirs (Firefox can't move a tab into a container without
+  reopening it). The space's icon gets a bar in the container's color.
 - Double-click a space's name or icon to rename it inline.
 - Tab right-click menu → **Move to Space** moves the selected tab(s) to another
   (or a new) space.

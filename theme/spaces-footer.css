@@ -1,0 +1,188 @@
+/* Spaces footer: history | 4-space carousel | +
+ * JS/firefox-zen-spaces.uc.js moves the footer into the sidebar's shadow DOM
+ * (after Firefox's tools row) and loads this sheet there. spaces.css also
+ * @imports it, for the fallback where the footer stays in #vertical-tabs. */
+
+/* While our footer is in the sidebar: smaller Firefox tool buttons */
+:host([fz-spaces-footer]) {
+  --button-size-icon: 26px;
+  --button-min-height: 26px;
+}
+
+:host([fz-spaces-footer]) .buttons-wrapper {
+  min-height: 0;
+}
+
+/* Firefox's tools row (expanded sidebar): one clipped row instead of
+ * wrapping onto extra rows; the script scrolls it when you hover its first or
+ * last visible button, like the spaces row. */
+:host([fz-spaces-footer][expanded]) .buttons-wrapper {
+  align-items: center !important;
+}
+
+:host([fz-spaces-footer][expanded]) .tools-and-extensions[orientation="horizontal"]:not(.overflow-button) {
+  flex: 1 1 0 !important;
+  min-width: 0 !important;
+  flex-wrap: nowrap !important;
+  /* hidden (not clip) keeps it a scroll container the script can scroll */
+  overflow-x: hidden !important;
+  overflow-y: clip !important;
+  scroll-behavior: smooth;
+  margin-block-start: 0 !important;
+  padding-block-end: var(--space-xsmall, 4px) !important;
+
+  --fz-fade-left: black;
+  --fz-fade-right: black;
+  mask-image: linear-gradient(to right, var(--fz-fade-left), black 14%, black 86%, var(--fz-fade-right));
+
+  &[fz-more-left] {
+    --fz-fade-left: transparent;
+  }
+
+  &[fz-more-right] {
+    --fz-fade-right: transparent;
+  }
+
+  > moz-button {
+    flex: none;
+  }
+}
+
+/* Collapsed sidebar: no footer */
+:host(:not([expanded])) #fz-spaces-bar {
+  display: none;
+}
+
+/* ---- Footer: history | 4-space carousel | + ---- */
+#fz-spaces-bar {
+  --fz-slot: 32px; /* 30px button + 2px gap */
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  flex: none;
+  padding: 6px var(--tab-margin-inline-inner, 6px) 6px;
+  color: var(--toolbox-text-color, inherit);
+  font: menu;
+
+  &[hidden] {
+    display: none;
+  }
+}
+
+/* Fixed window of up to 4 slots; the track slides one slot at a time */
+.fz-space-viewport {
+  flex: none;
+  width: calc(var(--fz-visible-slots, 4) * var(--fz-slot) - 2px);
+  overflow: hidden;
+  /* Fade an edge when more spaces are hidden that way */
+  --fz-fade-left: black;
+  --fz-fade-right: black;
+  mask-image: linear-gradient(to right, var(--fz-fade-left), black 18%, black 82%, var(--fz-fade-right));
+
+  &.fz-more-left {
+    --fz-fade-left: transparent;
+  }
+
+  &.fz-more-right {
+    --fz-fade-right: transparent;
+  }
+}
+
+.fz-space-list {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: max-content;
+  translate: calc(var(--fz-view-start, 0) * var(--fz-slot) * -1) 0;
+  transition: translate 0.2s ease;
+}
+
+.fz-history {
+  background: url("icons/history.svg") center / 16px no-repeat;
+  -moz-context-properties: fill, fill-opacity;
+  fill: currentColor;
+  opacity: 0.6;
+
+  &:hover {
+    opacity: 1;
+  }
+}
+
+.fz-space {
+  appearance: none;
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background-color: transparent;
+  color: inherit;
+  font-size: 14px;
+  line-height: 1;
+  transition: background-color 0.15s ease, opacity 0.15s ease, filter 0.15s ease, scale 0.1s ease;
+
+  /* Inactive spaces read as quiet monochrome icons, like Arc/Zen */
+  &:not([aria-pressed="true"], .fz-footer-button, .fz-space-add) {
+    opacity: 0.45;
+    filter: grayscale(1);
+  }
+
+  &:hover {
+    background-color: var(--toolbarbutton-hover-background, color-mix(in srgb, currentColor 10%, transparent));
+    opacity: 1;
+    filter: none;
+  }
+
+  &:active {
+    scale: 0.92;
+  }
+
+  &[aria-pressed="true"] {
+    background-color: var(--toolbarbutton-active-background, color-mix(in srgb, currentColor 14%, transparent));
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.15);
+  }
+
+  &:focus-visible {
+    outline: var(--focus-outline, 2px solid AccentColor);
+    outline-offset: 1px;
+  }
+}
+
+/* Space with a container: a short bar in the container's color */
+.fz-space-has-container::after {
+  content: "";
+  position: absolute;
+  inset-inline: 10px;
+  bottom: 3px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--fz-space-container-color);
+}
+
+.fz-space-add {
+  width: 32px;
+  height: 32px;
+  font-size: 22px;
+  font-weight: 300;
+  opacity: 0.6 !important;
+  filter: none !important;
+
+  &:hover {
+    opacity: 1 !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #fz-spaces-bar *,
+  .fz-space-list {
+    transition: none !important;
+  }
+}

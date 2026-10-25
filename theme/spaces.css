@@ -1,4 +1,8 @@
-/* Spaces (built by JS/firefox-zen-spaces.uc.js). On with firefox-zen.spaces */
+@import url("spaces-footer.css");
+
+/* Spaces (built by JS/firefox-zen-spaces.uc.js). On with firefox-zen.spaces
+ * Arc/Zen layout: the active space's icon + name as a header above its tabs,
+ * and one compact row of space icons at the bottom of the sidebar. */
 
 /* #vertical-tabs is a XUL <box> (a row), which put the bar beside the tab
  * list. Stack it under the tabs instead; the tab list keeps the rest. */
@@ -12,97 +16,63 @@
   }
 }
 
-#fz-spaces-bar {
+/* ---- Header: "🛠 Work" between Essentials (pinned) and the space's tabs ---- */
+#fz-space-header {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  align-items: center;
+  gap: 8px;
   flex: none;
-  padding: 8px var(--tab-margin-inline-inner, 6px) 6px;
-  border-top: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+  min-width: 0;
+  margin: 6px calc(var(--tab-margin-inline-inner, 6px) + 2px) 2px;
+  padding: 4px 6px;
+  border-radius: 6px;
   color: var(--toolbox-text-color, inherit);
+  opacity: 0.6;
   font: menu;
+  font-size: 0.85em;
+  font-weight: 600;
+  transition: opacity 0.15s ease;
+
+  &:hover {
+    opacity: 0.9;
+  }
 
   &[hidden] {
     display: none;
   }
 }
 
-.fz-space-name {
-  padding-inline: 4px;
-  font-weight: 600;
-  font-size: 0.9em;
-  opacity: 0.75;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.fz-space-list {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px;
-}
-
-.fz-space {
-  appearance: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  margin: 0;
-  padding: 0;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  color: inherit;
-  font-size: 15px;
+.fz-space-header-icon {
+  flex: none;
+  font-size: 13px;
   line-height: 1;
-  opacity: 0.6;
-  transition: background-color 0.15s ease, opacity 0.15s ease;
 
-  &:hover {
-    background: var(--toolbarbutton-hover-background, color-mix(in srgb, currentColor 10%, transparent));
-    opacity: 1;
-  }
-
-  &[aria-pressed="true"] {
-    background: var(--toolbarbutton-active-background, color-mix(in srgb, currentColor 16%, transparent));
-    opacity: 1;
-  }
-
-  &:focus-visible {
-    outline: var(--focus-outline, 2px solid AccentColor);
-    outline-offset: 1px;
-  }
-}
-
-.fz-space-add {
-  font-size: 18px;
-}
-
-/* Collapsed sidebar: no space bar (and keep the tab list's native layout) */
-#vertical-tabs:has(> #tabbrowser-tabs:not([expanded])) {
-  & > #fz-spaces-bar {
+  &:empty {
     display: none;
   }
 }
 
-/* Inline rename (double-click the space name) */
+.fz-space-name {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: text;
+}
+
+/* Inline rename (double-click the space name or its icon) */
 .fz-space-name-input {
   appearance: none;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   box-sizing: border-box;
-  margin: 0;
-  padding: 2px 4px;
+  margin: -3px 0;
+  padding: 2px 6px;
   border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
   border-radius: 6px;
   background: var(--toolbar-field-background-color, transparent);
   color: inherit;
   font: inherit;
-  font-weight: 600;
-  font-size: 0.9em;
 
   &:focus-visible {
     outline: var(--focus-outline, 2px solid AccentColor);
@@ -110,8 +80,23 @@
   }
 }
 
-.fz-space-name {
-  cursor: text;
+/* + button menu: icons follow the menu text color */
+#fz-spaces-plus-menu > menuitem {
+  -moz-context-properties: fill, fill-opacity;
+  fill: currentColor;
+}
+
+/* Horizontal tabs: the header would sit inside the tab strip */
+#tabbrowser-tabs[orient="horizontal"] > #fz-space-header {
+  display: none;
+}
+
+/* ---- Collapsed sidebar: no header, no bar (native tab list layout) ---- */
+#vertical-tabs:has(> #tabbrowser-tabs:not([expanded])) {
+  & > #fz-spaces-bar,
+  & #fz-space-header {
+    display: none;
+  }
 }
 
 /* A tab group whose tabs are all in other spaces would otherwise leave an
@@ -119,5 +104,11 @@
 @media -moz-pref("firefox-zen.spaces") {
   tab-group:not(:has(.tabbrowser-tab:not([hidden]))) {
     display: none !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #fz-space-header {
+    transition: none !important;
   }
 }
