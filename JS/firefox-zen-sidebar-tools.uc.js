@@ -97,6 +97,48 @@
   // TabClose fires before the tab leaves the strip.
   const queuePinnedRows = () => setTimeout(updatePinnedRows, 0);
 
+  // ---- hold the compact sidebar out while its popups are open ----
+
+  // A right-click menu (tab, sidebar, space menus) is a popup outside the
+  // sidebar, so the compact sidebar would lose :hover and slide away under it.
+  // While a popup triggered from inside the sidebar is open, mark
+  // #sidebar-container[fz-hold]; general.css keeps it out meanwhile.
+  const heldPopups = new Set();
+
+  function isInSidebar(node) {
+    const container = document.getElementById("sidebar-container");
+    while (node && container) {
+      if (container.contains(node)) {
+        return true;
+      }
+      // Footer/space menus are triggered from inside <sidebar-main>'s shadow DOM.
+      node = node.getRootNode?.()?.host;
+    }
+    return false;
+  }
+
+  function updateHold() {
+    document.getElementById("sidebar-container")?.toggleAttribute("fz-hold", heldPopups.size > 0);
+  }
+
+  function onPopupShowing(e) {
+    const popup = e.target;
+    if (!["menupopup", "panel"].includes(popup.localName)) {
+      return;
+    }
+    const trigger = popup.triggerNode ?? popup.anchorNode;
+    if (trigger && isInSidebar(trigger)) {
+      heldPopups.add(popup);
+      updateHold();
+    }
+  }
+
+  function onPopupHidden(e) {
+    if (heldPopups.delete(e.target)) {
+      updateHold();
+    }
+  }
+
   // ---- checkbox in Customize Sidebar → Tools ----
 
   async function injectCheckbox() {
@@ -160,6 +202,8 @@
 
     applyGear();
     applyPinnedGrid();
+    window.addEventListener("popupshowing", onPopupShowing, true);
+    window.addEventListener("popuphidden", onPopupHidden, true);
     updatePinnedRows();
     for (const type of ["TabPinned", "TabUnpinned", "TabOpen", "TabClose"]) {
       gBrowser.tabContainer.addEventListener(type, queuePinnedRows);

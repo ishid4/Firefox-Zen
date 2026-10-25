@@ -1066,3 +1066,10 @@ treechildren::-moz-tree-image(query, OrganizerQuery_history____v) {
 treechildren::-moz-tree-image(title, query, folder) {
   list-style-image: url("icons/folder.svg") !important;
 }
+
+/* Tab context menu: with the AI chatbot off, its items are hidden but Firefox
+ * still shows the separators on both sides of them (a double line after
+ * "Duplicate Tab"). Drop the second one when no AI item is visible. */
+#tabContextMenu:not(:has(> :is(#context_askChat, #context_askChatSummarize, #context_createAITab):not([hidden]))) > #context_aiSeparator {
+  display: none !important;
+}

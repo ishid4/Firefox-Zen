@@ -176,8 +176,10 @@ toolbar .toolbarbutton-1 {
     /* Stay out while hovered, focused, or while one of its buttons has a
      * panel open (e.g. Extensions in the URL bar): the panel lives outside
      * the sidebar, and sliding away would yank its anchor off-screen.
-     * open="true" only: many toolbar elements carry open="false". */
-    &:not(:hover, :focus-within, :has(:is(toolbarbutton, toolbaritem, button, moz-button)[open="true"])) {
+     * open="true" only: many toolbar elements carry open="false".
+     * [fz-hold]: a right-click menu from inside it is open (set by
+     * JS/firefox-zen-sidebar-tools.uc.js). */
+    &:not(:hover, :focus-within, [fz-hold], :has(:is(toolbarbutton, toolbaritem, button, moz-button)[open="true"])) {
       translate: calc(-100% + var(--fz-sidebar-peek)) 0 !important;
       opacity: 0;
       box-shadow: none;
