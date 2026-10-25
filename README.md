@@ -21,6 +21,7 @@ Then open `about:support`, click **Clear startup cache…**, and restart.
 | `firefox-zen.show-customize-button` | true | Firefox's "Customize sidebar" gear in the sidebar tools (toggle it under Customize Sidebar → Tools) |
 | `firefox-zen.sidebar-urlbar` | false | Toolbar + address bar at the top of the sidebar. With "Expand sidebar on hover" it stays there and shows when the sidebar expands; otherwise it goes back to the top while the sidebar is collapsed. Also back on top while customizing the toolbar |
 | `firefox-zen.floating-urlbar` | true | Open the address bar centered, like a command bar |
+| `firefox-zen.urlbar-newtab` | true | No New Tab page, like Arc/Zen: Ctrl+T and the + buttons open the address bar (floating, if that's on) and what you pick opens in a new tab. Esc or clicking away cancels without creating a tab. Shift+click (new window), middle-click paste and the tab Spaces needs for an empty space still make a real tab |
 | `firefox-zen.glance` | true | Alt+click a link to open it in a floating Glance window (see below) |
 | `firefox-zen.show-folder-icons` | true | Arc folder icons on tab groups |
 | `firefox-zen.show-menu-icons` | true | Icons in context menus |

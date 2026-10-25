@@ -58,6 +58,13 @@
       preview: "urlbar",
     },
     {
+      pref: "urlbar-newtab",
+      default: true,
+      label: "No New Tab page",
+      description: "Ctrl+T and the + button open the address bar; what you pick opens in a new tab. Esc cancels.",
+      preview: "newtab",
+    },
+    {
       pref: "glance",
       default: true,
       label: "Glance",
@@ -205,6 +212,13 @@
         mock.append(
           h("div", { class: "fz-mock-toolbar" }, h("div", { class: "fz-mock-urlbar" })),
           h("div", { class: "fz-mock-page" }),
+          h("div", { class: "fz-mock-float" }, h("div"), h("div"), h("div"))
+        );
+        break;
+      case "newtab":
+        mock.append(
+          h("div", { class: "fz-mock-toolbar" }, h("div", { class: "fz-mock-urlbar" })),
+          h("div", { class: "fz-mock-page" }, h("div", { class: "fz-mock-tiles" }, h("i"), h("i"), h("i"), h("i"))),
           h("div", { class: "fz-mock-float" }, h("div"), h("div"), h("div"))
         );
         break;

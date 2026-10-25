@@ -327,6 +327,27 @@
   translate: 0 0;
 }
 
+/* No New Tab page: the new tab page's tiles give way to the floating bar */
+.fz-mock-tiles {
+  position: absolute;
+  inset: 40% 22% auto;
+  display: flex;
+  gap: 4px;
+  justify-content: center;
+  transition: opacity 0.2s ease;
+
+  & > i {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    background: var(--fz-line);
+  }
+}
+
+.fz-card[data-on] .fz-mock-tiles {
+  opacity: 0;
+}
+
 /* Glance: dimmed page with a link grown into a floating window */
 .fz-mock-glance {
   position: absolute;

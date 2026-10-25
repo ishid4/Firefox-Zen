@@ -97,7 +97,8 @@
   // New-tab-page tabs (Ctrl+T, the + button, a space's first tab) open in the
   // active space's container. Firefox's openTab() calls the global
   // openTrustedLinkIn(url, where, params), so add userContextId there. Only
-  // the new tab page is touched; links, bookmarks etc. keep Firefox's rules.
+  // the new tab page is touched, plus tabs opened from the address bar while it
+  // stands in for one (urlbar-newtab); links, bookmarks etc. keep Firefox's rules.
   function hookNewTabContainer() {
     const original = window.openTrustedLinkIn;
     if (typeof original !== "function" || original.__fzSpaces) {
@@ -106,7 +107,7 @@
     const hooked = function (url, where, params = {}) {
       if (
         enabled() &&
-        url === window.BROWSER_NEW_TAB_URL &&
+        (url === window.BROWSER_NEW_TAB_URL || window.gURLBar?.hasAttribute("fz-newtab")) &&
         (where === "tab" || where === "tabshifted") &&
         params.userContextId == null
       ) {
@@ -200,13 +201,19 @@
 
   // ---- switching ----
 
-  function openTabInActiveSpace() {
+  // Passing the URL always makes a real tab (an empty space needs one).
+  // userInitiated leaves it to openTab(), which may open the address bar
+  // instead (urlbar-newtab); then no tab is created and nothing gets tagged.
+  function openTabInActiveSpace({ userInitiated = false } = {}) {
+    const before = gBrowser.selectedTab;
     if (window.BrowserCommands?.openTab) {
-      window.BrowserCommands.openTab();
+      window.BrowserCommands.openTab(userInitiated ? {} : { url: window.BROWSER_NEW_TAB_URL });
     } else {
       gBrowser.selectedTab = gBrowser.addTrustedTab(window.BROWSER_NEW_TAB_URL || "about:newtab");
     }
-    setSpaceOf(gBrowser.selectedTab, activeId);
+    if (gBrowser.selectedTab !== before) {
+      setSpaceOf(gBrowser.selectedTab, activeId);
+    }
   }
 
   function switchTo(id, { keepSelection = false } = {}) {
@@ -734,7 +741,7 @@
           createFolder();
           break;
         case "tab":
-          openTabInActiveSpace();
+          openTabInActiveSpace({ userInitiated: true });
           break;
       }
     });
