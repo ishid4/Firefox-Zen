@@ -178,8 +178,9 @@ toolbar .toolbarbutton-1 {
      * the sidebar, and sliding away would yank its anchor off-screen.
      * open="true" only: many toolbar elements carry open="false".
      * [fz-hold]: a right-click menu from inside it is open (set by
-     * JS/firefox-zen-sidebar-tools.uc.js). */
-    &:not(:hover, :focus-within, [fz-hold], :has(:is(toolbarbutton, toolbaritem, button, moz-button)[open="true"])) {
+     * JS/firefox-zen-sidebar-tools.uc.js). [fz-library-hold]: the Library is
+     * open next to it (JS/firefox-zen-library.uc.js). */
+    &:not(:hover, :focus-within, [fz-hold], [fz-library-hold], :has(:is(toolbarbutton, toolbaritem, button, moz-button)[open="true"])) {
       translate: calc(-100% + var(--fz-sidebar-peek)) 0 !important;
       opacity: 0;
       box-shadow: none;

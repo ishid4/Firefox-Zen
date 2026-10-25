@@ -105,15 +105,29 @@
   transition: translate 0.2s ease;
 }
 
-.fz-history {
+.fz-history,
+.fz-library {
   background: url("icons/history.svg") center / 16px no-repeat;
   -moz-context-properties: fill, fill-opacity;
   fill: currentColor;
   opacity: 0.6;
 
-  &:hover {
+  &:hover,
+  &[aria-pressed="true"] {
     opacity: 1;
   }
+}
+
+.fz-library {
+  background-image: url("icons/library.svg");
+}
+
+/* A tab dragged from the Library over a space button */
+.fz-space.fz-lib-drop-target {
+  opacity: 1 !important;
+  filter: none !important;
+  background-color: color-mix(in srgb, AccentColor 25%, transparent) !important;
+  scale: 1.12;
 }
 
 .fz-space {

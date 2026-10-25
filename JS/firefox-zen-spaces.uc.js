@@ -48,6 +48,8 @@
   let scrollTimer = null;
 
   const enabled = () => Services.prefs.getBoolPref(ENABLED_PREF, false);
+  const LIBRARY_PREF = "firefox-zen.library";
+  const libraryOn = () => Services.prefs.getBoolPref(LIBRARY_PREF, false) && !!window.FirefoxZenLibrary;
 
   // ---- space list ----
 
@@ -324,13 +326,34 @@
     }
   }
 
-  function changeIcon(id) {
+  function setSpaceIcon(id, icon) {
     const list = readSpaces();
     const space = list.find(s => s.id === id);
-    const icon = space && promptText("Change Space Icon", "Icon (emoji or a short text):", space.icon);
-    if (icon) {
+    if (space && icon) {
       space.icon = [...icon].slice(0, 2).join("");
       writeSpaces(list);
+    }
+  }
+
+  function changeIcon(id) {
+    const space = readSpaces().find(s => s.id === id);
+    const icon = space && promptText("Change Space Icon", "Icon (emoji or a short text):", space.icon);
+    if (icon) {
+      setSpaceIcon(id, icon);
+    }
+  }
+
+  // New order of the space list, by id. Ids missing from `ids` keep their
+  // relative order at the end.
+  function reorderSpaces(ids) {
+    const list = readSpaces();
+    const rank = id => {
+      const i = ids.indexOf(id);
+      return i < 0 ? ids.length : i;
+    };
+    const sorted = [...list].sort((a, b) => rank(a.id) - rank(b.id));
+    if (sorted.some((s, i) => s !== list[i])) {
+      writeSpaces(sorted);
     }
   }
 
@@ -544,13 +567,25 @@
     });
     add.addEventListener("click", () => openPlusMenu(add));
 
+    // Library (JS/firefox-zen-library.uc.js) when it's on, else Firefox's
+    // History sidebar.
+    const library = libraryOn();
     const history = h("button", {
-      class: "fz-space fz-footer-button fz-history",
+      class: `fz-space fz-footer-button ${library ? "fz-library" : "fz-history"}`,
       type: "button",
-      title: "History",
-      "aria-label": "History",
+      title: library ? "Library" : "History",
+      "aria-label": library ? "Library" : "History",
     });
-    history.addEventListener("click", () => window.SidebarController?.toggle("viewHistorySidebar"));
+    if (library) {
+      history.setAttribute("aria-pressed", String(!!window.FirefoxZenLibrary.isOpen()));
+    }
+    history.addEventListener("click", () => {
+      if (libraryOn()) {
+        window.FirefoxZenLibrary.toggle();
+      } else {
+        window.SidebarController?.toggle("viewHistorySidebar");
+      }
+    });
 
     // Keep the window inside the list, and bring the active space into view
     // when it changes (not on every re-render, so a hover-scroll sticks).
@@ -576,6 +611,7 @@
 
     bar.replaceChildren(history, viewport, add);
     renderHeader(active);
+    window.dispatchEvent(new CustomEvent("FzSpacesChanged"));
   }
 
   function updateCarousel(viewport, count) {
@@ -1014,6 +1050,48 @@
     },
   };
 
+  // ---- API for the Library (JS/firefox-zen-library.uc.js) ----
+
+  // Select a tab from any space; onTabSelect switches to its space.
+  function selectTab(tab) {
+    if (tab.hidden) {
+      gBrowser.showTab(tab);
+    }
+    gBrowser.selectedTab = tab;
+  }
+
+  function containerInfo(id) {
+    const container = containerOf(readSpaces().find(s => s.id === id));
+    if (!container) {
+      return null;
+    }
+    const identity = ContextualIdentityService.getPublicIdentityFromId(container);
+    return {
+      id: container,
+      label: ContextualIdentityService.getUserContextLabel(container),
+      color: ContextualIdentityService.getContainerColorCode(identity.color),
+    };
+  }
+
+  window.FirefoxZenSpaces = {
+    enabled,
+    list: readSpaces,
+    activeId: () => activeId,
+    spaceOf,
+    tabsIn,
+    containerInfo,
+    canUnload: id => unloadableTabs(id).length > 0,
+    switchTo: id => switchTo(id),
+    create: () => createSpace({ switchToIt: false }),
+    rename: setSpaceName,
+    setIcon: setSpaceIcon,
+    reorder: reorderSpaces,
+    remove: deleteSpace,
+    moveTabs,
+    selectTab,
+    openMenu,
+  };
+
   async function start() {
     await window.delayedStartupPromise;
     await SessionStore.promiseInitialized;
@@ -1040,9 +1118,17 @@
 
     // Pref observers match by prefix: this one also covers LIST_PREF.
     Services.prefs.addObserver(ENABLED_PREF, prefObserver);
-    window.addEventListener("unload", () => Services.prefs.removeObserver(ENABLED_PREF, prefObserver), {
-      once: true,
-    });
+    // The footer's first button is Library or History.
+    const libraryObserver = { observe: () => renderBar() };
+    Services.prefs.addObserver(LIBRARY_PREF, libraryObserver);
+    window.addEventListener(
+      "unload",
+      () => {
+        Services.prefs.removeObserver(ENABLED_PREF, prefObserver);
+        Services.prefs.removeObserver(LIBRARY_PREF, libraryObserver);
+      },
+      { once: true }
+    );
 
     init();
   }

@@ -17,6 +17,7 @@ Then open `about:support`, click **Clear startup cache…**, and restart.
 | `firefox-zen.compact-toolbar` | false | Hide the toolbar until hovered (with the address bar in the sidebar: the window controls hide too and the sidebar/page use the full window height) |
 | `firefox-zen.compact-sidebar` | false | Hide the vertical tabs sidebar until its edge is hovered |
 | `firefox-zen.spaces` | false | Zen-style Spaces (see below) |
+| `firefox-zen.library` | true | The spaces footer's first button opens the Library instead of the History sidebar (see below) |
 | `firefox-zen.tab-sections` | true | Folders above a line, New Tab and new tabs below it; hover the sidebar for **Clear** (see below) |
 | `firefox-zen.show-customize-button` | true | Firefox's "Customize sidebar" gear in the sidebar tools (toggle it under Customize Sidebar → Tools) |
 | `firefox-zen.sidebar-urlbar` | false | Toolbar + address bar at the top of the sidebar. With "Expand sidebar on hover" it stays there and shows when the sidebar expands; otherwise it goes back to the top while the sidebar is collapsed. Also back on top while customizing the toolbar |
@@ -61,6 +62,33 @@ Pinned tabs are global "Essentials" and show in every space.
   each window's current space are kept in the session, so they survive restarts.
 - Turning Spaces off shows every tab again.
 - Conflicts with other tab-hiding extensions (e.g. Simple Tab Groups).
+
+### Library
+
+The first button in the spaces footer opens the Library over the page. The
+sidebar expands and stays out while it's open, with the Library next to it
+(also with compact sidebar and expand-on-hover), and goes back to how it was
+when it closes. Esc, the button again, or clicking a tab closes it.
+
+**Spaces**: every space as a column with its folders and tabs, pinned tabs
+(Essentials) on top.
+
+- Drag a column's header to reorder spaces (the footer follows).
+- Drag tabs between columns or within one; drop on a folder's header to put
+  them in that folder. Ctrl+click / Shift+click picks several tabs to drag
+  together.
+- Drag a folder to move it, with all its tabs, to another space.
+- Drop tabs on Essentials to pin them, or drag pinned tabs into a space.
+- Drop tabs on **New space**, or on a space button in the footer.
+- Click a space's icon for an icon picker, its name to rename it, its header
+  to switch to it, ⋯ for container / unload / delete.
+- Click a tab to go to it; middle-click or × closes it. Filter searches tab
+  titles and addresses in every space.
+
+**History**: by last visit, grouped by day, searchable, loads more as you
+scroll. Click opens in the current space (Ctrl/middle-click: in the
+background); drag an entry onto a space to open it there; × deletes it from
+history.
 
 ### Tab sections
 

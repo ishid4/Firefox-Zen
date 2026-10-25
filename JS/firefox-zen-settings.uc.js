@@ -37,6 +37,13 @@
       preview: "spaces",
     },
     {
+      pref: "library",
+      default: true,
+      label: "Library",
+      description: "The footer's first button opens a Library: drag spaces, folders and tabs around, and browse history.",
+      preview: "library",
+    },
+    {
       pref: "tab-sections",
       default: true,
       label: "Tab sections",
@@ -229,6 +236,15 @@
           h("div", { class: "fz-mock-glance" }, h("div"), h("div"), h("div"))
         );
         break;
+      case "library": {
+        const column = rows => h("div", {}, ...Array.from({ length: rows }, () => h("i")));
+        mock.append(
+          h("div", { class: "fz-mock-toolbar" }, h("div", { class: "fz-mock-urlbar" })),
+          h("div", { class: "fz-mock-page" }),
+          h("div", { class: "fz-mock-library" }, column(4), column(2), column(3))
+        );
+        break;
+      }
       case "folders":
         for (let i = 0; i < 3; i++) {
           mock.append(

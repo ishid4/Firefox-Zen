@@ -1,0 +1,807 @@
+/* Firefox-Zen Library (built by JS/firefox-zen-library.uc.js)
+ * Opens over the content area from the spaces footer's first button.
+ * Size and place come from JS (the content area's box). */
+
+#fz-library {
+  --fz-lib-bg: var(--toolbar-bgcolor, Canvas);
+  --fz-lib-fg: var(--toolbar-color, CanvasText);
+  --fz-lib-accent: var(--color-accent-primary, AccentColor);
+  --fz-lib-line: color-mix(in srgb, currentColor 12%, transparent);
+  --fz-lib-surface: color-mix(in srgb, currentColor 5%, transparent);
+  --fz-lib-hover: color-mix(in srgb, currentColor 9%, transparent);
+  --fz-lib-active: color-mix(in srgb, currentColor 14%, transparent);
+  --fz-lib-radius: 10px;
+  --fz-lib-column-width: 260px;
+
+  position: fixed;
+  z-index: 4;
+  display: flex;
+  box-sizing: border-box;
+  overflow: hidden;
+  border-radius: var(--fz-lib-radius);
+  background: var(--fz-lib-bg);
+  color: var(--fz-lib-fg);
+  font: message-box;
+  font-size: 13px;
+  box-shadow: 0 0 0 1px var(--fz-lib-line);
+  outline: none;
+  user-select: none;
+
+  & button {
+    appearance: none;
+    font: inherit;
+    color: inherit;
+    border: none;
+    background: none;
+    margin: 0;
+  }
+
+  & :focus-visible {
+    outline: var(--focus-outline, 2px solid AccentColor);
+    outline-offset: -2px;
+  }
+
+  & img {
+    -moz-context-properties: fill;
+    fill: currentColor;
+  }
+
+  & [hidden] {
+    display: none !important;
+  }
+
+  &[dragging] {
+    cursor: grabbing;
+
+    & * {
+      cursor: grabbing !important;
+    }
+  }
+}
+
+/* ---- rail ---- */
+.fz-lib-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: none;
+  width: 150px;
+  padding: 14px 10px;
+  border-inline-end: 1px solid var(--fz-lib-line);
+}
+
+.fz-lib-title {
+  padding: 2px 10px 12px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.fz-lib-rail-spacer {
+  flex: 1;
+}
+
+.fz-lib-nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px !important;
+  border-radius: 7px;
+  text-align: start;
+  opacity: 0.75;
+
+  &::before {
+    content: "";
+    width: 16px;
+    height: 16px;
+    flex: none;
+    background: currentColor;
+    mask: var(--fz-lib-nav-icon) center / 16px no-repeat;
+  }
+
+  &:hover {
+    background: var(--fz-lib-hover);
+    opacity: 1;
+  }
+
+  &[aria-current="true"] {
+    background: var(--fz-lib-active);
+    opacity: 1;
+    font-weight: 600;
+  }
+}
+
+.fz-lib-nav-spaces {
+  --fz-lib-nav-icon: url("icons/window.svg");
+}
+
+.fz-lib-nav-history {
+  --fz-lib-nav-icon: url("icons/history.svg");
+}
+
+.fz-lib-nav-close {
+  --fz-lib-nav-icon: url("icons/close.svg");
+}
+
+/* ---- main ---- */
+.fz-lib-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.fz-lib-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  padding: 12px 16px;
+}
+
+.fz-lib-search {
+  flex: 1;
+  min-width: 0;
+  max-width: 420px;
+  height: 30px;
+  box-sizing: border-box;
+  padding: 0 10px;
+  border: 1px solid var(--fz-lib-line);
+  border-radius: 7px;
+  background: var(--fz-lib-surface);
+  color: inherit;
+  font: inherit;
+  user-select: text;
+
+  &:focus {
+    border-color: var(--fz-lib-accent);
+    outline: none;
+  }
+}
+
+.fz-lib-button {
+  height: 30px;
+  padding: 0 12px !important;
+  border: 1px solid var(--fz-lib-line) !important;
+  border-radius: 7px;
+  white-space: nowrap;
+
+  &:hover {
+    background: var(--fz-lib-hover) !important;
+  }
+}
+
+.fz-lib-icon-button {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  padding: 0 !important;
+  border-radius: 5px;
+  background: currentColor !important;
+  mask: var(--fz-lib-icon) center / 14px no-repeat;
+  opacity: 0;
+
+  &:hover {
+    opacity: 1 !important;
+  }
+}
+
+.fz-lib-close-tab {
+  --fz-lib-icon: url("icons/close.svg");
+}
+
+.fz-lib-more {
+  --fz-lib-icon: url("chrome://global/skin/icons/more.svg");
+}
+
+.fz-lib-hint {
+  opacity: 0.55;
+  font-size: 12px;
+}
+
+.fz-lib-section-label {
+  flex: none;
+  opacity: 0.6;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.fz-lib-count {
+  flex: none;
+  opacity: 0.5;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.fz-lib-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 48px 16px;
+  opacity: 0.8;
+  text-align: center;
+}
+
+.fz-lib-favicon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+/* ---- spaces view ---- */
+.fz-lib-board-wrap {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.fz-lib-essentials {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex: none;
+  min-height: 40px;
+  margin: 0 16px 10px;
+  padding: 6px 10px;
+  border: 1px dashed transparent;
+  border-radius: var(--fz-lib-radius);
+  background: var(--fz-lib-surface);
+  box-sizing: border-box;
+}
+
+.fz-lib-pinned {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 30px;
+  padding: 0 !important;
+  border-radius: 7px;
+  background: var(--fz-lib-surface) !important;
+
+  &:hover {
+    background: var(--fz-lib-hover) !important;
+  }
+
+  &[current] {
+    background: var(--fz-lib-active) !important;
+    box-shadow: inset 0 0 0 1px var(--fz-lib-line);
+  }
+
+  & img {
+    width: 16px;
+    height: 16px;
+  }
+}
+
+.fz-lib-board {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+  padding: 0 16px 16px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+
+.fz-lib-column {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+  width: var(--fz-lib-column-width);
+  max-height: 100%;
+  box-sizing: border-box;
+  border: 1px solid transparent;
+  border-radius: var(--fz-lib-radius);
+  background: var(--fz-lib-surface);
+  transition: border-color 0.12s ease, background-color 0.12s ease, opacity 0.12s ease;
+
+  &[active] {
+    border-color: color-mix(in srgb, var(--fz-lib-accent) 55%, transparent);
+  }
+}
+
+.fz-lib-column-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  padding: 8px 8px 8px 6px;
+  border-radius: var(--fz-lib-radius) var(--fz-lib-radius) 0 0;
+  cursor: grab;
+
+  &:hover {
+    background: var(--fz-lib-hover);
+
+    & .fz-lib-more {
+      opacity: 0.6;
+    }
+  }
+}
+
+.fz-lib-space-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  padding: 0 !important;
+  border-radius: 7px;
+  font-size: 15px !important;
+  line-height: 1;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--fz-lib-active) !important;
+  }
+}
+
+.fz-lib-space-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  padding: 2px 4px;
+  border-radius: 5px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: text;
+
+  &:hover {
+    background: var(--fz-lib-hover);
+  }
+}
+
+.fz-lib-rename {
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  padding: 0 4px;
+  border: 1px solid var(--fz-lib-accent);
+  border-radius: 5px;
+  background: var(--fz-lib-bg);
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  outline: none;
+  user-select: text;
+}
+
+.fz-lib-container {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--fz-container-color);
+}
+
+.fz-lib-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-height: 24px;
+  padding: 2px 6px;
+  overflow-y: auto;
+}
+
+.fz-lib-column-empty {
+  padding: 10px 8px;
+}
+
+.fz-lib-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  height: 30px;
+  padding: 0 4px 0 8px;
+  border-radius: 7px;
+  cursor: default;
+
+  &:hover {
+    background: var(--fz-lib-hover);
+
+    & .fz-lib-close-tab {
+      opacity: 0.6;
+    }
+  }
+
+  &[current] {
+    background: var(--fz-lib-active);
+    font-weight: 600;
+  }
+
+  &[picked] {
+    background: color-mix(in srgb, var(--fz-lib-accent) 22%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fz-lib-accent) 55%, transparent);
+  }
+
+  &[unloaded] > :is(.fz-lib-favicon, .fz-lib-tab-label) {
+    opacity: 0.5;
+  }
+}
+
+.fz-lib-tab-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fz-lib-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: none;
+  margin-block: 2px;
+}
+
+.fz-lib-group-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 8px 0 4px;
+  border-radius: 7px;
+  font-weight: 600;
+  cursor: grab;
+
+  &:hover {
+    background: var(--fz-lib-hover);
+  }
+}
+
+.fz-lib-chevron {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  background: currentColor;
+  mask: url("chrome://global/skin/icons/arrow-down.svg") center / 12px no-repeat;
+  opacity: 0.6;
+  transition: rotate 0.15s ease;
+
+  .fz-lib-group[collapsed] & {
+    rotate: -90deg;
+  }
+}
+
+/* Arc folder icons, like the sidebar (theme/tabgroups.css); a color dot
+ * when firefox-zen.show-folder-icons is off */
+.fz-lib-folder {
+  width: 16px;
+  height: 14px;
+  flex: none;
+  border-radius: 3px;
+  background: var(--fz-group-color);
+}
+
+@media -moz-pref("firefox-zen.show-folder-icons") {
+  .fz-lib-folder {
+    width: 18px;
+    border-radius: 0;
+    background: var(--fz-folder-open) center / contain no-repeat;
+
+    .fz-lib-group[collapsed] & {
+      background-image: var(--fz-folder-closed);
+    }
+  }
+}
+
+.fz-lib-group {
+  --fz-folder-closed: url("icons/folder/folder-closed-blue.svg");
+  --fz-folder-open: url("icons/folder/folder-open-blue.svg");
+}
+.fz-lib-group[data-color="blue"] {
+  --fz-folder-closed: url("icons/folder/folder-closed-blue.svg");
+  --fz-folder-open: url("icons/folder/folder-open-blue.svg");
+}
+.fz-lib-group[data-color="cyan"] {
+  --fz-folder-closed: url("icons/folder/folder-closed-cyan.svg");
+  --fz-folder-open: url("icons/folder/folder-open-cyan.svg");
+}
+.fz-lib-group[data-color="gray"] {
+  --fz-folder-closed: url("icons/folder/folder-closed-gray.svg");
+  --fz-folder-open: url("icons/folder/folder-open-gray.svg");
+}
+.fz-lib-group[data-color="green"] {
+  --fz-folder-closed: url("icons/folder/folder-closed-green.svg");
+  --fz-folder-open: url("icons/folder/folder-open-green.svg");
+}
+.fz-lib-group[data-color="orange"] {
+  --fz-folder-closed: url("icons/folder/folder-closed-orange.svg");
+  --fz-folder-open: url("icons/folder/folder-open-orange.svg");
+}
+.fz-lib-group[data-color="pink"] {
+  --fz-folder-closed: url("icons/folder/folder-closed-pink.svg");
+  --fz-folder-open: url("icons/folder/folder-open-pink.svg");
+}
+.fz-lib-group[data-color="purple"] {
+  --fz-folder-closed: url("icons/folder/folder-closed-purple.svg");
+  --fz-folder-open: url("icons/folder/folder-open-purple.svg");
+}
+.fz-lib-group[data-color="red"] {
+  --fz-folder-closed: url("icons/folder/folder-closed-red.svg");
+  --fz-folder-open: url("icons/folder/folder-open-red.svg");
+}
+.fz-lib-group[data-color="yellow"] {
+  --fz-folder-closed: url("icons/folder/folder-closed-yellow.svg");
+  --fz-folder-open: url("icons/folder/folder-open-yellow.svg");
+}
+
+/* Line between folders and loose tabs, like the sidebar's tab sections */
+.fz-lib-separator {
+  flex: none;
+  margin: 5px 4px;
+  border-top: 1px solid var(--fz-lib-line);
+}
+
+.fz-lib-group-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fz-lib-group-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-inline-start: 10px;
+  padding-inline-start: 6px;
+  border-inline-start: 2px solid color-mix(in srgb, var(--fz-group-color) 60%, transparent);
+}
+
+.fz-lib-new-column {
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  min-height: 140px;
+  max-height: 220px;
+  border: 1px dashed var(--fz-lib-line) !important;
+  background: none !important;
+  opacity: 0.7;
+
+  &:hover {
+    opacity: 1;
+    background: var(--fz-lib-surface) !important;
+  }
+}
+
+.fz-lib-new-column-plus {
+  font-size: 26px;
+  font-weight: 300;
+  line-height: 1;
+}
+
+/* ---- drag and drop ---- */
+.fz-lib-dragging {
+  opacity: 0.35;
+}
+
+.fz-lib-drop-target {
+  &.fz-lib-column,
+  &.fz-lib-essentials,
+  &.fz-lib-drop-space-chip {
+    border-color: var(--fz-lib-accent) !important;
+    border-style: solid !important;
+    background: color-mix(in srgb, var(--fz-lib-accent) 10%, transparent) !important;
+  }
+}
+
+/* Essentials shows it takes drops while a tab is dragged */
+#fz-library[dragging="tab"] .fz-lib-essentials {
+  border-color: var(--fz-lib-line);
+}
+
+.fz-lib-ghost {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 240px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--arrowpanel-background, var(--fz-lib-bg));
+  color: var(--arrowpanel-color, inherit);
+  box-shadow: 0 0 0 1px var(--fz-lib-line), 0 8px 24px rgb(0 0 0 / 0.25);
+  pointer-events: none;
+  white-space: nowrap;
+
+  & img {
+    width: 16px;
+    height: 16px;
+    flex: none;
+  }
+
+  & span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+.fz-lib-indicator {
+  position: absolute;
+  z-index: 9;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--fz-lib-accent);
+  pointer-events: none;
+
+  &[vertical] {
+    width: 2px;
+  }
+}
+
+/* ---- icon picker ---- */
+.fz-lib-popover {
+  position: absolute;
+  z-index: 11;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 248px;
+  padding: 10px;
+  border-radius: var(--fz-lib-radius);
+  background: var(--arrowpanel-background, var(--fz-lib-bg));
+  color: var(--arrowpanel-color, inherit);
+  box-shadow: 0 0 0 1px var(--fz-lib-line), 0 10px 30px rgb(0 0 0 / 0.25);
+}
+
+.fz-lib-icon-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 2px;
+}
+
+.fz-lib-icon-choice {
+  height: 28px;
+  padding: 0 !important;
+  border-radius: 6px;
+  font-size: 16px !important;
+
+  &:hover {
+    background: var(--fz-lib-hover) !important;
+  }
+}
+
+.fz-lib-icon-input {
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--fz-lib-line);
+  border-radius: 6px;
+  background: var(--fz-lib-surface);
+  color: inherit;
+  font: inherit;
+  user-select: text;
+
+  &:focus {
+    border-color: var(--fz-lib-accent);
+    outline: none;
+  }
+}
+
+/* ---- history view ---- */
+.fz-lib-history-body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.fz-lib-history-list {
+  flex: 1;
+  min-height: 0;
+  padding: 0 16px 16px;
+  overflow-y: auto;
+}
+
+.fz-lib-day {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 0;
+  padding: 10px 8px 6px;
+  background: var(--fz-lib-bg);
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.9;
+}
+
+.fz-lib-history-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 32px;
+  padding: 0 6px 0 8px;
+  border-radius: 7px;
+  cursor: default;
+
+  &:hover {
+    background: var(--fz-lib-hover);
+
+    & .fz-lib-close-tab {
+      opacity: 0.6;
+    }
+  }
+}
+
+.fz-lib-history-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fz-lib-history-host,
+.fz-lib-history-time {
+  flex: none;
+  opacity: 0.55;
+  font-size: 12px;
+}
+
+.fz-lib-history-host {
+  max-width: 30%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fz-lib-history-time {
+  width: 64px;
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Spaces to drop a history entry on; shown while one is dragged */
+.fz-lib-drop-spaces {
+  position: absolute;
+  inset: 0 16px auto;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: var(--fz-lib-radius);
+  background: var(--arrowpanel-background, var(--fz-lib-bg));
+  box-shadow: 0 0 0 1px var(--fz-lib-line), 0 8px 24px rgb(0 0 0 / 0.2);
+  opacity: 0;
+  translate: 0 -8px;
+  pointer-events: none;
+  transition: opacity 0.12s ease, translate 0.12s ease;
+
+  &[shown] {
+    opacity: 1;
+    translate: none;
+  }
+}
+
+.fz-lib-drop-space-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--fz-lib-line);
+  border-radius: 7px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #fz-library * {
+    transition: none !important;
+  }
+}
