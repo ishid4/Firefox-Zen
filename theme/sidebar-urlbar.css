@@ -99,9 +99,23 @@
     }
   }
 
+  /* Page actions live in the Extensions panel (a tile clicks the original,
+   * shown meanwhile as its panel's anchor) */
+  #vertical-tabs #page-action-buttons > :not(#unified-extensions-button, #userContext-icons, #urlbar-zoom-button, [fz-reveal]) {
+    display: none !important;
+  }
+
+  /* general.css removes these from the URL bar for good; here they're
+   * reachable from the panel, so let them show (and anchor their panels) */
+  #vertical-tabs #page-action-buttons > :is(#star-button-box, #picture-in-picture-button)[fz-reveal] {
+    display: flex !important;
+  }
+
   #page-action-buttons > #unified-extensions-button {
     margin: 0 !important;
     padding: 0 !important;
+    /* It opens the page actions panel here: Firefox's "Page actions" icon */
+    list-style-image: url("chrome://global/skin/icons/more.svg") !important;
 
     & > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) {
       width: 28px !important;
@@ -191,31 +205,36 @@
  * extension buttons + "All extensions" (Firefox's own Extensions panel). */
 #fz-urlbar-panel {
   --fz-up-tile: 44px;
+  --arrowpanel-border-radius: 12px;
+  --arrowpanel-padding: 0;
 
   .fz-up-body {
-    width: 248px;
+    width: 232px;
     padding: 10px;
     gap: 8px;
   }
 
   .fz-up-head {
     padding-inline: 2px;
+    margin-block-start: 4px;
   }
 
   .fz-up-title {
     margin: 0;
+    font-size: 0.95em;
     font-weight: 600;
   }
 
   .fz-up-manage {
     margin: 0;
-    font-size: 0.9em;
-    opacity: 0.75;
+    font-size: 0.85em;
+    color: inherit !important;
+    text-decoration: none !important;
+    opacity: 0.6;
     cursor: pointer;
 
     &:hover {
       opacity: 1;
-      text-decoration: underline;
     }
   }
 
@@ -255,12 +274,66 @@
         display: none !important;
       }
 
-      .toolbarbutton-icon,
+      /* Toolbar rules size icons as 16px + padding: keep them 16px here */
       .toolbarbutton-badge-stack {
+        padding: 0 !important;
+        background: transparent !important;
+        width: auto !important;
+        height: auto !important;
+      }
+
+      .toolbarbutton-icon {
+        width: 16px !important;
+        height: 16px !important;
+        min-width: 0 !important;
+        padding: 0 !important;
+        background: transparent !important;
+      }
+
+      .toolbarbutton-badge {
+        margin-block-start: -6px !important;
+        margin-inline-end: -8px !important;
+      }
+    }
+
+    /* Pinned extension: only its action button, as a full-size tile */
+    > .unified-extensions-item {
+      overflow: hidden;
+
+      .unified-extensions-item-contents,
+      .unified-extensions-item-menu-button {
+        display: none !important;
+      }
+
+      .unified-extensions-item-action-button {
+        flex: 1;
+        justify-content: center;
+        align-self: stretch;
+        margin: 0 !important;
         padding: 0 !important;
         background: transparent !important;
       }
     }
+  }
+
+  /* Address bar actions: their own group of smaller tiles, set apart from
+   * the toolbar items and extensions below by a divider */
+  #fz-up-page-actions {
+    --fz-up-tile: 28px;
+    gap: 4px;
+    padding-block-end: 10px !important;
+    margin-block-end: 2px;
+    border-block-end: 1px solid color-mix(in srgb, currentColor 12%, transparent) !important;
+
+    > toolbarbutton {
+      height: 28px;
+      border-radius: 6px;
+    }
+  }
+
+  .fz-up-page-action {
+    -moz-context-properties: fill, fill-opacity;
+    fill: currentColor;
   }
 
   #fz-up-all-extensions {
