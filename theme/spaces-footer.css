@@ -48,6 +48,12 @@
   }
 }
 
+/* Our edge-hover scrolling replaces Firefox's overflow ("»") button, whose
+ * menu would also bring back tools hidden in Customize Sidebar */
+:host([fz-spaces-footer]) .tools-and-extensions.overflow-button {
+  display: none !important;
+}
+
 /* Collapsed sidebar: no footer */
 :host(:not([expanded])) #fz-spaces-bar {
   display: none;

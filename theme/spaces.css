@@ -18,14 +18,20 @@
 
 /* ---- Header: "🛠 Work" between Essentials (pinned) and the space's tabs ---- */
 #fz-space-header {
+  /* Icon sits on the collapsed tab-icon column in both sidebar states, and the
+   * header keeps one fixed height, so nothing shifts on collapse/expand. */
+  --fz-header-icon-size: 14px;
+
   display: flex;
   align-items: center;
   gap: 8px;
   flex: none;
+  box-sizing: border-box;
+  height: 28px;
   min-width: 0;
-  margin: 6px calc(var(--tab-margin-inline-inner, 6px) + 2px) 2px;
-  padding: 4px 6px;
-  border-radius: 6px;
+  margin: 4px 0 2px;
+  padding-inline: calc(var(--tab-margin-inline-inner, 6px) + var(--tab-collapsed-background-width, 32px) / 2 - var(--fz-header-icon-size) / 2)
+    calc(var(--tab-margin-inline-inner, 6px) + 4px);
   color: var(--toolbox-text-color, inherit);
   opacity: 0.6;
   font: menu;
@@ -44,6 +50,8 @@
 
 .fz-space-header-icon {
   flex: none;
+  width: var(--fz-header-icon-size);
+  text-align: center;
   font-size: 13px;
   line-height: 1;
 
@@ -91,10 +99,13 @@
   display: none;
 }
 
-/* ---- Collapsed sidebar: no header, no bar (native tab list layout) ---- */
+/* ---- Collapsed sidebar: no footer; header keeps its height, icon only ---- */
 #vertical-tabs:has(> #tabbrowser-tabs:not([expanded])) {
-  & > #fz-spaces-bar,
-  & #fz-space-header {
+  & > #fz-spaces-bar {
+    display: none;
+  }
+
+  & #fz-space-header .fz-space-name {
     display: none;
   }
 }

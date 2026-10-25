@@ -150,8 +150,12 @@ toolbar .toolbarbutton-1 {
     inset-block: 0 !important;
     inset-inline: 0 auto !important;
     z-index: var(--browser-area-z-index-sidebar-expand-on-hover, 4) !important;
-    /* Opaque, matching the toolbox, since it now covers the page */
-    background-color: var(--toolbox-background-color, var(--lwt-accent-color)) !important;
+    /* Opaque and matching the toolbox (theme color/gradient included), since
+     * it now covers the page. Same paint as Firefox's own expand-on-hover
+     * overlay: the toolbox gradient sized to the window, over an opaque base. */
+    background-color: light-dark(#e8e8e8, #202020) !important;
+    background-image: var(--toolbox-background-gradient, none), image(var(--toolbox-background-color)) !important;
+    background-size: 100vw 100vh, auto !important;
     box-shadow: 0 0 16px rgb(0 0 0 / 0.25);
     translate: 0 !important;
     opacity: 1;
@@ -181,6 +185,16 @@ toolbar .toolbarbutton-1 {
 
   #sidebar-launcher-splitter {
     display: none !important;
+  }
+}
+
+/* Collapsed launcher width: the collapsed sidebar is sized from its content,
+ * but #vertical-tabs (overflow: hidden, its tabs at flex-basis 0%) can report
+ * 0 width, so the whole collapsed strip vanishes (seen on 158.0.1). Keep it at
+ * least as wide as Firefox's own collapsed tab width. */
+@media -moz-pref("sidebar.verticalTabs") {
+  #vertical-tabs:has(> #tabbrowser-tabs:not([expanded])) {
+    min-width: var(--tab-collapsed-width, 50px) !important;
   }
 }
 
