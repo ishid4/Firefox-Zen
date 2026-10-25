@@ -21,6 +21,7 @@ Then open `about:support`, click **Clear startup cache…**, and restart.
 | `firefox-zen.show-customize-button` | true | Firefox's "Customize sidebar" gear in the sidebar tools (toggle it under Customize Sidebar → Tools) |
 | `firefox-zen.sidebar-urlbar` | false | Toolbar + address bar at the top of the sidebar. With "Expand sidebar on hover" it stays there and shows when the sidebar expands; otherwise it goes back to the top while the sidebar is collapsed. Also back on top while customizing the toolbar |
 | `firefox-zen.floating-urlbar` | true | Open the address bar centered, like a command bar |
+| `firefox-zen.glance` | true | Alt+click a link to open it in a floating Glance window (see below) |
 | `firefox-zen.show-folder-icons` | true | Arc folder icons on tab groups |
 | `firefox-zen.show-menu-icons` | true | Icons in context menus |
 
@@ -70,6 +71,25 @@ follow what you see; a folder dragged below the line goes back above it.
 Hovering the sidebar shows **↓ Clear** on the line: it closes every tab below
 the line in the current space (Firefox asks first when closing many tabs;
 Ctrl+Shift+T reopens them). Folders and pinned tabs stay.
+
+### Glance
+
+Like Zen's Glance: Alt+click a link and the page grows out of it into a
+floating window over the current tab, with the tab dimmed behind it.
+
+- **Esc**, a click on the dimmed area, or **×** closes it (it shrinks back
+  into the link).
+- **Open as tab** switches to it as a normal tab next to the current one;
+  **Split view** puts both in Firefox's split view.
+  Nothing reloads: the glance already is a (hidden) tab.
+- Drag any edge or corner of the glance to resize it; it stays centered, and
+  the size is remembered (`firefox-zen.glance.width` / `.height`, in
+  thousandths of the content area).
+- Alt+click inside a glance navigates the glance. Switching tabs closes it.
+- Works on links whose address Firefox shows at the bottom on hover (that's
+  where the link comes from; no code runs inside pages).
+- Off while `browser.altClickSave` is on (Alt+click saves the link instead).
+- Pages that handle Alt+click themselves (rare) keep their own behavior.
 
 ### Address bar in sidebar
 

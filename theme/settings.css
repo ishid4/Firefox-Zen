@@ -327,6 +327,38 @@
   translate: 0 0;
 }
 
+/* Glance: dimmed page with a link grown into a floating window */
+.fz-mock-glance {
+  position: absolute;
+  inset: 20px 16% 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 5px;
+  border-radius: 5px;
+  background: var(--arrowpanel-background, Canvas);
+  box-shadow: 0 0 0 40px rgb(0 0 0 / 0.3), 0 2px 8px rgb(0 0 0 / 0.3);
+  opacity: 0;
+  scale: 0.4;
+  transition: opacity 0.2s ease, scale 0.25s cubic-bezier(0.2, 0.9, 0.25, 1);
+
+  & > div {
+    height: 4px;
+    border-radius: 2px;
+    background: var(--fz-line);
+
+    &:first-child {
+      height: 12px;
+      background: color-mix(in srgb, var(--fz-accent) 35%, transparent);
+    }
+  }
+}
+
+.fz-card[data-on] .fz-mock-glance {
+  opacity: 1;
+  scale: 1;
+}
+
 /* Rows used by folder + menu + tab sections previews */
 .fz-preview-folders,
 .fz-preview-sections,

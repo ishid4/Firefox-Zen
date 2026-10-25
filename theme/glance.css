@@ -1,0 +1,169 @@
+/* Firefox-Zen Glance (built by JS/firefox-zen-glance.uc.js)
+ * Alt+click a link: it opens in a hidden tab whose panel floats over the
+ * selected tab. The open/close motion is animated from JS. */
+
+/* The glance tab is plumbing until it's opened as a real tab */
+.tabbrowser-tab[fz-glance] {
+  display: none !important;
+}
+
+/* Glance panel: tabpanels only shows the selected panel, so force this one
+ * visible and float it above the rest */
+#tabbrowser-tabpanels > [fz-glance] {
+  -moz-subtree-hidden-only-visually: 0 !important;
+  visibility: visible !important;
+  /* Size and place come from JS (layout() in the script) */
+  position: absolute !important;
+  z-index: 3;
+  margin: 0 !important;
+  transform-origin: 0 0;
+
+  & > .browserContainer {
+    border: none !important;
+    /* Animated from JS while the card grows/shrinks */
+    border-radius: var(--fz-glance-radius, 12px) !important;
+    overflow: clip;
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, currentColor 12%, transparent),
+      0 16px 48px rgb(0 0 0 / 0.45);
+  }
+}
+
+/* Edge and corner grips for resizing; they straddle the card's border */
+.fz-glance-resizers {
+  --fz-grip: 10px;
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+
+  &[hidden] {
+    display: none;
+  }
+}
+
+.fz-glance-resizer {
+  position: absolute;
+  pointer-events: auto;
+  border-radius: calc(var(--fz-grip) / 2);
+  transition: background-color 0.15s ease;
+
+  &:is([data-edge="n"], [data-edge="s"]) {
+    left: var(--fz-grip);
+    right: var(--fz-grip);
+    height: var(--fz-grip);
+    cursor: ns-resize;
+  }
+
+  &:is([data-edge="e"], [data-edge="w"]) {
+    top: var(--fz-grip);
+    bottom: var(--fz-grip);
+    width: var(--fz-grip);
+    cursor: ew-resize;
+  }
+
+  &[data-edge*="n"] { top: calc(var(--fz-grip) / -2); }
+  &[data-edge*="s"] { bottom: calc(var(--fz-grip) / -2); }
+  &[data-edge*="e"] { right: calc(var(--fz-grip) / -2); }
+  &[data-edge*="w"] { left: calc(var(--fz-grip) / -2); }
+
+  &:is([data-edge="ne"], [data-edge="nw"], [data-edge="se"], [data-edge="sw"]) {
+    width: calc(var(--fz-grip) * 1.6);
+    height: calc(var(--fz-grip) * 1.6);
+  }
+
+  &:is([data-edge="nw"], [data-edge="se"]) {
+    cursor: nwse-resize;
+  }
+
+  &:is([data-edge="ne"], [data-edge="sw"]) {
+    cursor: nesw-resize;
+  }
+
+  /* A soft bar along the side you're about to drag */
+  &:is([data-edge="n"], [data-edge="s"], [data-edge="e"], [data-edge="w"]):hover,
+  [fz-glance-resizing] &:active {
+    background-color: color-mix(in srgb, var(--color-accent-primary, AccentColor) 45%, transparent);
+  }
+}
+
+/* While resizing, the page underneath mustn't swallow the pointer */
+#tabbrowser-tabpanels > [fz-glance-resizing] browser {
+  pointer-events: none;
+}
+
+/* Dims the tab underneath; clicking it closes the glance */
+#fz-glance-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: rgb(0 0 0 / 0.45);
+}
+
+/* Close / open as tab / split, beside the top-right corner */
+.fz-glance-buttons {
+  position: absolute;
+  top: 0;
+  left: calc(100% + 10px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  animation: fz-glance-buttons-in 0.2s 0.22s ease-out both;
+
+  &[hidden] {
+    display: none;
+  }
+}
+
+.fz-glance-button {
+  appearance: none;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  color: var(--toolbar-color, currentColor);
+  background: var(--toolbar-bgcolor, Canvas) center / 16px no-repeat;
+  box-shadow: 0 2px 10px rgb(0 0 0 / 0.35);
+  -moz-context-properties: fill, fill-opacity;
+  fill: currentColor;
+  transition: scale 0.12s ease, background-color 0.12s ease;
+
+  &:hover {
+    background-color: color-mix(in srgb, var(--toolbar-bgcolor, Canvas) 85%, currentColor);
+    scale: 1.06;
+  }
+
+  &:active {
+    scale: 0.95;
+  }
+
+  &:focus-visible {
+    outline: var(--focus-outline, 2px solid AccentColor);
+  }
+}
+
+.fz-glance-close {
+  background-image: url("icons/close.svg");
+}
+
+.fz-glance-expand {
+  background-image: url("icons/open.svg");
+}
+
+.fz-glance-split {
+  background-image: url("icons/sidebars-right.svg");
+}
+
+@keyframes fz-glance-buttons-in {
+  from {
+    opacity: 0;
+    translate: -8px 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fz-glance-buttons {
+    animation: none;
+  }
+}

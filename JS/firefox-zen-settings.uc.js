@@ -58,6 +58,13 @@
       preview: "urlbar",
     },
     {
+      pref: "glance",
+      default: true,
+      label: "Glance",
+      description: "Alt+click a link to peek at it in a floating window. Esc or a click outside closes it.",
+      preview: "glance",
+    },
+    {
       pref: "show-folder-icons",
       default: true,
       label: "Tab group folders",
@@ -199,6 +206,13 @@
           h("div", { class: "fz-mock-toolbar" }, h("div", { class: "fz-mock-urlbar" })),
           h("div", { class: "fz-mock-page" }),
           h("div", { class: "fz-mock-float" }, h("div"), h("div"), h("div"))
+        );
+        break;
+      case "glance":
+        mock.append(
+          h("div", { class: "fz-mock-toolbar" }, h("div", { class: "fz-mock-urlbar" })),
+          h("div", { class: "fz-mock-page" }),
+          h("div", { class: "fz-mock-glance" }, h("div"), h("div"), h("div"))
         );
         break;
       case "folders":
