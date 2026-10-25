@@ -266,6 +266,35 @@
   }
 }
 
+/* Address bar in sidebar: the top toolbar's URL bar moves into the sidebar */
+.fz-mock-url-side {
+  width: 40px;
+  padding-inline: 4px;
+}
+
+.fz-mock-side-url {
+  height: 7px;
+  border-radius: 4px;
+  background: var(--fz-line);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.fz-mock-top-toolbar .fz-mock-urlbar {
+  transition: opacity 0.2s ease;
+}
+
+.fz-card[data-on] .fz-preview-sidebarurl {
+  & .fz-mock-side-url {
+    opacity: 1;
+    background: color-mix(in srgb, var(--fz-accent) 45%, transparent);
+  }
+
+  & .fz-mock-top-toolbar .fz-mock-urlbar {
+    opacity: 0;
+  }
+}
+
 /* Floating urlbar: centered command bar over the page */
 .fz-mock-float {
   position: absolute;

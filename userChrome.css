@@ -13,6 +13,7 @@ Better unloaded tabs styling from github.com/Felkazz/zen-browser-better-unloaded
 @import url("theme/theme-sidebar.css");
 @import url("theme/settings.css");
 @import url("theme/spaces.css");
+@import url("theme/sidebar-urlbar.css");
 
 /* All the previous userChrome.css' content */
 @import url("theme/general.css");

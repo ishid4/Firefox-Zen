@@ -37,6 +37,13 @@
       preview: "spaces",
     },
     {
+      pref: "sidebar-urlbar",
+      default: false,
+      label: "Address bar in sidebar",
+      description: "Move the toolbar and address bar to the top of the expanded sidebar.",
+      preview: "sidebarurl",
+    },
+    {
       pref: "floating-urlbar",
       default: true,
       label: "Floating address bar",
@@ -141,6 +148,24 @@
             "div",
             { class: "fz-mock-body" },
             h("div", { class: "fz-mock-side" }, h("span"), h("span"), h("span")),
+            h("div", { class: "fz-mock-page" })
+          )
+        );
+        break;
+      case "sidebarurl":
+        mock.append(
+          h("div", { class: "fz-mock-toolbar fz-mock-top-toolbar" }, h("div", { class: "fz-mock-urlbar" })),
+          h(
+            "div",
+            { class: "fz-mock-body" },
+            h(
+              "div",
+              { class: "fz-mock-side fz-mock-url-side" },
+              h("i", { class: "fz-mock-side-url" }),
+              h("span"),
+              h("span"),
+              h("span")
+            ),
             h("div", { class: "fz-mock-page" })
           )
         );

@@ -1,0 +1,267 @@
+/* Navigation toolbar at the top of the sidebar (Zen/Arc layout).
+ * JS/firefox-zen-sidebar-urlbar.uc.js moves the whole #navigator-toolbox (so
+ * Firefox's toolbar button handlers keep working) into #vertical-tabs, puts
+ * the window controls in #fz-titlebar at the top of the window, and sets
+ * :root[fz-sidebar-urlbar] while it's there. On with firefox-zen.sidebar-urlbar */
+
+:root[fz-sidebar-urlbar] {
+  /* #vertical-tabs is a row box: stack the toolbar above the tab list */
+  #vertical-tabs:has(> #navigator-toolbox) {
+    flex-direction: column !important;
+
+    & > #tabbrowser-tabs {
+      flex: 1 !important;
+      min-height: 0 !important;
+      width: auto !important;
+    }
+  }
+
+  #vertical-tabs > #navigator-toolbox {
+    flex: none;
+    /* Fill the sidebar's width but never set it (the collapsed strip is sized
+     * from its content, and a row of buttons + URL bar would widen it) */
+    contain: inline-size;
+    min-width: 0 !important;
+    z-index: auto !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: transparent !important;
+    color: inherit;
+    /* The title bar's job moves here: empty space drags the window (buttons
+     * and the URL bar are no-drag natively) */
+    -moz-window-dragging: drag;
+
+    /* A bookmarks row would be cramped in the sidebar */
+    & > #PersonalToolbar {
+      display: none !important;
+    }
+  }
+
+  #vertical-tabs #nav-bar {
+    flex-wrap: wrap !important;
+    align-items: center;
+    row-gap: 6px;
+    min-height: 0 !important;
+    padding: 6px var(--tab-margin-inline-inner, 6px) 8px !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: transparent !important;
+
+    /* Buttons and the URL bar become direct rows of #nav-bar (the toolbox is
+     * moved back before Customize Toolbar starts) */
+    & > #nav-bar-customization-target {
+      display: contents !important;
+    }
+
+    /* Row 2: the URL bar, full width */
+    & #urlbar-container {
+      order: 100;
+      flex: 1 1 100% !important;
+      width: 100% !important;
+      min-width: 0 !important;
+      max-width: none !important;
+      margin-inline: 0 !important;
+      margin-block-start: 2px !important;
+      padding-inline: 0 !important;
+      --urlbar-container-height: 38px !important;
+    }
+
+    /* Visible field background in the sidebar (the toolbar style is flat) */
+    & #urlbar:not([popover-open], [focused]) > .urlbar-background {
+      background-color: color-mix(in srgb, currentColor 8%, transparent) !important;
+      border-radius: 10px !important;
+    }
+
+    /* Extension buttons pinned to the toolbar would take their own row; the
+     * Extensions button (moved into the URL bar) lists them all */
+    & :is(.webextension-browser-action, [id$="-browser-action"], .unified-extensions-item) {
+      display: none !important;
+    }
+
+    /* Toolbar-only spacing pieces */
+    & :is(#vertical-spacer, .titlebar-spacer) {
+      display: none !important;
+    }
+  }
+
+  /* Page actions + Extensions at the end of the URL bar, always visible
+   * (general.css puts page actions first and hides them until hover, Arc
+   * toolbar style) */
+  #vertical-tabs #urlbar:not([popover-open], [focused]) {
+    #page-action-buttons {
+      order: 99 !important;
+      opacity: 1 !important;
+      scale: 1 !important;
+    }
+
+    #identity-box {
+      order: 0 !important;
+    }
+  }
+
+  #page-action-buttons > #unified-extensions-button {
+    margin: 0 !important;
+    padding: 0 !important;
+
+    & > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) {
+      width: 28px !important;
+      height: 28px !important;
+      padding: 6px !important;
+      border-radius: 8px !important;
+    }
+
+    &:hover > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) {
+      background-color: var(--urlbar-box-hover-bgcolor, color-mix(in srgb, currentColor 12%, transparent)) !important;
+    }
+
+    &:is([open], :hover:active) > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) {
+      background-color: var(--urlbar-box-active-bgcolor, color-mix(in srgb, currentColor 18%, transparent)) !important;
+    }
+  }
+
+  /* Pinned tabs (Essentials) under the URL bar: room around the grid and
+   * rounder tiles, like Zen */
+  #tabbrowser-tabs[orient="vertical"][expanded] > #pinned-tabs-container {
+    margin-block: 4px 6px !important;
+
+    .tab-background {
+      border-radius: 10px !important;
+    }
+  }
+
+  /* "Expand sidebar on hover": the toolbar stays in the sidebar; while it's
+   * the collapsed strip, shrink it to nothing (still in layout, so Ctrl+L can
+   * focus the URL bar, which then floats over the page). Hovering expands the
+   * sidebar and shows it. */
+  #vertical-tabs:has(> #tabbrowser-tabs:not([expanded])) > #navigator-toolbox {
+    max-height: 0 !important;
+    overflow: clip !important;
+    opacity: 0;
+  }
+
+  /* Top row left where the toolbox was: window controls + drag area */
+  #fz-titlebar {
+    justify-content: flex-end;
+    min-height: 32px;
+    -moz-window-dragging: drag;
+    background-color: light-dark(#e8e8e8, #202020);
+    background-image: var(--toolbox-background-gradient, none), image(var(--toolbox-background-color));
+    background-size: 100vw 100vh, auto;
+    color: var(--toolbox-text-color, inherit);
+
+    & > .titlebar-buttonbox-container {
+      -moz-window-dragging: no-drag;
+    }
+  }
+}
+
+/* Compact toolbar + address bar in sidebar (Zen "only sidebar" layout): the
+ * window-controls row overlays the page instead of taking a row, so the
+ * sidebar and page get the full window height. It slides out leaving a thin
+ * hover strip at the top edge; hovering it brings the controls back.
+ * #fz-titlebar is a child of <body>, its containing block (contain: paint),
+ * so fixed = the whole window. */
+@media -moz-pref("firefox-zen.compact-toolbar") {
+  :root[fz-sidebar-urlbar] #fz-titlebar {
+    --fz-titlebar-peek: 6px;
+
+    position: fixed !important;
+    inset: 0 0 auto 0 !important;
+    z-index: 10 !important;
+    translate: 0;
+    opacity: 1;
+    box-shadow: 0 4px 16px rgb(0 0 0 / 0.25);
+    transition: translate 0.2s ease, opacity 0.15s ease !important;
+
+    &:not(:hover, :focus-within, :has([open])) {
+      translate: 0 calc(-100% + var(--fz-titlebar-peek));
+      opacity: 0;
+      box-shadow: none;
+      transition: translate 0.2s ease 0.35s, opacity 0.15s ease 0.35s, box-shadow 0s 0.55s !important;
+    }
+  }
+}
+
+/* ---- URL bar panel (Zen-style), opened by the Extensions button ----
+ * Top: toolbar items placed right of the address bar; then the toolbar-pinned
+ * extension buttons + "All extensions" (Firefox's own Extensions panel). */
+#fz-urlbar-panel {
+  --fz-up-tile: 44px;
+
+  .fz-up-body {
+    width: 248px;
+    padding: 10px;
+    gap: 8px;
+  }
+
+  .fz-up-head {
+    padding-inline: 2px;
+  }
+
+  .fz-up-title {
+    margin: 0;
+    font-weight: 600;
+  }
+
+  .fz-up-manage {
+    margin: 0;
+    font-size: 0.9em;
+    opacity: 0.75;
+    cursor: pointer;
+
+    &:hover {
+      opacity: 1;
+      text-decoration: underline;
+    }
+  }
+
+  /* Rows of icon tiles */
+  .fz-up-toolbar {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(var(--fz-up-tile), 1fr));
+    gap: 6px;
+    min-height: 0;
+    padding: 0 !important;
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+
+    &[hidden] {
+      display: none !important;
+    }
+
+    > :is(toolbarbutton, toolbaritem) {
+      justify-content: center;
+      margin: 0 !important;
+      padding: 0 !important;
+      height: 36px;
+      border-radius: 8px;
+      background-color: color-mix(in srgb, currentColor 8%, transparent);
+
+      &:hover {
+        background-color: color-mix(in srgb, currentColor 14%, transparent);
+      }
+
+      &:is([open], [checked], :hover:active) {
+        background-color: color-mix(in srgb, currentColor 20%, transparent);
+      }
+
+      .toolbarbutton-text,
+      .toolbarbutton-multiline-text {
+        display: none !important;
+      }
+
+      .toolbarbutton-icon,
+      .toolbarbutton-badge-stack {
+        padding: 0 !important;
+        background: transparent !important;
+      }
+    }
+  }
+
+  #fz-up-all-extensions {
+    list-style-image: url("chrome://mozapps/skin/extensions/extension.svg");
+    -moz-context-properties: fill, fill-opacity;
+    fill: currentColor;
+  }
+}

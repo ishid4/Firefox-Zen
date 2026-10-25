@@ -105,27 +105,35 @@ toolbar .toolbarbutton-1 {
  * Stays open while the URL bar, a toolbar menu or a panel is open.
  * On with firefox-zen.compact-toolbar */
 @media -moz-pref("firefox-zen.compact-toolbar") {
-  #navigator-toolbox {
-    background: var(--lwt-accent-color) !important;
-  }
+  /* Normal layout only: with the address bar in the sidebar the toolbox lives
+   * there and theme/sidebar-urlbar.css hides the window-controls row instead */
+  :root:not([fz-sidebar-urlbar]) {
+    /* Firefox's own toolbox paint (theme color/gradient included). Opaque
+     * base so it never shows the black window behind it without a theme. */
+    #navigator-toolbox {
+      background-color: light-dark(#e8e8e8, #202020) !important;
+      background-image: var(--toolbox-background-gradient, none), image(var(--toolbox-background-color)) !important;
+      background-size: 100vw 100vh, auto !important;
+    }
 
-  #nav-bar:not([customizing]) {
-    /* Numeric so the collapse below can be delayed (none can't transition) */
-    max-height: 100px;
-    transition: max-height 0s, opacity 0.15s ease !important;
-  }
-
-  #navigator-toolbox:not(
-      :hover,
-      :focus-within,
-      :has([open], #urlbar:is([focused], [popover-open]))
-    )
     #nav-bar:not([customizing]) {
-    max-height: 8px !important;
-    min-height: 0 !important;
-    overflow: clip !important;
-    opacity: 0 !important;
-    transition: max-height 0s linear 0.35s, opacity 0.15s ease 0.2s !important;
+      /* Numeric so the collapse below can be delayed (none can't transition) */
+      max-height: 100px;
+      transition: max-height 0s, opacity 0.15s ease !important;
+    }
+
+    #navigator-toolbox:not(
+        :hover,
+        :focus-within,
+        :has([open], #urlbar:is([focused], [popover-open]))
+      )
+      #nav-bar:not([customizing]) {
+      max-height: 8px !important;
+      min-height: 0 !important;
+      overflow: clip !important;
+      opacity: 0 !important;
+      transition: max-height 0s linear 0.35s, opacity 0.15s ease 0.2s !important;
+    }
   }
 }
 
@@ -165,7 +173,11 @@ toolbar .toolbarbutton-1 {
       inset-inline: auto 0 !important;
     }
 
-    &:not(:hover, :focus-within) {
+    /* Stay out while hovered, focused, or while one of its buttons has a
+     * panel open (e.g. Extensions in the URL bar): the panel lives outside
+     * the sidebar, and sliding away would yank its anchor off-screen.
+     * open="true" only: many toolbar elements carry open="false". */
+    &:not(:hover, :focus-within, :has(:is(toolbarbutton, toolbaritem, button, moz-button)[open="true"])) {
       translate: calc(-100% + var(--fz-sidebar-peek)) 0 !important;
       opacity: 0;
       box-shadow: none;
@@ -216,13 +228,36 @@ toolbar .toolbarbutton-1 {
   outline: none !important;
 }
 
-/* Expand-on-hover lists pinned tabs as full rows (1fr), but the container
- * keeps the splitter's saved inline height (one icon row), so it scrolls.
- * Let it fit its content instead. */
+/* Expand-on-hover: Firefox lists pinned tabs as full-width rows there, and
+ * only uses the Essentials-style icon grid in the other sidebar modes (its
+ * rules sit behind :root:not([sidebar-expand-on-hover])). Use the grid here
+ * too: tiles when hover-expanded, one icon column in the collapsed strip.
+ * The grid itself is set inside the container's shadow root by
+ * JS/firefox-zen-sidebar-tools.uc.js (a ::part() rule from here doesn't take);
+ * these rules hide titles, size the tiles and pass the padding through.
+ * Height fits the content, since the splitter's saved height would scroll. */
 @media -moz-pref("sidebar.visibility", "expand-on-hover") {
   #tabbrowser-tabs[orient="vertical"] > #pinned-tabs-container {
     height: auto !important;
     max-height: 50vh !important;
+    --tab-padding-inline: calc((var(--tab-collapsed-background-width) + 2 * var(--tab-margin-inline-pinned-expanded) - var(--icon-size)) / 2);
+
+    .tab-label-container {
+      display: none !important;
+    }
+
+    .tab-content {
+      justify-content: center;
+    }
+  }
+
+  #tabbrowser-tabs[orient="vertical"][expanded] > #pinned-tabs-container {
+    --tab-pinned-min-width: var(--tab-pinned-min-width-expanded);
+    --fz-pinned-padding-inline: var(--tab-container-margin-inline-pinned-expanded);
+
+    .tab-background {
+      margin-inline: var(--tab-margin-inline-pinned-expanded) !important;
+    }
   }
 }
 

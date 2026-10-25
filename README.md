@@ -14,10 +14,11 @@ Then open `about:support`, click **Clear startup cache…**, and restart.
 
 | Pref | Default | Effect |
 | --- | --- | --- |
-| `firefox-zen.compact-toolbar` | false | Hide the toolbar until hovered |
+| `firefox-zen.compact-toolbar` | false | Hide the toolbar until hovered (with the address bar in the sidebar: the window controls hide too and the sidebar/page use the full window height) |
 | `firefox-zen.compact-sidebar` | false | Hide the vertical tabs sidebar until its edge is hovered |
 | `firefox-zen.spaces` | false | Zen-style Spaces (see below) |
 | `firefox-zen.show-customize-button` | true | Firefox's "Customize sidebar" gear in the sidebar tools (toggle it under Customize Sidebar → Tools) |
+| `firefox-zen.sidebar-urlbar` | false | Toolbar + address bar at the top of the sidebar. With "Expand sidebar on hover" it stays there and shows when the sidebar expands; otherwise it goes back to the top while the sidebar is collapsed. Also back on top while customizing the toolbar |
 | `firefox-zen.floating-urlbar` | true | Open the address bar centered, like a command bar |
 | `firefox-zen.show-folder-icons` | true | Arc folder icons on tab groups |
 | `firefox-zen.show-menu-icons` | true | Icons in context menus |
@@ -57,6 +58,15 @@ Pinned tabs are global "Essentials" and show in every space.
   each window's current space are kept in the session, so they survive restarts.
 - Turning Spaces off shows every tab again.
 - Conflicts with other tab-hiding extensions (e.g. Simple Tab Groups).
+
+### Address bar in sidebar
+
+The toolbar follows your Customize Toolbar layout: items placed **left** of the
+address bar stay in the row above it; items placed **right** of it, plus
+toolbar-pinned extension buttons, move into the panel opened by the Extensions
+button at the end of the address bar ("All extensions" there opens Firefox's own
+Extensions panel, "Manage" opens about:addons). Everything goes back into the
+toolbar while customizing or when the address bar leaves the sidebar.
 
 ### Required prefs
 

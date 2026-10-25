@@ -33,6 +33,36 @@
     root.adoptedStyleSheets = showGear() ? sheets : [...sheets, hideGearSheet];
   }
 
+  // ---- pinned tabs as an icon grid with "Expand sidebar on hover" ----
+
+  // Firefox only grids pinned tabs outside expand-on-hover (rows with titles
+  // there). The grid lives on the arrowscrollbox's <slot part="items-wrapper">;
+  // a ::part() rule from userChrome.css doesn't take, so style it from inside
+  // the shadow root. Tile width/padding come from general.css's variables.
+  const pinnedGridSheet = new CSSStyleSheet();
+  // Added/removed with the pref rather than an -moz-pref() media query, which
+  // may not parse in a constructed sheet.
+  pinnedGridSheet.replaceSync(`
+    :host([orient="vertical"]) slot[part~="items-wrapper"] {
+      display: grid !important;
+      grid-template-columns: repeat(auto-fit, minmax(var(--tab-pinned-min-width), auto)) !important;
+      grid-auto-rows: var(--tab-height-with-margin-padding);
+      padding-inline: var(--fz-pinned-padding-inline, 0);
+    }
+  `);
+
+  function applyPinnedGrid() {
+    const root = document.getElementById("pinned-tabs-container")?.shadowRoot;
+    if (!root) {
+      return;
+    }
+    const hoverMode = Services.prefs.getStringPref("sidebar.visibility", "always-show") === "expand-on-hover";
+    const sheets = root.adoptedStyleSheets.filter(s => s !== pinnedGridSheet);
+    root.adoptedStyleSheets = hoverMode ? [...sheets, pinnedGridSheet] : sheets;
+  }
+
+  const visibilityObserver = { observe: () => applyPinnedGrid() };
+
   // ---- checkbox in Customize Sidebar → Tools ----
 
   async function injectCheckbox() {
@@ -95,6 +125,7 @@
     await window.SidebarController?.promiseInitialized;
 
     applyGear();
+    applyPinnedGrid();
     window.addEventListener("SidebarShown", () => {
       injectCheckbox().catch(e => console.error("firefox-zen-sidebar-tools:", e));
     });
@@ -102,7 +133,15 @@
     window.addEventListener("SidebarItemChanged", applyGear);
 
     Services.prefs.addObserver(PREF, prefObserver);
-    window.addEventListener("unload", () => Services.prefs.removeObserver(PREF, prefObserver), { once: true });
+    Services.prefs.addObserver("sidebar.visibility", visibilityObserver);
+    window.addEventListener(
+      "unload",
+      () => {
+        Services.prefs.removeObserver(PREF, prefObserver);
+        Services.prefs.removeObserver("sidebar.visibility", visibilityObserver);
+      },
+      { once: true }
+    );
 
     // Customize panel may already be open at startup.
     injectCheckbox().catch(e => console.error("firefox-zen-sidebar-tools:", e));
