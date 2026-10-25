@@ -10,9 +10,9 @@
 // sidebar and its space buttons stay usable while it's open.
 //
 // Views
-// - Spaces: one column per space with its folders and tabs, Essentials
-//   (pinned tabs) on top. Drag columns to reorder spaces; drag tabs and folders
-//   between and within columns, onto Essentials, onto the space buttons in the
+// - Spaces: one column per space with its folders and tabs, Pins (pinned
+//   tabs, at most FirefoxZenPins.max) on top. Drag columns to reorder spaces; drag tabs and folders
+//   between and within columns, onto Pins, onto the space buttons in the
 //   footer, or onto "New space".
 // - History: places history by last visit, grouped by day, searchable. Drag an
 //   entry onto a space to open it there.
@@ -251,6 +251,7 @@
     }
     cancelDrag();
     closePopover();
+    stopDownloads();
     resizeObserver.disconnect();
     const old = root;
     root = null;
@@ -283,7 +284,7 @@
   }
 
   function setView(name, { render = true } = {}) {
-    view = name === "history" ? "history" : "spaces";
+    view = ["history", "downloads"].includes(name) ? name : "spaces";
     Services.prefs.setStringPref(VIEW_PREF, view);
     if (render && root) {
       renderView();
@@ -324,6 +325,7 @@
         h("div", { class: "fz-lib-title", text: "Library" }),
         nav("spaces", "Spaces"),
         nav("history", "History"),
+        nav("downloads", "Downloads"),
         h("div", { class: "fz-lib-rail-spacer" }),
         h("button", {
           type: "button",
@@ -363,9 +365,13 @@
       button.setAttribute("aria-current", String(button.dataset.view === view));
     }
     closePopover();
+    stopDownloads();
     if (view === "history") {
       main.replaceChildren(...buildHistoryView());
       loadHistory({ reset: true });
+    } else if (view === "downloads") {
+      main.replaceChildren(...buildDownloadsView());
+      startDownloads();
     } else {
       main.replaceChildren(...buildSpacesShell());
       renderBoard();
@@ -493,7 +499,7 @@
       h("span", { class: "fz-lib-hint", text: "or drop tabs here" })
     );
     board.replaceChildren(
-      buildEssentials(),
+      buildPins(),
       h("div", { class: "fz-lib-board", "data-drop": "board" }, ...columns, newColumn)
     );
     restoreScroll(scroll);
@@ -526,7 +532,11 @@
   const matches = tab =>
     !filterText || tab.label.toLowerCase().includes(filterText) || tabUrl(tab).toLowerCase().includes(filterText);
 
-  function buildEssentials() {
+  // Pin limit from JS/firefox-zen-sidebar-tools.uc.js (none without it).
+  const pinMax = () => window.FirefoxZenPins?.max ?? Infinity;
+  const pinRoom = () => window.FirefoxZenPins?.room() ?? Infinity;
+
+  function buildPins() {
     const pinned = gBrowser.tabs.filter(t => t.pinned && !t.closing);
     const tiles = pinned.map(tab => {
       const key = keyOf(tab);
@@ -549,8 +559,9 @@
     });
     return h(
       "div",
-      { class: "fz-lib-essentials", "data-drop": "pinned", "aria-label": "Essentials (pinned tabs)" },
-      h("span", { class: "fz-lib-section-label", text: "Essentials" }),
+      { class: "fz-lib-essentials", "data-drop": "pinned", "aria-label": "Pins (pinned tabs)", full: pinRoom() <= 0 },
+      h("span", { class: "fz-lib-section-label", text: "Pins" }),
+      Number.isFinite(pinMax()) ? h("span", { class: "fz-lib-count", text: `${pinned.length}/${pinMax()}` }) : null,
       ...tiles,
       tiles.length ? null : h("span", { class: "fz-lib-hint", text: "Drop tabs here to pin them in every space" })
     );
@@ -1074,6 +1085,7 @@
     setDropHighlight(null);
     if (root) {
       root.removeAttribute("dragging");
+      root.querySelector(".fz-lib-essentials[refusing]")?.removeAttribute("refusing");
       for (const el of root.querySelectorAll(".fz-lib-dragging")) {
         el.classList.remove("fz-lib-dragging");
       }
@@ -1210,6 +1222,13 @@
 
     // Tabs and folders.
     const pinned = hit?.closest?.(".fz-lib-essentials");
+    // Full: pinned tabs can still be reordered, new ones don't fit.
+    if (pinned && d.kind === "tab" && d.payload.filter(t => !t.pinned).length > pinRoom()) {
+      pinned.setAttribute("refusing", "");
+      setDropHighlight(null);
+      return;
+    }
+    root.querySelector(".fz-lib-essentials[refusing]")?.removeAttribute("refusing");
     if (pinned && d.kind === "tab") {
       const tiles = [...pinned.querySelectorAll(".fz-lib-pinned:not(.fz-lib-dragging)")];
       const index = tiles.findIndex(t => {
@@ -1403,6 +1422,9 @@
   }
 
   function pinTabs(tabs, before) {
+    // As many as the pin limit leaves room for.
+    let room = pinRoom();
+    tabs = tabs.filter(t => t.pinned || room-- > 0);
     for (const tab of tabs) {
       if (tab.group) {
         gBrowser.ungroupTab(tab);
@@ -1641,6 +1663,282 @@
     if (!background) {
       activateTab(tab);
     }
+  }
+
+  // ---- downloads view ----
+  // Firefox's download list (Downloads.ALL), kept live with a list view while
+  // the view is shown. Failed downloads are marked [attention] (yellow), like
+  // Firefox's own lists (theme/downloads.css).
+
+  const { Downloads } = ChromeUtils.importESModule("resource://gre/modules/Downloads.sys.mjs");
+
+  let dlList = null;
+  let dlView = null;
+  let dlListEl = null;
+  let dlQuery = "";
+  // Download -> row, for the downloads currently in the list.
+  const dlRows = new Map();
+
+  function formatBytes(bytes) {
+    const units = ["B", "KB", "MB", "GB", "TB"];
+    let i = 0;
+    let n = bytes || 0;
+    while (n >= 1024 && i < units.length - 1) {
+      n /= 1024;
+      i++;
+    }
+    return `${n.toFixed(i && n < 10 ? 1 : 0)} ${units[i]}`;
+  }
+
+  const dlName = d => (d.target?.path ? PathUtils.filename(d.target.path) : d.source.url);
+  const dlFailed = d => !!d.error && !d.succeeded;
+  const dlBlocked = d => !!d.error?.becauseBlocked;
+  const dlPaused = d => d.stopped && !d.succeeded && !d.error && d.canceled && d.hasPartialData;
+
+  function dlStatus(d) {
+    const host = URL.parse(d.source.url)?.host ?? "";
+    if (d.succeeded) {
+      const size = formatBytes(d.target.size || d.totalBytes || d.currentBytes);
+      return d.target.exists === false ? "File moved or missing" : [size, host].filter(Boolean).join(" · ");
+    }
+    if (dlBlocked(d)) {
+      return "Blocked";
+    }
+    if (dlFailed(d)) {
+      return "Failed · Retry to try again";
+    }
+    const progress = d.hasProgress
+      ? `${formatBytes(d.currentBytes)} of ${formatBytes(d.totalBytes)}`
+      : formatBytes(d.currentBytes);
+    if (dlPaused(d)) {
+      return `Paused · ${progress}`;
+    }
+    if (d.canceled) {
+      return "Canceled";
+    }
+    return d.speed ? `${progress} · ${formatBytes(d.speed)}/s` : progress;
+  }
+
+  function dlAction(label, cls, action) {
+    return h("button", {
+      type: "button",
+      class: `fz-lib-button fz-lib-dl-action ${cls}`,
+      text: label,
+      onclick: e => {
+        e.stopPropagation();
+        Promise.resolve()
+          .then(action)
+          .catch(ex => console.error("firefox-zen-library: download action failed", ex));
+      },
+    });
+  }
+
+  function buildDownloadRow(d) {
+    const running = !d.stopped;
+    const actions = [];
+    if (running) {
+      if (d.hasPartialData) {
+        actions.push(dlAction("Pause", "", () => d.cancel()));
+      }
+      actions.push(dlAction("Cancel", "", () => d.cancel().then(() => d.removePartialData())));
+    } else if (dlPaused(d)) {
+      actions.push(dlAction("Resume", "", () => d.start()));
+      actions.push(dlAction("Cancel", "", () => d.removePartialData().then(() => d.refresh?.())));
+    } else if ((dlFailed(d) && !dlBlocked(d)) || (d.canceled && !d.succeeded)) {
+      actions.push(dlAction("Retry", "fz-lib-dl-retry", () => d.start()));
+    } else if (d.succeeded && d.target.exists !== false) {
+      actions.push(dlAction("Show in folder", "", () => d.showContainingDirectory()));
+    }
+
+    const progress =
+      running || dlPaused(d)
+        ? h(
+            "div",
+            { class: "fz-lib-dl-progress", indeterminate: running && !d.hasProgress },
+            h("div", { style: `width: ${d.hasProgress ? d.progress : 0}%` })
+          )
+        : null;
+
+    const fileUrl = d.target?.path ? PathUtils.toFileURI(d.target.path) : "";
+    return h(
+      "div",
+      {
+        class: "fz-lib-dl-row",
+        tabindex: "0",
+        title: d.target?.path || d.source.url,
+        attention: dlFailed(d) && !dlBlocked(d),
+        blocked: dlBlocked(d),
+        done: d.succeeded,
+        onclick: () => {
+          if (d.succeeded && d.target.exists !== false) {
+            d.launch().catch(ex => console.error("firefox-zen-library:", ex));
+          }
+        },
+        onkeydown: e => {
+          if (e.key === "Enter" && d.succeeded) {
+            d.launch().catch(() => {});
+          } else if (e.key === "Delete" && d.stopped) {
+            dlList?.remove(d);
+          }
+        },
+      },
+      h("img", {
+        class: "fz-lib-dl-icon",
+        src: fileUrl ? `moz-icon://${fileUrl}?size=32` : DEFAULT_FAVICON,
+        alt: "",
+      }),
+      h(
+        "div",
+        { class: "fz-lib-dl-text" },
+        h("span", { class: "fz-lib-dl-name", text: dlName(d) }),
+        h("span", { class: "fz-lib-dl-status", text: dlStatus(d) }),
+        progress
+      ),
+      h("span", { class: "fz-lib-history-time", text: timeFormat.format(d.startTime) }),
+      ...actions,
+      d.stopped
+        ? h("button", {
+            type: "button",
+            class: "fz-lib-icon-button fz-lib-close-tab",
+            title: "Remove from list",
+            "aria-label": "Remove from list",
+            onclick: e => {
+              e.stopPropagation();
+              dlList?.remove(d);
+            },
+          })
+        : null
+    );
+  }
+
+  const dlMatches = d =>
+    !dlQuery || dlName(d).toLowerCase().includes(dlQuery) || d.source.url.toLowerCase().includes(dlQuery);
+
+  // Rebuild the list: newest first, grouped by day.
+  function renderDownloads() {
+    if (!dlListEl) {
+      return;
+    }
+    const downloads = [...dlRows.keys()].filter(dlMatches).sort((a, b) => b.startTime - a.startTime);
+    const children = [];
+    let lastDay = null;
+    for (const d of downloads) {
+      const day = dayLabel(d.startTime.getTime());
+      if (day !== lastDay) {
+        lastDay = day;
+        children.push(h("h3", { class: "fz-lib-day", text: day }));
+      }
+      const row = buildDownloadRow(d);
+      dlRows.set(d, row);
+      children.push(row);
+    }
+    if (!children.length) {
+      children.push(
+        h("div", { class: "fz-lib-empty", text: dlQuery ? "No downloads match your search." : "No downloads yet." })
+      );
+    }
+    const scroll = dlListEl.scrollTop;
+    dlListEl.replaceChildren(...children);
+    dlListEl.scrollTop = scroll;
+  }
+
+  let dlRenderQueued = false;
+
+  function queueDownloadsRender() {
+    if (!dlRenderQueued) {
+      dlRenderQueued = true;
+      requestAnimationFrame(() => {
+        dlRenderQueued = false;
+        renderDownloads();
+      });
+    }
+  }
+
+  async function startDownloads() {
+    const list = await Downloads.getList(Downloads.ALL);
+    if (view !== "downloads" || !dlListEl?.isConnected || dlView) {
+      return;
+    }
+    dlList = list;
+    dlView = {
+      onDownloadAdded: d => {
+        dlRows.set(d, null);
+        queueDownloadsRender();
+      },
+      onDownloadChanged: d => {
+        // Progress ticks: swap just this row.
+        const old = dlRows.get(d);
+        if (old?.isConnected && dlMatches(d)) {
+          const row = buildDownloadRow(d);
+          dlRows.set(d, row);
+          old.replaceWith(row);
+        } else {
+          queueDownloadsRender();
+        }
+      },
+      onDownloadRemoved: d => {
+        dlRows.delete(d);
+        queueDownloadsRender();
+      },
+    };
+    // Calls onDownloadAdded for the downloads already in the list.
+    await list.addView(dlView);
+    renderDownloads();
+  }
+
+  function stopDownloads() {
+    if (dlList && dlView) {
+      // Synchronous in current Firefox, a promise in older ones.
+      try {
+        Promise.resolve(dlList.removeView(dlView)).catch(() => {});
+      } catch (ex) {
+        console.error("firefox-zen-library:", ex);
+      }
+    }
+    dlList = null;
+    dlView = null;
+    dlListEl = null;
+    dlRows.clear();
+  }
+
+  function buildDownloadsView() {
+    const search = h("input", {
+      type: "search",
+      class: "fz-lib-search",
+      placeholder: "Search downloads",
+      value: dlQuery,
+      oninput: e => {
+        dlQuery = e.target.value.trim().toLowerCase();
+        renderDownloads();
+      },
+      onkeydown: e => {
+        if (e.key === "Escape" && e.target.value) {
+          e.preventDefault();
+          e.stopPropagation();
+          e.target.value = dlQuery = "";
+          renderDownloads();
+        }
+      },
+    });
+    const folder = h("button", {
+      type: "button",
+      class: "fz-lib-button",
+      text: "Open downloads folder",
+      onclick: async () => {
+        const dir = await Downloads.getPreferredDownloadsDirectory();
+        const file = Cc["@mozilla.org/file/local;1"].createInstance(Ci.nsIFile);
+        file.initWithPath(dir);
+        file.launch();
+      },
+    });
+    const clear = h("button", {
+      type: "button",
+      class: "fz-lib-button",
+      text: "Clear finished",
+      onclick: () => dlList?.removeFinished(),
+    });
+    dlListEl = h("div", { class: "fz-lib-history-list fz-lib-dl-list" });
+    return [h("header", { class: "fz-lib-toolbar" }, search, folder, clear), dlListEl];
   }
 
   // ---- events ----

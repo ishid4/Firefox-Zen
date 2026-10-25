@@ -39,7 +39,7 @@ Without the loader they stay unset and read as `false`.
 
 Each unpinned tab belongs to one space; switching spaces hides the other
 spaces' tabs (Firefox's own tab hiding, so Ctrl+Tab and the tab strip follow).
-Pinned tabs are global "Essentials" and show in every space.
+Pinned tabs are global "Pins" and show in every space.
 
 - The **+** button opens a menu: Create Space, Create Folder (a new tab in a new
   tab group; Firefox asks for its name and color) and New Tab.
@@ -71,14 +71,14 @@ sidebar expands and stays out while it's open, with the Library next to it
 when it closes. Esc, the button again, or clicking a tab closes it.
 
 **Spaces**: every space as a column with its folders and tabs, pinned tabs
-(Essentials) on top.
+(Pins, with a 3/12 count) on top.
 
 - Drag a column's header to reorder spaces (the footer follows).
 - Drag tabs between columns or within one; drop on a folder's header to put
   them in that folder. Ctrl+click / Shift+click picks several tabs to drag
   together.
 - Drag a folder to move it, with all its tabs, to another space.
-- Drop tabs on Essentials to pin them, or drag pinned tabs into a space.
+- Drop tabs on Pins to pin them, or drag pinned tabs into a space.
 - Drop tabs on **New space**, or on a space button in the footer.
 - Click a space's icon for an icon picker, its name to rename it, its header
   to switch to it, ⋯ for container / unload / delete.
@@ -89,6 +89,24 @@ when it closes. Esc, the button again, or clicking a tab closes it.
 scroll. Click opens in the current space (Ctrl/middle-click: in the
 background); drag an entry onto a space to open it there; × deletes it from
 history.
+
+**Downloads**: Firefox's downloads, newest first and grouped by day, with
+progress, Pause / Resume / Cancel, Retry, Show in folder, search, Clear
+finished and Open downloads folder. Click a finished download to open it.
+Failed downloads (the ones that need Retry) are tinted yellow.
+
+### Pins
+
+At most 12 pinned tabs. The tab right-click menu shows the count next to
+Pin Tab / Unpin Tab (e.g. 3/12), and Pin Tab is disabled once they're full;
+dragging a tab into the pinned area or onto the Library's Pins does nothing
+then. Windows restored from a session keep all their pinned tabs.
+
+### Downloads
+
+Firefox's own download lists (toolbar Downloads panel, Library window,
+about:downloads) also tint failed downloads yellow, so the ones waiting for
+Retry stand out (theme/downloads.css).
 
 ### Tab sections
 

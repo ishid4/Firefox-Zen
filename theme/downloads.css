@@ -1,0 +1,24 @@
+/* Firefox's download lists: the toolbar Downloads panel, Library window →
+ * Downloads (userChrome.css) and about:downloads (userContent.css).
+ * Failed downloads (state="2", the ones with a Retry button) get a yellow
+ * tint and bar so they stand out. */
+
+#downloadsListBox > richlistitem.download-state[state="2"] {
+  --fz-download-attention: light-dark(#d18b00, #f5b82e);
+
+  background-color: color-mix(in srgb, var(--fz-download-attention) 16%, transparent) !important;
+  box-shadow: inset 3px 0 0 var(--fz-download-attention);
+
+  &:hover {
+    background-color: color-mix(in srgb, var(--fz-download-attention) 24%, transparent) !important;
+  }
+
+  &[selected] {
+    background-color: color-mix(in srgb, var(--fz-download-attention) 30%, transparent) !important;
+  }
+
+  & .downloadDetails {
+    color: var(--fz-download-attention);
+    opacity: 1 !important;
+  }
+}

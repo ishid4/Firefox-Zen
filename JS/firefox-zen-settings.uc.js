@@ -40,7 +40,7 @@
       pref: "library",
       default: true,
       label: "Library",
-      description: "The footer's first button opens a Library: drag spaces, folders and tabs around, and browse history.",
+      description: "The footer's first button opens a Library: drag spaces, folders and tabs around, and browse history and downloads.",
       preview: "library",
     },
     {

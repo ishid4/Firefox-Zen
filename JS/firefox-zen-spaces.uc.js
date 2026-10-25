@@ -11,7 +11,7 @@
 //   (0/missing = no container).
 // - Tab's space: SessionStore custom tab value (survives restarts/restore).
 // - Window's active space: SessionStore custom window value.
-// - Pinned tabs are global "Essentials": never assigned, never hidden
+// - Pinned tabs are global "Pins": never assigned, never hidden
 //   (gBrowser.hideTab refuses pinned tabs anyway).
 // Switching shows the target space's tabs and hides the rest with
 // gBrowser.showTab/hideTab, so the tab strip, Ctrl+Tab etc. follow natively.
@@ -471,7 +471,7 @@
   }
 
   // Arc-style header with the active space's icon and name, between the
-  // pinned tabs (Essentials) and the space's tabs. #tabbrowser-tabs already
+  // pinned tabs (Pins) and the space's tabs. #tabbrowser-tabs already
   // holds non-tab children (drop indicator, splitter), so a sibling of the
   // tab scroll box is safe.
   function ensureHeader() {

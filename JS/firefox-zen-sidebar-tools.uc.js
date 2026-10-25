@@ -97,6 +97,54 @@
   // TabClose fires before the tab leaves the strip.
   const queuePinnedRows = () => setTimeout(updatePinnedRows, 0);
 
+  // ---- at most MAX_PINS pinned tabs ----
+
+  // Pins the user makes (tab menu, dragging into the pinned area) go through
+  // gBrowser.pinTab with a user-triggered metrics context; refuse those once
+  // the pins are full. Session restore isn't user-triggered, so a restored
+  // window keeps all its pins. The Library checks the limit itself.
+  const MAX_PINS = 12;
+  const pinCount = () => gBrowser.pinnedTabCount;
+
+  window.FirefoxZenPins = { max: MAX_PINS, count: pinCount, room: () => Math.max(0, MAX_PINS - pinCount()) };
+
+  function limitPinTab() {
+    const original = gBrowser.pinTab;
+    if (typeof original !== "function" || original.__fzLimit) {
+      return;
+    }
+    const limited = function (tab, options) {
+      if (!tab?.pinned && options?.metricsContext?.isUserTriggered && pinCount() >= MAX_PINS) {
+        return;
+      }
+      return original.call(this, tab, options);
+    };
+    limited.__fzLimit = true;
+    gBrowser.pinTab = limited;
+  }
+
+  // Tab menu: "3/12" on the right of Pin Tab / Unpin Tab; Pin is disabled
+  // when the tabs wouldn't fit. Runs after Firefox's own popupshowing
+  // handler (an attribute handler, so it's registered first).
+  function onTabMenuShowing(e) {
+    if (e.target.id !== "tabContextMenu") {
+      return;
+    }
+    const tabs = window.TabContextMenu?.contextTabs ?? [];
+    const newPins = tabs.filter(t => !t.pinned).length;
+    const count = `${pinCount()}/${MAX_PINS}`;
+    for (const id of ["context_pinTab", "context_pinSelectedTabs"]) {
+      const item = document.getElementById(id);
+      if (item) {
+        item.setAttribute("acceltext", count);
+        item.disabled = pinCount() + newPins > MAX_PINS;
+      }
+    }
+    for (const id of ["context_unpinTab", "context_unpinSelectedTabs"]) {
+      document.getElementById(id)?.setAttribute("acceltext", count);
+    }
+  }
+
   // ---- hold the compact sidebar out while its popups are open ----
 
   // A right-click menu (tab, sidebar, space menus) is a popup outside the
@@ -205,6 +253,8 @@
     window.addEventListener("popupshowing", onPopupShowing, true);
     window.addEventListener("popuphidden", onPopupHidden, true);
     updatePinnedRows();
+    limitPinTab();
+    document.getElementById("tabContextMenu")?.addEventListener("popupshowing", onTabMenuShowing);
     for (const type of ["TabPinned", "TabUnpinned", "TabOpen", "TabClose"]) {
       gBrowser.tabContainer.addEventListener(type, queuePinnedRows);
     }
