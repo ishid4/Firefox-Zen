@@ -17,6 +17,7 @@ Then open `about:support`, click **Clear startup cache…**, and restart.
 | `firefox-zen.compact-toolbar` | false | Hide the toolbar until hovered (with the address bar in the sidebar: the window controls hide too and the sidebar/page use the full window height) |
 | `firefox-zen.compact-sidebar` | false | Hide the vertical tabs sidebar until its edge is hovered |
 | `firefox-zen.spaces` | false | Zen-style Spaces (see below) |
+| `firefox-zen.tab-sections` | true | Folders above a line, New Tab and new tabs below it; hover the sidebar for **Clear** (see below) |
 | `firefox-zen.show-customize-button` | true | Firefox's "Customize sidebar" gear in the sidebar tools (toggle it under Customize Sidebar → Tools) |
 | `firefox-zen.sidebar-urlbar` | false | Toolbar + address bar at the top of the sidebar. With "Expand sidebar on hover" it stays there and shows when the sidebar expands; otherwise it goes back to the top while the sidebar is collapsed. Also back on top while customizing the toolbar |
 | `firefox-zen.floating-urlbar` | true | Open the address bar centered, like a command bar |
@@ -58,6 +59,17 @@ Pinned tabs are global "Essentials" and show in every space.
   each window's current space are kept in the session, so they survive restarts.
 - Turning Spaces off shows every tab again.
 - Conflicts with other tab-hiding extensions (e.g. Simple Tab Groups).
+
+### Tab sections
+
+Like Zen and Arc, the vertical tab list is split by a line: tab groups
+(folders) sit above it, New Tab and ungrouped tabs below it. Folders are kept
+first in the real tab order too, so Ctrl+Tab, keyboard navigation and dragging
+follow what you see; a folder dragged below the line goes back above it.
+
+Hovering the sidebar shows **↓ Clear** on the line: it closes every tab below
+the line in the current space (Firefox asks first when closing many tabs;
+Ctrl+Shift+T reopens them). Folders and pinned tabs stay.
 
 ### Address bar in sidebar
 

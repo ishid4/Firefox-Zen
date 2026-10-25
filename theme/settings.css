@@ -327,8 +327,9 @@
   translate: 0 0;
 }
 
-/* Rows used by folder + menu previews */
+/* Rows used by folder + menu + tab sections previews */
 .fz-preview-folders,
+.fz-preview-sections,
 .fz-preview-menu {
   justify-content: center;
   gap: 5px;
@@ -392,6 +393,29 @@
   & .fz-mock-row:nth-child(3) .fz-mock-icon {
     background-image: url("icons/folder/folder-open-purple.svg");
   }
+}
+
+/* Tab sections: folders on top, a line fades in above the tabs */
+.fz-preview-sections {
+  & .fz-mock-icon {
+    border-radius: 3px;
+    background-color: var(--fz-line);
+  }
+  & .fz-mock-row:nth-child(-n + 2) .fz-mock-icon {
+    background-color: var(--tab-group-color-blue, #0069cc);
+  }
+}
+
+.fz-mock-separator {
+  height: 0;
+  margin-inline: 2px;
+  border-top: 1px solid var(--fz-line);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.fz-card[data-on] .fz-mock-separator {
+  opacity: 1;
 }
 
 /* Menu: icons fade in */

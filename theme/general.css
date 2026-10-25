@@ -228,6 +228,12 @@ toolbar .toolbarbutton-1 {
   outline: none !important;
 }
 
+/* Expanded vertical tabs, every sidebar mode: pinned tiles three per row,
+ * like Zen's Essentials (read by JS/firefox-zen-sidebar-tools.uc.js) */
+#tabbrowser-tabs[orient="vertical"][expanded] > #pinned-tabs-container {
+  --fz-pinned-columns: repeat(3, minmax(0, 1fr));
+}
+
 /* Expand-on-hover: Firefox lists pinned tabs as full-width rows there, and
  * only uses the Essentials-style icon grid in the other sidebar modes (its
  * rules sit behind :root:not([sidebar-expand-on-hover])). Use the grid here
@@ -235,10 +241,14 @@ toolbar .toolbarbutton-1 {
  * The grid itself is set inside the container's shadow root by
  * JS/firefox-zen-sidebar-tools.uc.js (a ::part() rule from here doesn't take);
  * these rules hide titles, size the tiles and pass the padding through.
- * Height fits the content, since the splitter's saved height would scroll. */
+ * Height is the expanded grid's row count (--fz-pinned-rows, set by the same
+ * script) in both states, so the tabs below don't move when the sidebar
+ * expands; the collapsed icon column scrolls whatever doesn't fit. This also
+ * overrides the splitter's saved height. */
 @media -moz-pref("sidebar.visibility", "expand-on-hover") {
   #tabbrowser-tabs[orient="vertical"] > #pinned-tabs-container {
-    height: auto !important;
+    height: calc(var(--fz-pinned-rows, 1) * var(--tab-height-with-margin-padding)) !important;
+    min-height: 0 !important;
     max-height: 50vh !important;
     --tab-padding-inline: calc((var(--tab-collapsed-background-width) + 2 * var(--tab-margin-inline-pinned-expanded) - var(--icon-size)) / 2);
 
@@ -258,6 +268,11 @@ toolbar .toolbarbutton-1 {
     .tab-background {
       margin-inline: var(--tab-margin-inline-pinned-expanded) !important;
     }
+  }
+
+  /* No scrollbar in the narrow collapsed strip (it still scrolls) */
+  #tabbrowser-tabs[orient="vertical"]:not([expanded]) > #pinned-tabs-container::part(scrollbox) {
+    scrollbar-width: none !important;
   }
 }
 

@@ -119,10 +119,14 @@
     }
   }
 
-  /* Pinned tabs (Essentials) under the URL bar: room around the grid and
+  /* Pinned tabs (Essentials) under the URL bar: room around the grid (in
+   * both sidebar states, so expanding doesn't shift the tabs below) and
    * rounder tiles, like Zen */
-  #tabbrowser-tabs[orient="vertical"][expanded] > #pinned-tabs-container {
+  #tabbrowser-tabs[orient="vertical"] > #pinned-tabs-container {
     margin-block: 4px 6px !important;
+  }
+
+  #tabbrowser-tabs[orient="vertical"][expanded] > #pinned-tabs-container {
 
     .tab-background {
       border-radius: 10px !important;

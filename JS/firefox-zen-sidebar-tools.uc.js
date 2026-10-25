@@ -38,16 +38,34 @@
   // Firefox only grids pinned tabs outside expand-on-hover (rows with titles
   // there). The grid lives on the arrowscrollbox's <slot part="items-wrapper">;
   // a ::part() rule from userChrome.css doesn't take, so style it from inside
-  // the shadow root. Tile width/padding come from general.css's variables.
+  // the shadow root. Tile width/padding and the column template come from
+  // general.css's variables.
   const pinnedGridSheet = new CSSStyleSheet();
   // Added/removed with the pref rather than an -moz-pref() media query, which
   // may not parse in a constructed sheet.
   pinnedGridSheet.replaceSync(`
     :host([orient="vertical"]) slot[part~="items-wrapper"] {
       display: grid !important;
-      grid-template-columns: repeat(auto-fit, minmax(var(--tab-pinned-min-width), auto)) !important;
+      grid-template-columns: var(
+        --fz-pinned-columns,
+        repeat(auto-fit, minmax(var(--tab-pinned-min-width), auto))
+      ) !important;
       grid-auto-rows: var(--tab-height-with-margin-padding);
       padding-inline: var(--fz-pinned-padding-inline, 0);
+    }
+  `);
+
+  // Other sidebar modes (incl. compact sidebar, which uses "always show"):
+  // Firefox's own grid, with general.css's column template (3 per row when
+  // expanded). Firefox sets it via ::part(), which an !important rule in the
+  // shadow root beats.
+  const pinnedColumnsSheet = new CSSStyleSheet();
+  pinnedColumnsSheet.replaceSync(`
+    :host([orient="vertical"]) slot[part~="items-wrapper"] {
+      grid-template-columns: var(
+        --fz-pinned-columns,
+        repeat(auto-fit, minmax(var(--tab-pinned-min-width), auto))
+      ) !important;
     }
   `);
 
@@ -57,11 +75,27 @@
       return;
     }
     const hoverMode = Services.prefs.getStringPref("sidebar.visibility", "always-show") === "expand-on-hover";
-    const sheets = root.adoptedStyleSheets.filter(s => s !== pinnedGridSheet);
-    root.adoptedStyleSheets = hoverMode ? [...sheets, pinnedGridSheet] : sheets;
+    const sheets = root.adoptedStyleSheets.filter(s => s !== pinnedGridSheet && s !== pinnedColumnsSheet);
+    root.adoptedStyleSheets = [...sheets, hoverMode ? pinnedGridSheet : pinnedColumnsSheet];
   }
 
   const visibilityObserver = { observe: () => applyPinnedGrid() };
+
+  // Rows the expanded grid needs (3 tiles per row). general.css sizes the
+  // container to exactly that in both sidebar states, so the tabs below don't
+  // jump on expand; the collapsed single column scrolls the rest.
+  const PINNED_PER_ROW = 3;
+
+  function updatePinnedRows() {
+    const container = document.getElementById("pinned-tabs-container");
+    if (container) {
+      const rows = Math.max(1, Math.ceil(gBrowser.pinnedTabCount / PINNED_PER_ROW));
+      container.style.setProperty("--fz-pinned-rows", String(rows));
+    }
+  }
+
+  // TabClose fires before the tab leaves the strip.
+  const queuePinnedRows = () => setTimeout(updatePinnedRows, 0);
 
   // ---- checkbox in Customize Sidebar → Tools ----
 
@@ -126,6 +160,11 @@
 
     applyGear();
     applyPinnedGrid();
+    updatePinnedRows();
+    for (const type of ["TabPinned", "TabUnpinned", "TabOpen", "TabClose"]) {
+      gBrowser.tabContainer.addEventListener(type, queuePinnedRows);
+    }
+    window.addEventListener("SSWindowRestored", queuePinnedRows);
     window.addEventListener("SidebarShown", () => {
       injectCheckbox().catch(e => console.error("firefox-zen-sidebar-tools:", e));
     });

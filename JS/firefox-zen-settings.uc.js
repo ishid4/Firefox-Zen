@@ -37,6 +37,13 @@
       preview: "spaces",
     },
     {
+      pref: "tab-sections",
+      default: true,
+      label: "Tab sections",
+      description: "Folders above a line, new tabs below it. Hover the sidebar for a Clear button that closes the tabs below.",
+      preview: "sections",
+    },
+    {
       pref: "sidebar-urlbar",
       default: false,
       label: "Address bar in sidebar",
@@ -201,6 +208,12 @@
           );
         }
         break;
+      case "sections": {
+        const row = () =>
+          h("div", { class: "fz-mock-row" }, h("span", { class: "fz-mock-icon" }), h("span", { class: "fz-mock-line" }));
+        mock.append(row(), row(), h("div", { class: "fz-mock-separator" }), row(), row());
+        break;
+      }
       case "menu":
         for (let i = 0; i < 4; i++) {
           mock.append(
