@@ -2057,11 +2057,65 @@
       text: label,
       onclick: e => {
         e.stopPropagation();
+        // Until it settles, so a quick second click can't hit the
+        // button that replaces this one (Pause, then Resume).
+        const buttons = [...e.currentTarget.parentElement.querySelectorAll(".fz-lib-dl-action")];
+        buttons.forEach(b => (b.disabled = true));
         Promise.resolve()
           .then(action)
-          .catch(ex => console.error("firefox-zen-library: download action failed", ex));
+          .catch(ex => console.error("firefox-zen-library: download action failed", ex))
+          .finally(() => buttons.forEach(b => (b.disabled = false)));
       },
     });
+  }
+
+  // What decides a row's buttons and icon; while it holds, progress ticks
+  // update the row in place. Rebuilding it on every tick swaps the button
+  // under the pointer between mousedown and mouseup, so clicks get lost.
+  const dlShape = d =>
+    JSON.stringify([
+      d.stopped,
+      d.hasPartialData,
+      dlPaused(d),
+      dlFailed(d),
+      dlBlocked(d),
+      d.canceled,
+      d.succeeded,
+      d.target?.exists !== false,
+      d.target?.path,
+    ]);
+  let dlRowCache = new WeakMap();
+
+  function downloadRow(d, remove) {
+    const shape = dlShape(d);
+    const old = dlRowCache.get(d);
+    if (old?.fzShape === shape) {
+      old.querySelector(".fz-lib-dl-status").textContent = dlStatus(d);
+      const bar = old.querySelector(".fz-lib-dl-progress");
+      if (bar) {
+        bar.toggleAttribute("indeterminate", !d.stopped && !d.hasProgress);
+        bar.firstChild.style.width = `${d.hasProgress ? d.progress : 0}%`;
+      }
+      return old;
+    }
+    const row = buildDownloadRow(d, remove);
+    row.fzShape = shape;
+    dlRowCache.set(d, row);
+    return row;
+  }
+
+  // Leaves rows that didn't change in place (see dlShape).
+  function setDownloadChildren(children) {
+    const current = dlListEl.children;
+    if (
+      current.length === children.length &&
+      children.every((c, i) => c === current[i] || c.isEqualNode(current[i]))
+    ) {
+      return;
+    }
+    const scroll = dlListEl.scrollTop;
+    dlListEl.replaceChildren(...children);
+    dlListEl.scrollTop = scroll;
   }
 
   // `remove`: takes it off its list (Firefox's, or a private space's).
@@ -2245,7 +2299,7 @@
       const live = api().privateLiveDownload?.(d.key);
       children.push(
         live
-          ? buildDownloadRow(live, () => api().removePrivateDownload(dlSource, d.key))
+          ? downloadRow(live, () => api().removePrivateDownload(dlSource, d.key))
           : buildPrivateDownloadRow(dlSource, d)
       );
     }
@@ -2254,9 +2308,7 @@
         h("div", { class: "fz-lib-empty", text: dlQuery ? "No downloads match your search." : "No downloads yet." })
       );
     }
-    const scroll = dlListEl.scrollTop;
-    dlListEl.replaceChildren(...children);
-    dlListEl.scrollTop = scroll;
+    setDownloadChildren(children);
   }
 
   function renderDownloads() {
@@ -2276,7 +2328,7 @@
         lastDay = day;
         children.push(h("h3", { class: "fz-lib-day", text: day }));
       }
-      const row = buildDownloadRow(d);
+      const row = downloadRow(d);
       dlRows.set(d, row);
       children.push(row);
     }
@@ -2285,9 +2337,7 @@
         h("div", { class: "fz-lib-empty", text: dlQuery ? "No downloads match your search." : "No downloads yet." })
       );
     }
-    const scroll = dlListEl.scrollTop;
-    dlListEl.replaceChildren(...children);
-    dlListEl.scrollTop = scroll;
+    setDownloadChildren(children);
   }
 
   let dlRenderQueued = false;
@@ -2318,12 +2368,15 @@
         queueDownloadsRender();
       },
       onDownloadChanged: d => {
-        // Progress ticks: swap just this row.
+        // Progress ticks: update just this row (in place unless its
+        // buttons change).
         const old = dlRows.get(d);
         if (old?.isConnected && dlMatches(d)) {
-          const row = buildDownloadRow(d);
-          dlRows.set(d, row);
-          old.replaceWith(row);
+          const row = downloadRow(d);
+          if (row !== old) {
+            dlRows.set(d, row);
+            old.replaceWith(row);
+          }
         } else {
           queueDownloadsRender();
         }
@@ -2351,6 +2404,7 @@
     dlView = null;
     dlListEl = null;
     dlRows.clear();
+    dlRowCache = new WeakMap();
   }
 
   function buildDownloadsView() {
