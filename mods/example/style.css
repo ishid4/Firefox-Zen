@@ -1,0 +1,12 @@
+/* Loaded in every browser window while the mod is on.
+   Options arrive as variables on <html>: --mod-example-color, --mod-example-width
+   (with its px unit), and select/bool options also as attributes
+   (fz-mod-example-side="left|right", fz-mod-example-shortcut). */
+
+.tabbrowser-tab[selected] .tab-background {
+  box-shadow: inset var(--mod-example-width) 0 0 var(--mod-example-color) !important;
+}
+
+:root[fz-mod-example-side="right"] .tabbrowser-tab[selected] .tab-background {
+  box-shadow: inset calc(-1 * var(--mod-example-width)) 0 0 var(--mod-example-color) !important;
+}

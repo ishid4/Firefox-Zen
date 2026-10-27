@@ -1,0 +1,222 @@
+/* Firefox-Zen mods: the Library's Mods tab (built by JS/firefox-zen-mods.uc.js).
+   Rows reuse the Settings tab's look (theme/settings.css). */
+
+.fz-mods-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: -12px;
+}
+
+.fz-mods-empty {
+  margin: 0;
+  padding: 24px 0;
+  text-align: center;
+  line-height: 1.5;
+}
+
+.fz-mod-preview {
+  width: var(--fz-preview-width);
+  object-fit: cover;
+}
+
+/* No preview image: the mod's initial */
+.fz-mod-initial {
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--fz-muted);
+  text-transform: uppercase;
+}
+
+.fz-mod-kind {
+  background: var(--fz-surface-hover);
+  font-weight: 500;
+}
+
+.fz-mod-broken {
+  background: color-mix(in srgb, var(--text-color-error, #e22850) 22%, transparent);
+}
+
+.fz-mod-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+  margin-top: 2px;
+}
+
+.fz-mod-errors {
+  display: none;
+  margin: 2px 0 0;
+  padding-inline-start: 16px;
+  color: var(--text-color-error, #e22850);
+  font-size: 12px;
+  line-height: 1.35;
+
+  .fz-mod[data-error] & {
+    display: block;
+  }
+}
+
+.fz-select {
+  height: 26px;
+  padding: 0 22px 0 8px !important;
+  border: 1px solid var(--fz-line) !important;
+  border-radius: 6px;
+  background-color: var(--fz-surface) !important;
+  color: inherit;
+  font: inherit;
+}
+
+.fz-color {
+  width: 40px;
+  height: 26px;
+  padding: 2px;
+  border: 1px solid var(--fz-line);
+  border-radius: 6px;
+  background: var(--fz-surface);
+}
+
+/* ---- Updates ---- */
+
+/* A dot on the Library's Mods button while an update is waiting */
+:root[fz-mods-updates] .fz-lib-nav-mods::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  margin-inline-start: auto;
+  border-radius: 50%;
+  background: var(--fz-lib-accent, var(--color-accent-primary, AccentColor));
+}
+
+.fz-mod-update {
+  background: var(--fz-accent);
+  color: var(--button-text-color-primary, white);
+}
+
+.fz-update-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 16px;
+  margin: 0;
+
+  & dt {
+    color: var(--fz-muted);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    line-height: 1.6;
+  }
+
+  & dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+    user-select: text;
+  }
+}
+
+.fz-banner-warning {
+  background: color-mix(in srgb, #e9a700 18%, transparent);
+}
+
+.fz-update-actions {
+  margin-top: 0;
+}
+
+.fz-primary {
+  border-color: transparent !important;
+  background: var(--fz-accent) !important;
+  color: var(--button-text-color-primary, white);
+
+  &:hover {
+    background: color-mix(in srgb, var(--fz-accent) 85%, currentColor) !important;
+  }
+}
+
+.fz-diff-file {
+  border: 1px solid var(--fz-line);
+  border-radius: 8px;
+  overflow: hidden;
+
+  & + & {
+    margin-top: 10px;
+  }
+}
+
+.fz-diff-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--fz-surface);
+  border-bottom: 1px solid var(--fz-line);
+}
+
+.fz-diff-path {
+  font-family: monospace;
+  font-weight: 600;
+  user-select: text;
+}
+
+.fz-diff-status {
+  .fz-diff-file[data-status="added"] & {
+    background: color-mix(in srgb, #2ea043 25%, transparent);
+  }
+
+  .fz-diff-file[data-status="removed"] & {
+    background: color-mix(in srgb, #e5534b 25%, transparent);
+  }
+}
+
+.fz-diff-stat {
+  font-family: monospace;
+  font-size: 12px;
+}
+
+.fz-diff-stat[data-t="add"],
+.fz-diff-line[data-t="add"] {
+  color: light-dark(#1a7f37, #57d364);
+}
+
+.fz-diff-stat[data-t="del"],
+.fz-diff-line[data-t="del"] {
+  color: light-dark(#cf222e, #ff7b72);
+}
+
+.fz-diff {
+  display: flex;
+  flex-direction: column;
+  max-height: 480px;
+  margin: 0;
+  padding: 6px 0;
+  overflow: auto;
+  font-size: 12px;
+  line-height: 1.5;
+  user-select: text;
+}
+
+.fz-diff-line,
+.fz-diff-hunk {
+  padding: 0 10px;
+  white-space: pre;
+}
+
+.fz-diff-line[data-t="add"] {
+  background: color-mix(in srgb, #2ea043 14%, transparent);
+}
+
+.fz-diff-line[data-t="del"] {
+  background: color-mix(in srgb, #e5534b 14%, transparent);
+}
+
+.fz-diff-hunk {
+  color: var(--fz-muted);
+  margin-top: 4px;
+}
+
+.fz-diff-note {
+  margin: 0;
+  padding: 10px;
+}

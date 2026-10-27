@@ -22,6 +22,9 @@ Settings, so it works on first startup, before Spaces and its footer are on.
 as a small JSON file (`"format": "firefox-zen-settings"`), to share a setup or
 move it to another profile. Importing skips keys it doesn't know (from a newer
 version) and keeps numbers in range. Undo puts back what an import changed.
+The file also lists which [mods](#mods) are on and their options (not the mods
+themselves): importing turns on the ones installed there, except mods with a
+script that profile hasn't trusted yet.
 
 Everything needs the
 [fx-autoconfig](https://github.com/MrOtherGuy/fx-autoconfig) loader (MPL-2.0):
@@ -51,6 +54,9 @@ Then open `about:support`, click **Clear startup cache…**, and restart.
 | `firefox-zen.private-spaces.autolock-minutes` | 10 | Lock every private space after this many idle minutes (0 = never) |
 | `firefox-zen.show-folder-icons` | true | Arc folder icons on tab groups |
 | `firefox-zen.show-menu-icons` | true | Icons in context menus |
+| `firefox-zen.mods.enabled` | [] | Ids of the [mods](#mods) that are on (JSON); `firefox-zen.mods.trusted` lists the scripts confirmed to run |
+| `firefox-zen.mods.safe-mode` | false | Load no mods on the next start (then clears itself) |
+| `firefox-zen.mods.auto-update-check` | true | Check mods for updates at startup, at most once a day |
 
 Compact sidebar replaces Firefox's own "Expand sidebar on hover" (the two fight
 at the window edge): turning it on saves your `sidebar.visibility` and switches
@@ -201,6 +207,151 @@ history.
 progress, Pause / Resume / Cancel, Retry, Show in folder, search, Clear
 finished and Open downloads folder. Click a finished download to open it.
 Failed downloads (the ones that need Retry) are tinted yellow.
+
+### Mods
+
+Mods change or add to Firefox-Zen without editing its files. The Library's
+**Mods** tab (above Settings) lists them with a switch each; changes apply
+instantly, in every window.
+
+- **Install from folder…** / **Install from zip…** copy a mod into
+  `chrome/mods/<id>/`. Or put the folder there yourself and press **Reload**
+  (which also reloads every mod's files after you edit them).
+- Each row: **Folder** opens it, **Export…** zips it to share, **Remove…**
+  deletes it and its options. Options unfold while the mod is on; a dot marks
+  options changed from their defaults, with **Reset** on hover.
+- Problems (bad `mod.json`, missing files, a script that threw) show in red on
+  the row. A script that throws turns its mod off.
+- A mod that breaks the browser: set `firefox-zen.mods.safe-mode` to `true` in
+  about:config (or user.js) and restart. That start loads no mods (the pref
+  clears itself), so it can be turned off or removed.
+
+**Mods with a script run with full access to Firefox** (tabs, browsing data,
+saved passwords, files). They start off, and the first time one is turned on
+Firefox-Zen asks to confirm. Installing a new version asks again. Only turn on
+scripts you trust. CSS-only mods turn on when installed.
+
+#### Updates
+
+A mod that lists an `updateURL` is checked for a newer version at startup (at
+most once a day; `firefox-zen.mods.auto-update-check` turns that off) and by
+**Check for updates** in the Mods tab. A mod with an update gets an
+**Update: x.y** badge, and the Library's Mods button a dot.
+
+**Review update…** downloads it and shows, before anything changes:
+
+- the installed and new versions and where it comes from;
+- a warning when the mod's files were edited since it was installed or last
+  updated (updating replaces the folder: **Export…** first to keep them), and
+  when the update changes its script;
+- every added, removed and changed file, with a line-by-line diff.
+
+**Update** replaces the mod's folder and keeps it on (a mod with a script
+doesn't ask for confirmation again: reviewing the changes is that); its options
+are kept. **Cancel** leaves everything as it was. A failed check shows on the
+mod's row.
+
+#### Making a mod
+
+Copy `chrome/mods/example` (a selected-tab accent bar plus a shortcut). The
+folder name is the mod's id (lower-case letters, digits, `-`, `_`).
+
+`mod.json`:
+
+```json
+{
+  "name": "My Mod",
+  "version": "1.0.0",
+  "author": "you",
+  "description": "What it does.",
+  "homepage": "https://example.com",
+  "updateURL": "https://example.com/my-mod/mod.json",
+  "downloadURL": "https://example.com/my-mod/my-mod.zip",
+  "styles": ["style.css"],
+  "contentStyles": ["content.css"],
+  "script": "mod.uc.js",
+  "preview": "preview.png",
+  "options": [
+    { "type": "bool", "pref": "compact", "label": "Compact", "default": false },
+    { "type": "number", "pref": "size", "label": "Size", "default": 32, "min": 16, "max": 64, "unit": "px" },
+    { "type": "select", "pref": "side", "label": "Side", "default": "left",
+      "choices": [{ "value": "left", "label": "Left" }, { "value": "right", "label": "Right" }] },
+    { "type": "color", "pref": "accent", "label": "Accent", "default": "#7c5cff", "hint": "Shown under it." },
+    { "type": "button", "pref": "clear", "label": "Clear the list", "text": "Clear", "confirm": "Clear it?" }
+  ]
+}
+```
+
+Every field is optional except that there must be something to load. Without
+`styles` / `contentStyles` / `script` / `preview`, the files `style.css`,
+`content.css`, `mod.uc.js` and `preview.png` (or `.svg`, `.jpg`, `.webp`) are
+used when present.
+
+- `updateURL` / `downloadURL` (both `https://`): where updates come from.
+  `updateURL` is the newest `mod.json`; when its `version` is higher than the
+  installed one (`1.10.0` > `1.9.2`), the mod has an update. The zip comes from
+  that file's `downloadURL`, or this one. The zip holds the mod (its `mod.json`
+  at the top, or in one folder), like **Export…** makes, and must contain the
+  new version. Or it's a whole repository's zip with `#<folder>` at the end,
+  the mod's folder inside it. The example mod updates from this repository
+  that way, so pushing a higher `version` to `main` is a release:
+
+  ```json
+  "updateURL": "https://raw.githubusercontent.com/ishid4/Firefox-Zen/main/mods/example/mod.json",
+  "downloadURL": "https://github.com/ishid4/Firefox-Zen/archive/refs/heads/main.zip#mods/example"
+  ```
+
+  For a mod in its own repository, drop the folder (`…/main.zip`); to publish
+  only on purpose, point `downloadURL` at a release asset instead
+  (`https://github.com/<you>/<repo>/releases/latest/download/my-mod.zip`).
+- `styles`: CSS for the browser UI (each browser window).
+- `contentStyles`: CSS for every document: web pages, about: pages and the
+  browser UI. Scope it with `@-moz-document domain(example.com) { … }`.
+- **Options** are stored as `firefox-zen.mods.<id>.<pref>`. While the mod is
+  on, the browser window's `<html>` has `fz-mod-<id>`, each option as the
+  variable `--mod-<id>-<pref>` (bool: `1`/`0`; number: with its unit when it's
+  a CSS unit like `px`, `%`, `ms`), and bool/select options also as the
+  attribute `fz-mod-<id>-<pref>` (present / the chosen value):
+
+  ```css
+  :root[fz-mod-my-mod-compact] #tabbrowser-tabs { --tab-min-height: var(--mod-my-mod-size); }
+  ```
+
+  There are five kinds of option (`chrome/mods/example` uses all five). Every
+  option has `type`, `pref` (lower-case letters, digits, `-`, `_`; unique in
+  the mod), and optionally `label` (defaults to `pref`) and `hint` (a line
+  under it). The other fields depend on the type:
+
+  | `type` | Control | Fields | Stored as | In CSS (`<id>` / `<pref>` from the mod) |
+  | --- | --- | --- | --- | --- |
+  | `bool` | Switch | `default`: `true` / `false` (false) | bool pref | `--mod-<id>-<pref>: 1` or `0`; attribute `fz-mod-<id>-<pref>` while on |
+  | `number` | Number box (Enter, blur or the arrows apply it; out of range snaps back) | `min` (0), `max` (100), `default` (min), `unit`: text after the box | int pref | `--mod-<id>-<pref>: 12px` (unit added when it's `px` `em` `rem` `%` `vw` `vh` `ms` `s` `deg` `ch` `ex`, else just `12`) |
+  | `select` | Dropdown | `choices`: list of `{ "value", "label" }` or plain strings (at least one); `default`: one of the values (the first) | string pref | `--mod-<id>-<pref>: <value>`; attribute `fz-mod-<id>-<pref>="<value>"` |
+  | `color` | Color picker | `default`: `#rrggbb` (`#000000`) | string pref | `--mod-<id>-<pref>: #rrggbb` |
+| `button` | Button | `text`: the button's caption (`Run`); `confirm`: a question asked first (none) | nothing | nothing: it calls the script's `mod.onButton("<pref>", fn)` in the window it was clicked in |
+
+  Defaults in brackets apply when a field is missing. A script reads the
+  others with `mod.pref("<pref>")`: a boolean, a number or a string. A button
+  needs a script: its handler may be async, and a string it returns shows as
+  the Mods tab's status line (errors show there too).
+- `script` runs once in each browser window with `mod` in scope; window
+  globals (`gBrowser`, `document`, `Services`) work as usual. Register what you
+  add through `mod`, so turning the mod off undoes it:
+
+  | `mod.` | |
+  | --- | --- |
+  | `id`, `name`, `version`, `dir`, `window` | About the mod |
+  | `pref(name)` / `setPref(name, value)` | Read / write an option |
+  | `onPrefChange(fn)` | `fn(name)` when an option changes |
+  | `onButton(name, fn)` | `fn()` when the button option `name` is clicked |
+  | `listen(target, type, fn, options)` | `addEventListener`, removed when off |
+  | `addStyle(css)` | CSS for this window; returns a remover |
+  | `onCleanup(fn)` | Anything else to undo when off |
+  | `url(path)` | `file://` URL of a file in the mod's folder |
+  | `log(...)` | `console.log` tagged with the mod |
+
+  Turning the mod off, Reload, or reinstalling runs the cleanups (last first)
+  and runs the script again when it's back on.
 
 ### Pins
 

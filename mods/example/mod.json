@@ -1,0 +1,40 @@
+{
+  "name": "Example: Tab Accent",
+  "version": "1.0.0",
+  "author": "Firefox-Zen",
+  "homepage": "https://github.com/ishid4/Firefox-Zen/tree/main/mods/example",
+  "updateURL": "https://raw.githubusercontent.com/ishid4/Firefox-Zen/main/mods/example/mod.json",
+  "downloadURL": "https://github.com/ishid4/Firefox-Zen/archive/refs/heads/main.zip#mods/example",
+  "description": "A colored bar on the selected tab, Ctrl+Shift+D to duplicate it, and a button that closes duplicate tabs. Copy this folder to start your own mod.",
+  "styles": ["style.css"],
+  "script": "mod.uc.js",
+  "options": [
+    { "type": "color", "pref": "color", "label": "Color", "default": "#7c5cff" },
+    { "type": "number", "pref": "width", "label": "Bar width", "default": 3, "min": 1, "max": 8, "unit": "px" },
+    {
+      "type": "select",
+      "pref": "side",
+      "label": "Side",
+      "default": "left",
+      "choices": [
+        { "value": "left", "label": "Left" },
+        { "value": "right", "label": "Right" }
+      ]
+    },
+    {
+      "type": "bool",
+      "pref": "shortcut",
+      "label": "Ctrl+Shift+D duplicates the tab",
+      "default": true,
+      "hint": "Handled by mod.uc.js."
+    },
+    {
+      "type": "button",
+      "pref": "dedupe",
+      "label": "Close duplicate tabs",
+      "text": "Close",
+      "confirm": "Close every tab whose address is already open in another tab of this window?",
+      "hint": "Handled by mod.onButton(\"dedupe\", …) in mod.uc.js."
+    }
+  ]
+}

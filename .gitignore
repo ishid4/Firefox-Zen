@@ -1,0 +1,3 @@
+# Mods people install themselves; the example ships with the theme.
+/mods/*
+!/mods/example/

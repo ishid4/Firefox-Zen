@@ -17,6 +17,7 @@
 // - History: places history by last visit, grouped by day, searchable. Drag an
 //   entry onto a space to open it there.
 // - Downloads: Firefox's downloads (or a private space's).
+// - Mods: built by JS/firefox-zen-mods.uc.js (window.FirefoxZenMods).
 // - Settings: built by JS/firefox-zen-settings.uc.js (window.FirefoxZenSettings).
 //
 // The Library is core: always on. The toolbar's Firefox-Zen button opens it on
@@ -53,7 +54,7 @@
 
   let root = null;
   let main = null;
-  const VIEWS = ["spaces", "history", "downloads", "settings"];
+  const VIEWS = ["spaces", "history", "downloads", "mods", "settings"];
   let view = Services.prefs.getStringPref(VIEW_PREF, "spaces");
   let filterText = "";
   let renderQueued = false;
@@ -286,8 +287,8 @@
 
   function setView(name, { render = true } = {}) {
     view = VIEWS.includes(name) ? name : "spaces";
-    // Settings is a detour: the footer button opens the last content view.
-    if (view !== "settings") {
+    // Mods and Settings are detours: the footer button opens the last content view.
+    if (view !== "mods" && view !== "settings") {
       Services.prefs.setStringPref(VIEW_PREF, view);
     }
     if (render && root) {
@@ -331,6 +332,7 @@
         nav("history", "History"),
         nav("downloads", "Downloads"),
         h("div", { class: "fz-lib-rail-spacer" }),
+        window.FirefoxZenMods && nav("mods", "Mods"),
         window.FirefoxZenSettings && nav("settings", "Settings"),
         h("button", {
           type: "button",
@@ -377,6 +379,8 @@
     } else if (view === "downloads") {
       main.replaceChildren(...buildDownloadsView());
       startDownloads();
+    } else if (view === "mods" && window.FirefoxZenMods) {
+      main.replaceChildren(window.FirefoxZenMods.buildView());
     } else if (view === "settings" && window.FirefoxZenSettings) {
       main.replaceChildren(window.FirefoxZenSettings.buildView());
     } else {

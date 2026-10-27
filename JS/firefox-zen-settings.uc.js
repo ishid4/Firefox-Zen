@@ -15,6 +15,7 @@
   const PREF_BRANCH = "firefox-zen.";
   const WIDGET_ID = "firefox-zen-settings-button";
   const HTML_NS = "http://www.w3.org/1999/xhtml";
+  const { FzMods } = ChromeUtils.importESModule("chrome://userscripts/content/firefox-zen-mods.sys.mjs");
 
   // Options shown under a feature while it's on. Each reads and writes its own
   // pref; `default` is what an unset pref means to the feature's script.
@@ -278,6 +279,8 @@
   // ---- export / import ----
   // A settings file holds every pref the Settings tab shows, so a setup can be
   // shared and loaded elsewhere. Keys this version doesn't know are skipped.
+  // `mods` holds which mods are on and their options (JS/firefox-zen-mods.sys.mjs);
+  // the mods themselves aren't in the file.
 
   const FILE_FORMAT = "firefox-zen-settings";
   const FILE_VERSION = 1;
@@ -323,12 +326,13 @@
   }
 
   // For Undo after Import and Reset to defaults.
-  const snapshot = () => new Map(ALL.map(o => [o, readValue(o)]));
+  const snapshot = () => ({ prefs: new Map(ALL.map(o => [o, readValue(o)])), mods: FzMods.exportState() });
 
   function restore(saved) {
-    for (const [o, value] of saved) {
+    for (const [o, value] of saved.prefs) {
       writeValue(o, value);
     }
+    FzMods.importState(saved.mods);
   }
 
   function pickFile(mode, title) {
@@ -353,8 +357,9 @@
     for (const o of ALL) {
       settings[o.pref] = readValue(o);
     }
-    await IOUtils.writeJSON(path, { format: FILE_FORMAT, version: FILE_VERSION, settings });
-    return `Exported ${Object.keys(settings).length} settings.`;
+    const mods = FzMods.exportState();
+    await IOUtils.writeJSON(path, { format: FILE_FORMAT, version: FILE_VERSION, settings, mods });
+    return `Exported ${Object.keys(settings).length} settings` + (mods.enabled.length ? ` and ${mods.enabled.length} mods.` : ".");
   }
 
   async function importSettings() {
@@ -376,7 +381,17 @@
         skipped++;
       }
     }
-    return `Imported ${applied} settings` + (skipped ? `; skipped ${skipped} unknown or invalid.` : ".");
+    let message = `Imported ${applied} settings` + (skipped ? `; skipped ${skipped} unknown or invalid.` : ".");
+    if (data.mods) {
+      const { missing, held } = FzMods.importState(data.mods);
+      if (missing.length) {
+        message += ` Not installed: ${missing.join(", ")}.`;
+      }
+      if (held.length) {
+        message += ` Left off (they run code; turn on in Mods): ${held.join(", ")}.`;
+      }
+    }
+    return message;
   }
 
   // The theme's icons are file:// SVGs using context-fill. Firefox only honors
