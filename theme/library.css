@@ -524,6 +524,51 @@
   overflow-y: auto;
 }
 
+/* Scrolling lists fade out at an edge while there's more that way. Each fade
+ * grows with the list's own scroll position over its first/last 10px, so it
+ * eases in instead of popping. A list that doesn't overflow has an inactive
+ * timeline and both fades stay 0. The keyframes use plain lengths: with var()
+ * in them the registered property only flips halfway instead of
+ * interpolating. 10px is also the sticky day headers' top padding in history
+ * and downloads, so the fade dims padding, not text. */
+@property --fz-lib-fade-top {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --fz-lib-fade-bottom {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@keyframes fz-lib-fade-top {
+  to {
+    --fz-lib-fade-top: 10px;
+  }
+}
+
+@keyframes fz-lib-fade-bottom {
+  from {
+    --fz-lib-fade-bottom: 10px;
+  }
+}
+
+.fz-lib-tabs,
+.fz-lib-history-list {
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    black var(--fz-lib-fade-top),
+    black calc(100% - var(--fz-lib-fade-bottom)),
+    transparent
+  );
+  animation: fz-lib-fade-top linear both, fz-lib-fade-bottom linear both;
+  animation-timeline: scroll(self block);
+  animation-range: 0 10px, calc(100% - 10px) 100%;
+}
+
 .fz-lib-column-empty {
   padding: 10px 8px;
 }

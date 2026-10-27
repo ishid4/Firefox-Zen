@@ -1296,7 +1296,8 @@
 
   // For a real scroll container (overflow-x: hidden): hovering the first or
   // last visible item's width scrolls one item that way, repeating while the
-  // pointer stays there. Fade attributes mark hidden items on either side.
+  // pointer stays there. theme/spaces-footer.css fades the edges from the
+  // element's scroll timeline.
   function attachEdgeScroll(el) {
     if (edgeScrollAttached.has(el)) {
       return;
@@ -1309,15 +1310,10 @@
       return (first?.getBoundingClientRect().width || 32) + gap;
     };
     const maxScroll = () => el.scrollWidth - el.clientWidth;
-    const updateFades = () => {
-      el.toggleAttribute("fz-more-left", el.scrollLeft > 1);
-      el.toggleAttribute("fz-more-right", el.scrollLeft < maxScroll() - 1);
-    };
     const stop = () => {
       clearTimeout(timer);
       timer = null;
     };
-    el.addEventListener("scroll", updateFades);
     el.addEventListener("mouseleave", stop);
     el.addEventListener("mousemove", e => {
       if (maxScroll() <= 1) {
@@ -1349,10 +1345,6 @@
       };
       step(SCROLL_FIRST_DELAY);
     });
-    new ResizeObserver(updateFades).observe(el);
-    // Tools/extensions added or removed change the scroll width, not the size.
-    new MutationObserver(updateFades).observe(el, { childList: true });
-    updateFades();
   }
 
   function setupToolsRow() {

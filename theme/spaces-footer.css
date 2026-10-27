@@ -31,20 +31,37 @@
   margin-block-start: 0 !important;
   padding-block-end: var(--space-xsmall, 4px) !important;
 
+  /* Fade an edge while more tools are hidden that way, driven by the row's
+   * own scroll position. Unregistered properties flip halfway through each
+   * 2px range, so an edge fades once it's more than 1px from the end. A row
+   * that doesn't overflow has an inactive timeline: no animation, no fades. */
   --fz-fade-left: black;
   --fz-fade-right: black;
   mask-image: linear-gradient(to right, var(--fz-fade-left), black 14%, black 86%, var(--fz-fade-right));
-
-  &[fz-more-left] {
-    --fz-fade-left: transparent;
-  }
-
-  &[fz-more-right] {
-    --fz-fade-right: transparent;
-  }
+  animation: fz-tools-more-left linear both, fz-tools-more-right linear both;
+  animation-timeline: scroll(self x);
+  animation-range: 0 2px, calc(100% - 2px) 100%;
 
   > moz-button {
     flex: none;
+  }
+}
+
+@keyframes fz-tools-more-left {
+  from {
+    --fz-fade-left: black;
+  }
+  to {
+    --fz-fade-left: transparent;
+  }
+}
+
+@keyframes fz-tools-more-right {
+  from {
+    --fz-fade-right: transparent;
+  }
+  to {
+    --fz-fade-right: black;
   }
 }
 

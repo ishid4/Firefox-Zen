@@ -266,10 +266,6 @@
   list-style-image: url("icons/privateBrowsing.svg") !important;
 }
 
-#save-to-pocket-button {
-  list-style-image: url("icons/pocket-outline.svg") !important;
-}
-
 #profiler-button-button>.toolbarbutton-icon,
 .subviewbutton[label="Task Manager"] {
   list-style-image: url("icons/tool-profiler.svg") !important;
@@ -284,13 +280,11 @@
   list-style-image: url("icons/window.svg") !important;
 }
 
-#restore-button,
 #fullscreen-button,
 #appMenu-fullscreen-button2 {
   list-style-image: url("icons/fullscreen.svg") !important;
 }
 
-#restore-button[checked],
 #fullscreen-button[checked],
 #appMenu-fullscreen-button2[checked] {
   list-style-image: url("icons/fullscreen-exit.svg") !important;
@@ -406,7 +400,7 @@
 }
 
 #overflowMenu-customize-button,
-#appMenu-moreTools-button {
+#appmenu-moreTools-button {
   list-style-image: url("icons/customize.svg") !important;
 }
 
@@ -922,11 +916,6 @@
   menuitem[id="placesContext_new:folder"],
   menuitem[id="placesContext_new:separator"] {
     --menu-image: url("icons/plus.svg");
-  }
-
-  #context-savelinktopocket,
-  #context-pocket {
-    --menu-image: url("icons/pocket-outline.svg");
   }
 
   #context_moveTabOptions {

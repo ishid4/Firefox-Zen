@@ -287,37 +287,6 @@ toolbar .toolbarbutton-1 {
   padding-block-start: 8px;
 }
 
-/* Hide the collapsed sidebar when it's not hovered */
-@media -moz-pref("sidebar.visibility","expand-on-hover") {
-  #sidebar-wrapper {
-    outline: 2px solid
-      color-mix(in srgb, var(--toolbarbutton-icon-fill) 30%, transparent) !important;
-    &.expandOnHover {
-      width: 8px !important;
-      opacity: 0 !important;
-      transition: 0.2s ease !important;
-    }
-    &:hover {
-      width: initial !important;
-      opacity: 1 !important;
-      box-shadow: var(--content-area-shadow) !important;
-      border-radius: var(--border-radius-medium) !important;
-    }
-    #sidebar-box {
-      padding-inline-end: 8px !important;
-    }
-  }
-  #sidebar-wrapper {
-    &.expandOnHover {
-      & #sidebar-main {
-        &:hover {
-          box-shadow: none !important;
-        }
-      }
-    }
-  }
-}
-
 /* [FIREFOX SIDEBAR ZONE] */
 /* Blend sidebar styling with current theme */
 #sidebar {

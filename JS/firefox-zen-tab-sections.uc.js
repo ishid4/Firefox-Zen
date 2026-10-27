@@ -38,6 +38,10 @@
 
   const scrollbox = () => document.getElementById("tabbrowser-arrowscrollbox");
 
+  // Firefox 159 moved isTab/isTabGroup/isSplitViewWrapper and closingTabsEnum
+  // from the gBrowser instance to static members of its Tabbrowser class.
+  const tabbrowser = () => ("closingTabsEnum" in gBrowser.constructor ? gBrowser.constructor : gBrowser);
+
   // ---- keep folders first in the DOM ----
 
   let normalizeQueued = false;
@@ -50,14 +54,15 @@
     if (!enabled() || !box || box.getAttribute("orient") !== "vertical") {
       return;
     }
+    const tb = tabbrowser();
     let firstLoose = null;
     const late = [];
     for (const el of box.children) {
-      if (gBrowser.isTabGroup(el)) {
+      if (tb.isTabGroup(el)) {
         if (firstLoose) {
           late.push(el);
         }
-      } else if (!firstLoose && (gBrowser.isTab(el) || gBrowser.isSplitViewWrapper?.(el)) && !el.pinned) {
+      } else if (!firstLoose && (tb.isTab(el) || tb.isSplitViewWrapper?.(el)) && !el.pinned) {
         firstLoose = el;
       }
     }
@@ -84,7 +89,7 @@
 
   function clearTabs() {
     const tabs = looseTabs();
-    if (!tabs.length || !gBrowser.warnAboutClosingTabs(tabs.length, gBrowser.closingTabsEnum.MULTI_SELECTED)) {
+    if (!tabs.length || !gBrowser.warnAboutClosingTabs(tabs.length, tabbrowser().closingTabsEnum.MULTI_SELECTED)) {
       return;
     }
     // Never close the window from here: Firefox opens a fresh tab instead.
