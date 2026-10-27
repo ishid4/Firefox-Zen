@@ -653,6 +653,7 @@
           current: tab.selected,
           unloaded: !isLoaded(tab),
           onclick: () => activateTab(tab),
+          oncontextmenu: e => openTabMenu(e, tab),
         },
         h("img", { src: tabIcon(tab), alt: "" })
       );
@@ -732,6 +733,7 @@
 
     const list = h("div", { class: "fz-lib-tabs", "data-scroll-key": `space:${space.id}` });
     const seenGroups = new Set();
+    const seenSplits = new Set();
     for (const tab of tabs) {
       if (tab.group) {
         if (seenGroups.has(tab.group)) {
@@ -742,12 +744,16 @@
         if (block) {
           list.append(block);
         }
-      } else if (matches(tab)) {
+      } else {
+        const row = buildRow(tab, seenSplits);
+        if (!row) {
+          continue;
+        }
         // The sidebar's line between folders and loose tabs (tab sections).
         if (list.lastElementChild?.classList.contains("fz-lib-group")) {
           list.append(h("div", { class: "fz-lib-separator", "aria-hidden": "true" }));
         }
-        list.append(buildTabRow(tab));
+        list.append(row);
       }
     }
     if (!list.children.length) {
@@ -890,6 +896,7 @@
     const key = keyOf(group);
     groupByKey.set(key, group);
     const collapsed = collapsedGroups.has(group.id) && !filterText;
+    const seenSplits = new Set();
     const head = h(
       "div",
       {
@@ -921,8 +928,26 @@
         style: `--fz-group-color: var(--tab-group-${group.color}, currentColor)`,
       },
       head,
-      collapsed ? null : h("div", { class: "fz-lib-group-tabs" }, ...(filterText ? shown : tabs).map(buildTabRow))
+      collapsed ? null : h("div", { class: "fz-lib-group-tabs" }, ...tabs.map(t => buildRow(t, seenSplits)))
     );
+  }
+
+  // A tab's row, or its split view's tabs side by side as in the sidebar
+  // (once per split view: seenSplits). Null when the filter hides it.
+  function buildRow(tab, seenSplits) {
+    const split = tab.splitview;
+    if (!split) {
+      return matches(tab) ? buildTabRow(tab) : null;
+    }
+    if (seenSplits.has(split)) {
+      return null;
+    }
+    seenSplits.add(split);
+    const tabs = split.tabs;
+    if (!tabs.some(matches)) {
+      return null;
+    }
+    return h("div", { class: "fz-lib-split", current: tabs.some(t => t.selected) }, ...tabs.map(buildTabRow));
   }
 
   function buildTabRow(tab) {
@@ -941,6 +966,7 @@
         picked: picked.has(tab),
         unloaded: !isLoaded(tab),
         onclick: e => onTabClick(e, tab),
+        oncontextmenu: e => openTabMenu(e, tab),
         onauxclick: e => {
           if (e.button === 1) {
             e.preventDefault();
@@ -986,6 +1012,15 @@
     } else {
       activateTab(tab);
     }
+  }
+
+  // Firefox's tab menu, as on the sidebar's tabs. It takes its tab from
+  // triggerNode.tab (see TabContextMenu.updateContextMenu).
+  function openTabMenu(e, tab) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.target.tab = tab;
+    document.getElementById("tabContextMenu")?.openPopupAtScreen(e.screenX, e.screenY, true, e);
   }
 
   function activateTab(tab) {
@@ -1555,7 +1590,9 @@
       showIndicator({ left: r.left, y: r.top - 1, width: r.width }, false);
       return { space, before: groupByKey.get(Number(blocks[index].dataset.group)) };
     }
-    const firstLoose = column.querySelector(".fz-lib-tabs > .fz-lib-tab:not(.fz-lib-dragging)");
+    const firstLoose = column.querySelector(
+      ":is(.fz-lib-tabs, .fz-lib-tabs > .fz-lib-split) > .fz-lib-tab:not(.fz-lib-dragging)"
+    );
     if (firstLoose) {
       const r = firstLoose.getBoundingClientRect();
       showIndicator({ left: r.left, y: r.top - 1, width: r.width }, false);
@@ -2508,6 +2545,8 @@
       "TabGroupExpand",
       "TabGroupUpdate",
       "TabSelect",
+      "SplitViewCreated",
+      "SplitViewRemoved",
     ]) {
       tc.addEventListener(type, onTabsChanged);
     }

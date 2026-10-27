@@ -561,6 +561,34 @@
   }
 }
 
+/* A split view: its tabs side by side, as in the sidebar. */
+.fz-lib-split {
+  display: flex;
+  flex: none;
+  gap: 1px;
+  border-radius: 7px;
+
+  &[current] {
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fz-lib-accent) 55%, transparent);
+  }
+
+  & > .fz-lib-tab {
+    flex: 1;
+    min-width: 0;
+  }
+
+  & > .fz-lib-tab + .fz-lib-tab {
+    border-start-start-radius: 0;
+    border-end-start-radius: 0;
+    box-shadow: -1px 0 0 color-mix(in srgb, currentColor 25%, transparent);
+  }
+
+  & > .fz-lib-tab:has(+ .fz-lib-tab) {
+    border-start-end-radius: 0;
+    border-end-end-radius: 0;
+  }
+}
+
 .fz-lib-tab-label {
   flex: 1;
   min-width: 0;
