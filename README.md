@@ -18,9 +18,11 @@ a floating address bar, Glance previews and a built-in Library.
 
 ## Install
 
-Close Firefox first. Running the install command again updates Firefox-Zen.
+Close Firefox first, then open your system below. Running the install command
+again updates Firefox-Zen.
 
-### Windows
+<details>
+<summary><b>Windows</b></summary>
 
 **Easy way:** open PowerShell and run
 
@@ -32,6 +34,8 @@ It asks which profile to use (if you have several), backs up an existing
 `chrome` folder, and asks for admin once to copy the loader into the Firefox
 folder.
 
+Then start Firefox and click **Restart now** when Firefox-Zen asks (first start only).
+
 **Manual way:**
 
 1. Download the [ZIP](https://github.com/ishid4/Firefox-Zen/archive/refs/heads/main.zip)
@@ -41,8 +45,13 @@ folder.
 3. Copy everything from the extracted `Firefox-Zen-main` folder into `chrome`.
 4. Copy the contents of `chrome\program` into `C:\Program Files\Mozilla Firefox`
    (needs admin), so you get `config.js` and `defaults\pref\config-prefs.js` there.
+5. Start Firefox, open `about:support` and click **Clear startup cache…**.
+   Firefox-Zen then shows a **Restart now** banner: click it.
 
-### macOS
+</details>
+
+<details>
+<summary><b>macOS</b></summary>
 
 **Easy way:** open Terminal and run
 
@@ -53,13 +62,24 @@ curl -fsSL https://raw.githubusercontent.com/ishid4/Firefox-Zen/main/install.sh 
 If copying into Firefox fails, allow Terminal under System Settings →
 Privacy & Security → **App Management** and run it again.
 
+Then start Firefox and click **Restart now** when Firefox-Zen asks (first start only).
+
 **Manual way:**
 
-1. Do steps 1-3 from Windows (**Profile Folder** → **Show in Finder**).
-2. Right-click Firefox in Applications → **Show Package Contents**, and copy the
+1. Download the [ZIP](https://github.com/ishid4/Firefox-Zen/archive/refs/heads/main.zip)
+   and extract it.
+2. Open your profile folder (`about:support` → **Profile Folder** → **Show in Finder**)
+   and create a `chrome` folder in it.
+3. Copy everything from the extracted `Firefox-Zen-main` folder into `chrome`.
+4. Right-click Firefox in Applications → **Show Package Contents**, and copy the
    contents of `chrome/program` into `Contents/Resources`.
+5. Start Firefox, open `about:support` and click **Clear startup cache…**.
+   Firefox-Zen then shows a **Restart now** banner: click it.
 
-### Linux
+</details>
+
+<details>
+<summary><b>Linux</b></summary>
 
 **Easy way:** open a terminal and run
 
@@ -70,21 +90,25 @@ curl -fsSL https://raw.githubusercontent.com/ishid4/Firefox-Zen/main/install.sh 
 It uses `sudo` when the Firefox folder needs it. Snap and Flatpak Firefox
 can't load the loader; use Mozilla's `.deb` or `.tar.bz2` build.
 
+Then start Firefox and click **Restart now** when Firefox-Zen asks (first start only).
+
 **Manual way:**
 
-1. Do steps 1-3 from Windows.
-2. Copy the contents of `chrome/program` into the Firefox install folder (the
+1. Download the [ZIP](https://github.com/ishid4/Firefox-Zen/archive/refs/heads/main.zip)
+   and extract it.
+2. Open your profile folder (`about:support` → **Profile Folder** → **Open Directory**)
+   and create a `chrome` folder in it.
+3. Copy everything from the extracted `Firefox-Zen-main` folder into `chrome`.
+4. Copy the contents of `chrome/program` into the Firefox install folder (the
    one with `application.ini`, often `/usr/lib/firefox` or `/opt/firefox`):
 
    ```bash
    sudo cp -r chrome/program/. /usr/lib/firefox/
    ```
+5. Start Firefox, open `about:support` and click **Clear startup cache…**.
+   Firefox-Zen then shows a **Restart now** banner: click it.
 
-### Finish
-
-Start Firefox. After a manual install, open `about:support` and click
-**Clear startup cache…** first. On the first start Firefox-Zen shows a
-**Restart now** banner: click it.
+</details>
 
 ## Usage
 
