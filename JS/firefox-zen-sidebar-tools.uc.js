@@ -97,16 +97,24 @@
   // TabClose fires before the tab leaves the strip.
   const queuePinnedRows = () => setTimeout(updatePinnedRows, 0);
 
-  // ---- at most MAX_PINS pinned tabs ----
+  // ---- at most maxPins() pinned tabs ----
 
   // Pins the user makes (tab menu, dragging into the pinned area) go through
   // gBrowser.pinTab with a user-triggered metrics context; refuse those once
   // the pins are full. Session restore isn't user-triggered, so a restored
   // window keeps all its pins. The Library checks the limit itself.
-  const MAX_PINS = 12;
+  // firefox-zen.pins.max, 1-36 (Settings → Library).
+  const MAX_PINS_PREF = "firefox-zen.pins.max";
+  const maxPins = () => Math.min(36, Math.max(1, Services.prefs.getIntPref(MAX_PINS_PREF, 12)));
   const pinCount = () => gBrowser.pinnedTabCount;
 
-  window.FirefoxZenPins = { max: MAX_PINS, count: pinCount, room: () => Math.max(0, MAX_PINS - pinCount()) };
+  window.FirefoxZenPins = {
+    get max() {
+      return maxPins();
+    },
+    count: pinCount,
+    room: () => Math.max(0, maxPins() - pinCount()),
+  };
 
   function limitPinTab() {
     const original = gBrowser.pinTab;
@@ -114,7 +122,7 @@
       return;
     }
     const limited = function (tab, options) {
-      if (!tab?.pinned && options?.metricsContext?.isUserTriggered && pinCount() >= MAX_PINS) {
+      if (!tab?.pinned && options?.metricsContext?.isUserTriggered && pinCount() >= maxPins()) {
         return;
       }
       return original.call(this, tab, options);
@@ -132,12 +140,12 @@
     }
     const tabs = window.TabContextMenu?.contextTabs ?? [];
     const newPins = tabs.filter(t => !t.pinned).length;
-    const count = `${pinCount()}/${MAX_PINS}`;
+    const count = `${pinCount()}/${maxPins()}`;
     for (const id of ["context_pinTab", "context_pinSelectedTabs"]) {
       const item = document.getElementById(id);
       if (item) {
         item.setAttribute("acceltext", count);
-        item.disabled = pinCount() + newPins > MAX_PINS;
+        item.disabled = pinCount() + newPins > maxPins();
       }
     }
     for (const id of ["context_unpinTab", "context_unpinSelectedTabs"]) {

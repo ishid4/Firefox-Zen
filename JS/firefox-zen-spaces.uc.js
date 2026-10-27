@@ -50,9 +50,11 @@
   // in the meantime doesn't drag us into another space.
   let holdSpace = false;
 
-  // Footer carousel: VISIBLE spaces at a time; hovering the first/last visible
-  // slot scrolls one slot that way.
-  const VISIBLE = 4;
+  // Footer carousel: visible() spaces at a time (VISIBLE_PREF, 2-8); hovering
+  // the first/last visible slot scrolls one slot that way.
+  const VISIBLE_PREF = "firefox-zen.spaces.visible";
+  const VISIBLE_DEFAULT = 4;
+  const visible = () => Math.min(8, Math.max(2, Services.prefs.getIntPref(VISIBLE_PREF, VISIBLE_DEFAULT)));
   const SCROLL_FIRST_DELAY = 250;
   const SCROLL_REPEAT_DELAY = 350;
   let viewStart = 0;
@@ -60,8 +62,8 @@
   let scrollTimer = null;
 
   const enabled = () => Services.prefs.getBoolPref(ENABLED_PREF, false);
-  const LIBRARY_PREF = "firefox-zen.library";
-  const libraryOn = () => Services.prefs.getBoolPref(LIBRARY_PREF, false) && !!window.FirefoxZenLibrary;
+  // The Library is always on; History is the fallback without its script.
+  const libraryOn = () => !!window.FirefoxZenLibrary;
 
   // ---- space list ----
 
@@ -1193,8 +1195,7 @@
     });
     add.addEventListener("click", () => openPlusMenu(add));
 
-    // Library (JS/firefox-zen-library.uc.js) when it's on, else Firefox's
-    // History sidebar.
+    // Library (JS/firefox-zen-library.uc.js), else Firefox's History sidebar.
     const library = libraryOn();
     const history = h("button", {
       class: `fz-space fz-footer-button ${library ? "fz-library" : "fz-history"}`,
@@ -1216,6 +1217,7 @@
     // Keep the window inside the list, and bring the active space into view
     // when it changes (not on every re-render, so a hover-scroll sticks).
     const count = list.length;
+    const VISIBLE = visible();
     const maxStart = Math.max(0, count - VISIBLE);
     const activeIndex = list.findIndex(s => s.id === activeId);
     if (activeId !== lastRenderedActive && activeIndex >= 0) {
@@ -1243,7 +1245,7 @@
   function updateCarousel(viewport, count) {
     viewport.style.setProperty("--fz-view-start", String(viewStart));
     viewport.classList.toggle("fz-more-left", viewStart > 0);
-    viewport.classList.toggle("fz-more-right", viewStart + VISIBLE < count);
+    viewport.classList.toggle("fz-more-right", viewStart + visible() < count);
   }
 
   function stopScroll() {
@@ -1254,6 +1256,7 @@
   // Which slot the pointer is over decides the direction, rather than which
   // button: buttons slide under a still cursor while scrolling.
   function onViewportHover(viewport, count, e) {
+    const VISIBLE = visible();
     if (count <= VISIBLE) {
       return;
     }
@@ -1717,6 +1720,10 @@
         }
         return;
       }
+      if (name === VISIBLE_PREF) {
+        renderBar();
+        return;
+      }
       if (name === LIST_PREF && enabled()) {
         const list = localSpaces();
         if (!list.length) {
@@ -1901,9 +1908,6 @@
 
     // Pref observers match by prefix: this one also covers LIST_PREF.
     Services.prefs.addObserver(ENABLED_PREF, prefObserver);
-    // The footer's first button is Library or History.
-    const libraryObserver = { observe: () => renderBar() };
-    Services.prefs.addObserver(LIBRARY_PREF, libraryObserver);
     // A private space was locked or unlocked (in any window).
     const privateTopic = privateSpaces()?.CHANGED_TOPIC;
     const privateObserver = { observe: () => renderBar() };
@@ -1938,7 +1942,6 @@
       "unload",
       () => {
         Services.prefs.removeObserver(ENABLED_PREF, prefObserver);
-        Services.prefs.removeObserver(LIBRARY_PREF, libraryObserver);
         if (privateTopic) {
           Services.obs.removeObserver(privateObserver, privateTopic);
         }

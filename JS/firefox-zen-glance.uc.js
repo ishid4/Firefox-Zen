@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name           Firefox-Zen Glance
-// @description    Alt+click a link to peek at it in a floating window over the current tab
+// @description    Alt+click (or another modifier+click) a link to peek at it in a floating window
 // @include        main
 // ==/UserScript==
 
@@ -12,6 +12,11 @@
 // onClick), so no code has to run inside web pages. A plain Alt+click on a
 // link does nothing by default (it saves the link only with
 // browser.altClickSave), so pages are left alone.
+//
+// The modifiers are firefox-zen.glance.modifiers ("alt", "ctrl+shift", ...).
+// With Ctrl or Shift in them, Firefox also opens the link in a new tab/window
+// (ClickHandlerParent, after our click): that one open is swallowed in
+// window.openLinkIn (see claimClick).
 
 (function () {
   "use strict";
@@ -38,6 +43,8 @@
   // card's edges changes it (see startResize).
   const WIDTH_PREF = "firefox-zen.glance.width";
   const HEIGHT_PREF = "firefox-zen.glance.height";
+  const MODIFIERS_PREF = "firefox-zen.glance.modifiers";
+  const MODIFIER_KEYS = ["ctrl", "alt", "shift"];
   const DEFAULT_WIDTH = 700;
   const DEFAULT_HEIGHT = 940;
   const MIN_SIZE = { width: 360, height: 240 };
@@ -139,7 +146,7 @@
   // `origin`: box in window coordinates to grow out of, or null for the center.
   function open(browser, href, origin) {
     if (glance) {
-      // Alt+click inside the glance navigates the glance.
+      // A glance click inside the glance navigates the glance.
       if (browser === glance.tab.linkedBrowser) {
         browser.fixupAndLoadURIString(href, {
           triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(),
@@ -451,18 +458,52 @@
     hoveredLink = event.detail?.url ?? "";
   }
 
+  // Unknown or empty: Alt.
+  function modifiers() {
+    const set = new Set(Services.prefs.getStringPref(MODIFIERS_PREF, "alt").split("+"));
+    return MODIFIER_KEYS.some(k => set.has(k)) ? set : new Set(["alt"]);
+  }
+
+  function matchesModifiers(event) {
+    const want = modifiers();
+    if (
+      event.metaKey ||
+      event.ctrlKey !== want.has("ctrl") ||
+      event.altKey !== want.has("alt") ||
+      event.shiftKey !== want.has("shift")
+    ) {
+      return false;
+    }
+    // Plain Alt+click saves the link with this on: leave it to Firefox.
+    return !(want.size === 1 && want.has("alt") && Services.prefs.getBoolPref("browser.altClickSave", false));
+  }
+
+  // The <browser> whose next Firefox link open (new tab/window for Ctrl or
+  // Shift) belongs to a glance click, until `until`.
+  let claimed = null;
+  const CLAIM_MS = 1000;
+
+  function claimClick(browser) {
+    claimed = { browser, until: performance.now() + CLAIM_MS };
+  }
+
+  const originalOpenLinkIn = window.openLinkIn;
+  window.openLinkIn = function (url, where, params) {
+    if (claimed && params?.openerBrowser === claimed.browser && performance.now() < claimed.until) {
+      claimed = null;
+      return undefined;
+    }
+    return originalOpenLinkIn.apply(this, arguments);
+  };
+
   // The window sees clicks on pages too (target: the <browser>), which is all
   // Glance needs, so no code has to run inside web pages.
   function onClick(event) {
     if (
       event.button !== 0 ||
-      !event.altKey ||
-      event.ctrlKey ||
-      event.metaKey ||
-      event.shiftKey ||
       event.target.localName !== "browser" ||
       !Services.prefs.getBoolPref(PREF, false) ||
-      Services.prefs.getBoolPref("browser.altClickSave", false)
+      !matchesModifiers(event)
     ) {
       return;
     }
@@ -470,6 +511,7 @@
     if (!url || (url.protocol !== "http:" && url.protocol !== "https:")) {
       return;
     }
+    claimClick(event.target);
 
     const origin = {
       x: event.clientX - ORIGIN_SIZE.width / 2,

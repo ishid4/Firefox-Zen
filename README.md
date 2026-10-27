@@ -1,8 +1,29 @@
 # Firefox-Zen
-## Settings panel
+## Settings
 
-A toolbar button opens the Firefox-Zen settings panel, where you can toggle theme
-features and preview them live. The panel needs the
+Settings live in the Library's **Settings** tab, grouped by category (Core,
+Tabs & spaces, Address bar, Layout, Browsing), each feature with a live preview
+and a switch. Turning a feature on unfolds tips and its own options under it
+(Library: pin limit; Spaces: footer size and private space auto-lock; Glance:
+shortcut and size). The Firefox-Zen toolbar button opens the Library on
+Settings, so it works on first startup, before Spaces and its footer are on.
+
+- **Search** (top right) filters by anything a row shows: title, description,
+  tips and option names. Esc clears it.
+- A **dot** next to a title marks a setting changed from its default (the
+  feature or any of its options); hover the row for **Reset**, which resets
+  just that one.
+- **Reset to defaults** and **Import…** show **Undo** next to the result.
+- On first startup the settings script has to turn on two Firefox prefs the
+  theme needs, which only take effect after a restart; the tab shows a
+  **Restart now** banner until then.
+
+**Export…** / **Import…** at the bottom save and load every setting on that tab
+as a small JSON file (`"format": "firefox-zen-settings"`), to share a setup or
+move it to another profile. Importing skips keys it doesn't know (from a newer
+version) and keeps numbers in range. Undo puts back what an import changed.
+
+Everything needs the
 [fx-autoconfig](https://github.com/MrOtherGuy/fx-autoconfig) loader (MPL-2.0):
 
 - `utils/`: loader files that live in the profile (already in place).
@@ -17,13 +38,17 @@ Then open `about:support`, click **Clear startup cache…**, and restart.
 | `firefox-zen.compact-toolbar` | false | Hide the toolbar until hovered (with the address bar in the sidebar: the window controls hide too and the sidebar/page use the full window height) |
 | `firefox-zen.compact-sidebar` | false | Hide the vertical tabs sidebar until its edge is hovered |
 | `firefox-zen.spaces` | false | Zen-style Spaces (see below) |
-| `firefox-zen.library` | true | The spaces footer's first button opens the Library instead of the History sidebar (see below) |
 | `firefox-zen.tab-sections` | true | Folders above a line, New Tab and new tabs below it; hover the sidebar for **Clear** (see below) |
 | `firefox-zen.show-customize-button` | true | Firefox's "Customize sidebar" gear in the sidebar tools (toggle it under Customize Sidebar → Tools) |
 | `firefox-zen.sidebar-urlbar` | false | Toolbar + address bar at the top of the sidebar. With "Expand sidebar on hover" it stays there and shows when the sidebar expands; otherwise it goes back to the top while the sidebar is collapsed. Also back on top while customizing the toolbar |
 | `firefox-zen.floating-urlbar` | true | Open the address bar centered, like a command bar |
 | `firefox-zen.urlbar-newtab` | true | No New Tab page, like Arc/Zen: Ctrl+T and the + buttons open the address bar (floating, if that's on) and what you pick opens in a new tab. Esc or clicking away cancels without creating a tab. Shift+click (new window), middle-click paste and the tab Spaces needs for an empty space still make a real tab |
 | `firefox-zen.glance` | true | Alt+click a link to open it in a floating Glance window (see below) |
+| `firefox-zen.glance.modifiers` | alt | Keys held while clicking a link to open Glance: `ctrl`, `alt`, `shift`, joined with `+` |
+| `firefox-zen.glance.width` / `.height` | 700 / 940 | Glance size in thousandths of the content area (Settings sliders, or drag its edges) |
+| `firefox-zen.pins.max` | 12 | Most pinned tabs (1-36) |
+| `firefox-zen.spaces.visible` | 4 | Spaces the footer shows at once (2-8) |
+| `firefox-zen.private-spaces.autolock-minutes` | 10 | Lock every private space after this many idle minutes (0 = never) |
 | `firefox-zen.show-folder-icons` | true | Arc folder icons on tab groups |
 | `firefox-zen.show-menu-icons` | true | Icons in context menus |
 
@@ -146,7 +171,8 @@ rewritten every few seconds while it changes.
 
 ### Library
 
-The first button in the spaces footer opens the Library over the page. The
+The Library is core (always on). The first button in the spaces footer, or
+the Firefox-Zen toolbar button (on its Settings tab), opens it over the page. The
 sidebar expands and stays out while it's open, with the Library next to it
 (also with compact sidebar and expand-on-hover), and goes back to how it was
 when it closes. Esc, the button again, or clicking a tab closes it.
@@ -178,7 +204,7 @@ Failed downloads (the ones that need Retry) are tinted yellow.
 
 ### Pins
 
-At most 12 pinned tabs. The tab right-click menu shows the count next to
+At most 12 pinned tabs by default (Settings → Library, `firefox-zen.pins.max`). The tab right-click menu shows the count next to
 Pin Tab / Unpin Tab (e.g. 3/12), and Pin Tab is disabled once they're full;
 dragging a tab into the pinned area or onto the Library's Pins does nothing
 then. Windows restored from a session keep all their pinned tabs.
@@ -203,7 +229,10 @@ Ctrl+Shift+T reopens them). Folders and pinned tabs stay.
 ### Glance
 
 Like Zen's Glance: Alt+click a link and the page grows out of it into a
-floating window over the current tab, with the tab dimmed behind it.
+floating window over the current tab, with the tab dimmed behind it. The
+shortcut can be any mix of Ctrl, Alt and Shift (Settings → Glance → Open with).
+With Ctrl or Shift in it, Firefox's own new tab / new window for that click is
+skipped; other clicks behave as usual.
 
 - **Esc**, a click on the dimmed area, or **×** closes it (it shrinks back
   into the link).
@@ -213,11 +242,12 @@ floating window over the current tab, with the tab dimmed behind it.
 - Drag any edge or corner of the glance to resize it; it stays centered, and
   the size is remembered (`firefox-zen.glance.width` / `.height`, in
   thousandths of the content area).
-- Alt+click inside a glance navigates the glance. Switching tabs closes it.
+- The shortcut inside a glance navigates the glance. Switching tabs closes it.
 - Works on links whose address Firefox shows at the bottom on hover (that's
   where the link comes from; no code runs inside pages).
-- Off while `browser.altClickSave` is on (Alt+click saves the link instead).
-- Pages that handle Alt+click themselves (rare) keep their own behavior.
+- A plain Alt shortcut is off while `browser.altClickSave` is on (Alt+click
+  saves the link instead).
+- Pages that handle the click themselves (rare) keep their own behavior.
 
 ### Address bar in sidebar
 

@@ -77,7 +77,7 @@
   }
 }
 
-/* Fixed window of up to 4 slots; the track slides one slot at a time */
+/* Fixed window of up to firefox-zen.spaces.visible slots; the track slides one slot at a time */
 .fz-space-viewport {
   flex: none;
   width: calc(var(--fz-visible-slots, 4) * var(--fz-slot) - 2px);

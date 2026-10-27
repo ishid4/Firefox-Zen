@@ -122,6 +122,10 @@
   --fz-lib-nav-icon: url("icons/downloads.svg");
 }
 
+.fz-lib-nav-settings {
+  --fz-lib-nav-icon: url("icons/settings.svg");
+}
+
 .fz-lib-nav-close {
   --fz-lib-nav-icon: url("icons/close.svg");
 }

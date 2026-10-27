@@ -16,6 +16,11 @@
 //   footer, or onto "New space".
 // - History: places history by last visit, grouped by day, searchable. Drag an
 //   entry onto a space to open it there.
+// - Downloads: Firefox's downloads (or a private space's).
+// - Settings: built by JS/firefox-zen-settings.uc.js (window.FirefoxZenSettings).
+//
+// The Library is core: always on. The toolbar's Firefox-Zen button opens it on
+// Settings, so it can be reached before Spaces (and its footer) is on.
 //
 // Drag and drop uses pointer events (not HTML drag and drop), captured on the
 // panel, so a drag can leave the panel and land on the footer.
@@ -23,7 +28,6 @@
 (function () {
   "use strict";
 
-  const PREF = "firefox-zen.library";
   const VIEW_PREF = "firefox-zen.library.view";
   const SPACES_PREF = "firefox-zen.spaces";
   const ROOT_ID = "fz-library";
@@ -43,13 +47,13 @@
     "⭐", "❤️", "🔥", "🚀", "🧠", "🎓", "🛠️", "🗂️", "🌍", "🏖️", "🎧", "🕹️",
   ];
 
-  const enabled = () => Services.prefs.getBoolPref(PREF, false);
   const api = () => window.FirefoxZenSpaces;
   const spacesOn = () => !!api()?.enabled();
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
   let root = null;
   let main = null;
+  const VIEWS = ["spaces", "history", "downloads", "settings"];
   let view = Services.prefs.getStringPref(VIEW_PREF, "spaces");
   let filterText = "";
   let renderQueued = false;
@@ -211,9 +215,6 @@
   }
 
   function open(newView) {
-    if (!enabled()) {
-      return;
-    }
     if (newView) {
       setView(newView, { render: false });
     }
@@ -284,8 +285,11 @@
   }
 
   function setView(name, { render = true } = {}) {
-    view = ["history", "downloads"].includes(name) ? name : "spaces";
-    Services.prefs.setStringPref(VIEW_PREF, view);
+    view = VIEWS.includes(name) ? name : "spaces";
+    // Settings is a detour: the footer button opens the last content view.
+    if (view !== "settings") {
+      Services.prefs.setStringPref(VIEW_PREF, view);
+    }
     if (render && root) {
       renderView();
     }
@@ -327,6 +331,7 @@
         nav("history", "History"),
         nav("downloads", "Downloads"),
         h("div", { class: "fz-lib-rail-spacer" }),
+        window.FirefoxZenSettings && nav("settings", "Settings"),
         h("button", {
           type: "button",
           class: "fz-lib-nav fz-lib-nav-close",
@@ -372,6 +377,8 @@
     } else if (view === "downloads") {
       main.replaceChildren(...buildDownloadsView());
       startDownloads();
+    } else if (view === "settings" && window.FirefoxZenSettings) {
+      main.replaceChildren(window.FirefoxZenSettings.buildView());
     } else {
       main.replaceChildren(...buildSpacesShell());
       renderBoard();
@@ -2412,15 +2419,13 @@
 
   const prefObserver = {
     observe(_subject, _topic, name) {
-      if (name === PREF && !enabled()) {
-        close();
-      } else if (name === SPACES_PREF) {
+      if (name === SPACES_PREF) {
         onTabsChanged();
       }
     },
   };
 
-  window.FirefoxZenLibrary = { isOpen, open, close, toggle };
+  window.FirefoxZenLibrary = { isOpen, open, close, toggle, view: () => view };
 
   async function start() {
     await window.delayedStartupPromise;
@@ -2474,12 +2479,10 @@
       }
     });
 
-    Services.prefs.addObserver(PREF, prefObserver);
     Services.prefs.addObserver(SPACES_PREF, prefObserver);
     window.addEventListener(
       "unload",
       () => {
-        Services.prefs.removeObserver(PREF, prefObserver);
         Services.prefs.removeObserver(SPACES_PREF, prefObserver);
       },
       { once: true }
