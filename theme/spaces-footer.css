@@ -187,6 +187,26 @@
   background: var(--fz-space-container-color);
 }
 
+/* Private space: a mask badge, a padlock while locked */
+.fz-space-private {
+  &::after {
+    content: "";
+    position: absolute;
+    inset-inline-end: 1px;
+    bottom: 1px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--toolbar-bgcolor, Canvas) url("icons/privateBrowsing.svg") center / 9px no-repeat;
+    -moz-context-properties: fill;
+    fill: currentColor;
+  }
+
+  &[fz-locked]::after {
+    background-image: url("icons/security.svg");
+  }
+}
+
 .fz-space-add {
   width: 32px;
   height: 32px;

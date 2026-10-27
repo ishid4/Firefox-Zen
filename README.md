@@ -63,6 +63,53 @@ Pinned tabs are global "Pins" and show in every space.
 - Turning Spaces off shows every tab again.
 - Conflicts with other tab-hiding extensions (e.g. Simple Tab Groups).
 
+#### Private spaces
+
+**+** → **Create Private Space…** asks for a password and opens the space in
+its own private window (private browsing is per window in Firefox). The
+Library's **New** → **New Private Space…** does the same but stays in the
+Library, with the new space unlocked there. Firefox writes nothing from it to history, cookies,
+cache or the session file. Its tabs (with back/forward history) and cookies are
+saved instead to `firefox-zen-private/<id>.json` in the profile, encrypted with
+AES-256-GCM using a key derived from the password (PBKDF2-SHA256, 600,000
+rounds), and rewritten every few seconds while it changes.
+
+- **Hidden by default**: every time Firefox starts, private spaces are hidden
+  from the footer, the Library and **Move to Space**. Show or hide them with
+  the Library's **Private** button, **+** → **Show/Hide Private Spaces**, or
+  **Ctrl+Alt+P** (in every window at once). Hiding also locks them all.
+  Creating one shows them. This only keeps them out of sight; it adds no
+  security beyond the password.
+- Its icon in the footer has a padlock while it's locked. Clicking it asks for
+  the password and opens its private window.
+- **Unlocking** (the Library's **Unlock…** or right-click → **Unlock…**) only
+  decrypts it; no window opens. The Library then lists its tabs (kept up to
+  date). Clicking the column's header, or one of its tabs, opens its window.
+- **Moving tabs**: drag tabs onto its Library column or footer button, or use
+  the tab menu's **Move to Space** (a locked space asks for its password).
+  Drag its tabs to another column, or use **Move to Space** in its window, to
+  move them out, to a normal space or to another private space. A tab's history moves with it; visits it made before moving
+  in stay in normal history. Container tabs lose their container.
+- It always opens in its own window: Firefox only supports private browsing
+  per window, and forcing a private tab into a normal window crashes Firefox.
+- Closing its window keeps it unlocked (saved). **Lock** (the mask button on
+  its Library column, or right-click → **Lock Space**) or quitting Firefox
+  locks it; after a restart every private space starts locked.
+- Right-click a private space: **Change Password…**, **Clear and Lock…**
+  (erases its tabs, history and cookies; the space and password stay) and
+  **Delete Space…** (erases it all for good).
+- Its history never shows up in other spaces. Its address bar still suggests
+  your normal history and bookmarks.
+- Several private spaces can be unlocked at once, but only one has its window
+  open: private windows share one cookie jar, so opening another's window
+  saves and closes the current one (it stays unlocked) to keep their cookies
+  apart. For the same reason, opening a private space's window or locking one
+  clears the cookies of any other private window (Ctrl+Shift+P) you have open.
+- The space's name and icon are stored unencrypted in prefs, like other spaces.
+- The password can't be recovered. A weak one can be guessed by anyone who
+  copies the file. Downloads, extensions allowed in private windows and
+  Windows' page file are outside what this protects.
+
 ### Library
 
 The first button in the spaces footer opens the Library over the page. The

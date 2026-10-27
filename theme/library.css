@@ -386,6 +386,96 @@
   background: var(--fz-container-color);
 }
 
+/* New ▾ and the Private (show/hide) toggle */
+.fz-lib-new-space::after {
+  content: "";
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-inline-start: 6px;
+  background: currentColor;
+  mask: url("chrome://global/skin/icons/arrow-down-12.svg") center / contain no-repeat;
+  vertical-align: middle;
+}
+
+.fz-lib-private-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+
+  &::before {
+    content: "";
+    width: 14px;
+    height: 14px;
+    background: currentColor;
+    mask: url("icons/privateBrowsing.svg") center / contain no-repeat;
+  }
+
+  &[aria-pressed="true"] {
+    border-color: var(--fz-lib-accent) !important;
+    background: color-mix(in srgb, var(--fz-lib-accent) 18%, transparent) !important;
+  }
+}
+
+/* Private space column: mask badge (padlock while locked); locked columns
+ * show blurred placeholder rows under an Unlock button */
+.fz-lib-private-column {
+  & .fz-lib-column-head {
+    cursor: pointer;
+  }
+
+  & .fz-lib-space-name {
+    cursor: inherit;
+
+    &:hover {
+      background: none;
+    }
+  }
+
+  & .fz-lib-space-icon:hover {
+    background: none !important;
+  }
+}
+
+/* Mask while unlocked (click to lock), padlock while locked; always shown */
+.fz-lib-private-badge {
+  --fz-lib-icon: url("icons/privateBrowsing.svg");
+  opacity: 0.7 !important;
+
+  &:hover {
+    opacity: 1 !important;
+  }
+
+  [locked] > .fz-lib-column-head > & {
+    --fz-lib-icon: url("icons/security.svg");
+  }
+}
+
+.fz-lib-locked-row {
+  filter: blur(3px);
+  opacity: 0.55;
+  pointer-events: none;
+
+  & > .fz-lib-favicon {
+    border-radius: 4px;
+    background: currentColor;
+    opacity: 0.5;
+  }
+}
+
+.fz-lib-locked-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: currentColor;
+  opacity: 0.45;
+}
+
+.fz-lib-unlock {
+  align-self: center;
+  margin-top: 12px;
+  background: var(--fz-lib-bg);
+}
+
 .fz-lib-tabs {
   display: flex;
   flex-direction: column;

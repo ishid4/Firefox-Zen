@@ -433,11 +433,22 @@
     const add = h("button", {
       type: "button",
       class: "fz-lib-button fz-lib-new-space",
-      text: "New space",
-      onclick: () => newSpace(),
+      text: "New",
+      "aria-haspopup": "menu",
+      onclick: e => openNewMenu(e.currentTarget),
+    });
+    // Shows or hides private spaces everywhere (hiding locks them).
+    const shown = !!api()?.privateShown?.();
+    const privateToggle = h("button", {
+      type: "button",
+      class: "fz-lib-button fz-lib-private-toggle",
+      text: "Private",
+      title: `${shown ? "Hide" : "Show"} private spaces (Ctrl+Alt+P)`,
+      "aria-pressed": String(shown),
+      onclick: () => api()?.togglePrivate?.(),
     });
     board = h("div", { class: "fz-lib-board-wrap" });
-    return [h("header", { class: "fz-lib-toolbar" }, filter, add), board];
+    return [h("header", { class: "fz-lib-toolbar" }, filter, add, privateToggle), board];
   }
 
   function newSpace(tabs) {
@@ -448,6 +459,44 @@
     renameAfterRender = id;
     queueRender();
     return id;
+  }
+
+  // New ▾: New Space / New Private Space…, like the footer's + menu.
+  const NEW_MENU_ID = "fz-lib-new-menu";
+
+  function openNewMenu(anchor) {
+    let menu = document.getElementById(NEW_MENU_ID);
+    if (!menu) {
+      menu = document.createXULElement("menupopup");
+      menu.id = NEW_MENU_ID;
+      const item = (label, icon, command) => {
+        const mi = document.createXULElement("menuitem");
+        mi.setAttribute("label", label);
+        mi.setAttribute("image", icon);
+        mi.classList.add("menuitem-iconic");
+        mi.addEventListener("command", command);
+        return mi;
+      };
+      menu.append(
+        item("New Space", "chrome://browser/skin/window.svg", () => newSpace()),
+        item("New Private Space…", "chrome://browser/skin/privateBrowsing.svg", () => newPrivateSpace())
+      );
+      document.getElementById("mainPopupSet").append(menu);
+    }
+    menu.openPopup(anchor, "after_start");
+  }
+
+  // Asks for a password; the new space stays here, unlocked, with its column
+  // brought into view.
+  async function newPrivateSpace() {
+    const id = await api().createPrivate?.();
+    if (id) {
+      renderBoard();
+      board?.querySelector(`.fz-lib-column[data-space="${CSS.escape(id)}"]`)?.scrollIntoView({
+        block: "nearest",
+        inline: "nearest",
+      });
+    }
   }
 
   // Re-render the board, keeping scroll positions and animating rows and
@@ -461,6 +510,12 @@
       return;
     }
     renderQueued = false;
+    const toggle = root.querySelector(".fz-lib-private-toggle");
+    if (toggle) {
+      const shown = !!api()?.privateShown?.();
+      toggle.setAttribute("aria-pressed", String(shown));
+      toggle.title = `${shown ? "Hide" : "Show"} private spaces (Ctrl+Alt+P)`;
+    }
     const before = measure();
     const scroll = saveScroll();
 
@@ -483,9 +538,12 @@
       return;
     }
 
-    const columns = api()
-      .list()
-      .map(space => buildColumn(space));
+    const columns = [
+      ...api()
+        .list()
+        .map(space => buildColumn(space)),
+      ...(api().privateList?.() ?? []).map(space => buildPrivateColumn(space)),
+    ];
     const newColumn = h(
       "button",
       {
@@ -662,6 +720,119 @@
         "data-drop-space": space.id,
         "data-key": `space:${space.id}`,
         active,
+      },
+      head,
+      list
+    );
+  }
+
+  // A private space's tabs open in its own private window (see
+  // firefox-zen-spaces). Locked: blurred placeholder rows and Unlock…, which
+  // only decrypts it (no window). Unlocked: its tabs, draggable to other
+  // spaces; tabs dropped on it move in. The header opens its window.
+  const LOCKED_ROWS = [72, 55, 84, 63, 46];
+
+  function buildPrivateColumn(space) {
+    const open = api().isUnlocked(space.id);
+    const tabs = open ? api().privateTabs(space.id) : [];
+    const unlock = e => {
+      e.stopPropagation();
+      api().unlockPrivate(space.id);
+    };
+    const lock = h("button", {
+      type: "button",
+      class: "fz-lib-icon-button fz-lib-private-badge",
+      title: open ? "Lock" : "Locked",
+      "aria-label": open ? "Lock" : "Locked",
+      onclick: e => {
+        e.stopPropagation();
+        if (open) {
+          api().lockPrivate(space.id);
+        } else {
+          unlock(e);
+        }
+      },
+    });
+    const more = h("button", {
+      type: "button",
+      class: "fz-lib-icon-button fz-lib-more",
+      title: "More (lock, password, delete)",
+      "aria-label": "More",
+      onclick: e => {
+        e.stopPropagation();
+        api().openMenu(space.id, e);
+      },
+    });
+    const head = h(
+      "div",
+      {
+        class: "fz-lib-column-head",
+        title: "Private space · click to open its window",
+        onclick: () => {
+          close();
+          api().showPrivate(space.id);
+        },
+      },
+      h("span", { class: "fz-lib-space-icon", text: space.icon || "•" }),
+      h("span", { class: "fz-lib-space-name", text: space.name }),
+      open ? h("span", { class: "fz-lib-count", text: String(tabs.length) }) : null,
+      lock,
+      more
+    );
+
+    const list = h("div", { class: "fz-lib-tabs", "data-scroll-key": `space:${space.id}` });
+    if (open) {
+      const shown = tabs.filter(
+        t => !filterText || t.label.toLowerCase().includes(filterText) || t.url.toLowerCase().includes(filterText)
+      );
+      for (const t of shown) {
+        list.append(
+          h(
+            "div",
+            {
+              class: "fz-lib-tab",
+              tabindex: "0",
+              "data-drag": "private-tab",
+              "data-index": String(t.index),
+              title: `${t.label}\n${t.url}`,
+              current: t.selected,
+              unloaded: t.tab ? !isLoaded(t.tab) : true,
+              onclick: () => {
+                close();
+                api().showPrivate(space.id, t.index);
+              },
+            },
+            h("img", { class: "fz-lib-favicon", src: t.image || DEFAULT_FAVICON, alt: "" }),
+            h("span", { class: "fz-lib-tab-label", text: t.label })
+          )
+        );
+      }
+      if (!list.children.length) {
+        list.append(h("div", { class: "fz-lib-hint fz-lib-column-empty", text: filterText ? "No matches" : "No tabs" }));
+      }
+    } else {
+      // Fake rows to blur: the real tabs aren't readable until it's unlocked.
+      list.append(
+        ...LOCKED_ROWS.map(width =>
+          h(
+            "div",
+            { class: "fz-lib-tab fz-lib-locked-row", "aria-hidden": "true" },
+            h("span", { class: "fz-lib-favicon" }),
+            h("span", { class: "fz-lib-locked-bar", style: `width: ${width}%` })
+          )
+        ),
+        h("button", { type: "button", class: "fz-lib-button fz-lib-unlock", text: "Unlock…", onclick: unlock })
+      );
+    }
+
+    return h(
+      "div",
+      {
+        class: "fz-lib-column fz-lib-private-column",
+        "data-space": space.id,
+        "data-drop-space": space.id,
+        "data-key": `space:${space.id}`,
+        locked: !open,
       },
       head,
       list
@@ -939,7 +1110,7 @@
   }
 
   // ---- drag and drop ----
-  // drag = { kind: "tab" | "group" | "space" | "history", source, x0, y0,
+  // drag = { kind: "tab" | "group" | "space" | "history" | "private-tab", source, x0, y0,
   //          pointerId, started, ghost, indicator, payload, target }
 
   function onPointerDown(e) {
@@ -1039,6 +1210,17 @@
         d.payload = space.id;
         label = `${space.icon || ""} ${space.name}`.trim();
         column.classList.add("fz-lib-dragging");
+        break;
+      }
+      case "private-tab": {
+        const column = d.source.closest(".fz-lib-column");
+        d.payload = { spaceId: column?.dataset.space, index: Number(d.source.dataset.index) };
+        if (!d.payload.spaceId) {
+          return false;
+        }
+        label = d.source.querySelector(".fz-lib-tab-label")?.textContent ?? "";
+        icon = d.source.querySelector("img")?.src ?? null;
+        d.source.classList.add("fz-lib-dragging");
         break;
       }
       case "history": {
@@ -1220,7 +1402,26 @@
       return;
     }
 
-    // Tabs and folders.
+    // A private space's tab: to any other space (no exact spot), or a new one.
+    if (d.kind === "private-tab") {
+      const column = hit?.closest?.(".fz-lib-column[data-space]");
+      const newColumn = hit?.closest?.(".fz-lib-new-column");
+      if (newColumn) {
+        d.target = { newSpace: true };
+      } else if (column && column.dataset.space !== d.payload.spaceId) {
+        d.target = { space: column.dataset.space };
+      }
+      setDropHighlight(d.target ? newColumn ?? column : null);
+      return;
+    }
+
+    // Tabs and folders. A private space's column takes them, without a spot.
+    const privateColumn = hit?.closest?.(".fz-lib-private-column");
+    if (privateColumn) {
+      d.target = { space: privateColumn.dataset.space };
+      setDropHighlight(privateColumn);
+      return;
+    }
     const pinned = hit?.closest?.(".fz-lib-essentials");
     // Full: pinned tabs can still be reordered, new ones don't fit.
     if (pinned && d.kind === "tab" && d.payload.filter(t => !t.pinned).length > pinRoom()) {
@@ -1340,10 +1541,19 @@
         break;
       }
       case "history":
-        if (target.space) {
+        if (target.space && api().isPrivate?.(target.space)) {
+          api().openInPrivate(target.space, d.payload.url, d.payload.title);
+        } else if (target.space) {
           openUrl(d.payload.url, { spaceId: target.space, background: true });
         }
         break;
+      case "private-tab": {
+        const to = target.newSpace ? newSpace() : target.space;
+        if (to && to !== d.payload.spaceId) {
+          api().movePrivateTabs(d.payload.spaceId, [d.payload.index], to);
+        }
+        break;
+      }
       case "group":
         if (target.newSpace) {
           moveGroupTo(d.payload, newSpace(), {});
@@ -1372,6 +1582,11 @@
   // Unpin, move into `spaceId`, then place: into a folder, before/after a
   // tab or folder, or (no place) wherever they are.
   function moveTabsTo(tabs, spaceId, place) {
+    // Into a private space: its own window takes them, wherever they were.
+    if (spacesOn() && api().isPrivate?.(spaceId)) {
+      api().moveTabs(tabs, spaceId);
+      return;
+    }
     for (const tab of tabs) {
       if (tab.pinned) {
         gBrowser.unpinTab(tab);
@@ -1653,6 +1868,11 @@
   function openUrl(url, { spaceId = null, background = false } = {}) {
     const spaces = spacesOn() ? api() : null;
     const space = spaceId ?? spaces?.activeId();
+    // Never load it outside a private space.
+    if (space && spaces?.isPrivate?.(space)) {
+      spaces.openInPrivate(space, url);
+      return;
+    }
     const tab = gBrowser.addTrustedTab(url, {
       inBackground: true,
       userContextId: (space && spaces?.containerInfo(space)?.id) || 0,
@@ -1990,6 +2210,8 @@
       tc.addEventListener(type, onTabsChanged);
     }
     window.addEventListener("FzSpacesChanged", onTabsChanged);
+    // An open private space's tabs changed in its own window.
+    window.addEventListener("FzPrivateTabsChanged", onTabsChanged);
     window.addEventListener("resize", place);
     // Clicking a tab in the sidebar means "show me the page".
     document.getElementById("tabbrowser-tabs")?.addEventListener("mousedown", e => {

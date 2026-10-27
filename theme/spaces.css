@@ -88,8 +88,20 @@
   }
 }
 
-/* + button menu: icons follow the menu text color */
-#fz-spaces-plus-menu > menuitem {
+/* Private space's window: a mask after the space's name */
+#fz-space-header.fz-space-header-private::after {
+  content: "";
+  flex: none;
+  width: 12px;
+  height: 12px;
+  background: url("icons/privateBrowsing.svg") center / contain no-repeat;
+  -moz-context-properties: fill;
+  fill: currentColor;
+  opacity: 0.7;
+}
+
+/* + button menu (and the Library's New menu): icons follow the menu text color */
+:is(#fz-spaces-plus-menu, #fz-lib-new-menu) > menuitem {
   -moz-context-properties: fill, fill-opacity;
   fill: currentColor;
 }
