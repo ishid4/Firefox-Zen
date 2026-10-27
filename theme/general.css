@@ -179,8 +179,10 @@ toolbar .toolbarbutton-1 {
      * open="true" only: many toolbar elements carry open="false".
      * [fz-hold]: a right-click menu from inside it is open (set by
      * JS/firefox-zen-sidebar-tools.uc.js). [fz-library-hold]: the Library is
-     * open next to it (JS/firefox-zen-library.uc.js). */
-    &:not(:hover, :focus-within, [fz-hold], [fz-library-hold], :has(:is(toolbarbutton, toolbaritem, button, moz-button)[open="true"])) {
+     * open next to it (JS/firefox-zen-library.uc.js). [fz-download-hold]: a
+     * new download is flying to its Library button
+     * (JS/firefox-zen-download-cue.uc.js). */
+    &:not(:hover, :focus-within, [fz-hold], [fz-library-hold], [fz-download-hold], :has(:is(toolbarbutton, toolbaritem, button, moz-button)[open="true"])) {
       translate: calc(-100% + var(--fz-sidebar-peek)) 0 !important;
       opacity: 0;
       box-shadow: none;

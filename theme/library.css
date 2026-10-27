@@ -126,6 +126,22 @@
   --fz-lib-nav-icon: url("icons/extension.svg");
 }
 
+/* A new download not seen yet (JS/firefox-zen-download-cue.uc.js) */
+:root[fz-download-new] .fz-lib-nav-downloads {
+  position: relative;
+
+  &::after {
+    content: "";
+    position: absolute;
+    top: 5px;
+    inset-inline-end: 6px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--fz-lib-accent, var(--color-accent-primary, AccentColor));
+  }
+}
+
 .fz-lib-nav-settings {
   --fz-lib-nav-icon: url("icons/settings.svg");
 }

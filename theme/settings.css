@@ -678,6 +678,58 @@
   translate: none;
 }
 
+/* Download animation: a file arcs from the page onto the footer's first
+ * button (the Library), which lights up */
+.fz-preview-download .fz-mock-body {
+  padding-top: 4px;
+}
+
+.fz-preview-download .fz-mock-spaces-bar {
+  opacity: 1;
+}
+
+.fz-mock-download {
+  position: absolute;
+  left: 70%;
+  top: 40%;
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  background: var(--fz-accent);
+  opacity: 0;
+}
+
+.fz-setting[data-on] .fz-preview-download {
+  & .fz-mock-download {
+    animation: fz-mock-download-fly 2.4s cubic-bezier(0.45, 0, 0.3, 1) infinite;
+  }
+
+  & .fz-mock-spaces-bar > i:first-child {
+    background: var(--fz-accent);
+    animation: fz-mock-download-land 2.4s ease-out infinite;
+  }
+}
+
+@keyframes fz-mock-download-fly {
+  0% { opacity: 0; translate: 0 0; scale: 0.6; }
+  8% { opacity: 1; scale: 1.2; }
+  30% { translate: -35px -14px; }
+  50% { opacity: 1; scale: 0.8; }
+  56%, 100% { opacity: 0; translate: -69px 25px; scale: 0.6; }
+}
+
+@keyframes fz-mock-download-land {
+  0%, 54% { box-shadow: 0 0 0 0 transparent; }
+  60% { box-shadow: 0 0 0 2px color-mix(in srgb, var(--fz-accent) 50%, transparent); }
+  78%, 100% { box-shadow: 0 0 0 4px transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fz-setting[data-on] .fz-preview-download :is(.fz-mock-download, .fz-mock-spaces-bar > i) {
+    animation: none;
+  }
+}
+
 /* Rows used by folder + menu + tab sections previews */
 .fz-preview-folders,
 .fz-preview-sections,

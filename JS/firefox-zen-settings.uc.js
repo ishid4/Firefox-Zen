@@ -54,6 +54,18 @@
     hint: "Hover the first or last one to scroll to the rest.",
   };
 
+  // JS/firefox-zen-download-cue.uc.js
+  const DOWNLOAD_ICON = {
+    type: "number",
+    pref: "download-cue.icon-seconds",
+    default: 7,
+    min: 0,
+    max: 10,
+    unit: "seconds",
+    label: "Show the downloads icon for",
+    hint: "The Library button turns into a downloads icon after one starts. 0 keeps the Library icon.",
+  };
+
   // Which modifiers + click open a glance (JS/firefox-zen-glance.uc.js).
   const GLANCE_MODIFIERS = {
     type: "modifiers",
@@ -206,6 +218,20 @@
           preview: "glance",
           tips: ["Esc or a click outside closes it. Drag its edges to resize; the size is kept."],
           options: [GLANCE_MODIFIERS, ...GLANCE_SIZE],
+        },
+        {
+          pref: "download-cue",
+          default: true,
+          label: "Download animation",
+          description: "A new download flies to the Library button, which then opens on Downloads.",
+          preview: "download",
+          tips: [
+            "While downloads run, a ring around the button fills with their progress.",
+            "The Library's Downloads tab has a dot until you've seen the new download.",
+            "A compact sidebar slides out to show it.",
+            "Without the spaces footer, it flies to Firefox's Downloads button when that's in the toolbar.",
+          ],
+          options: [DOWNLOAD_ICON],
         },
         {
           pref: "show-menu-icons",
@@ -556,6 +582,23 @@
         );
         break;
       }
+      case "download":
+        mock.append(
+          h(
+            "div",
+            { class: "fz-mock-body" },
+            h(
+              "div",
+              { class: "fz-mock-side fz-mock-spaces-side" },
+              h("span"),
+              h("span"),
+              h("div", { class: "fz-mock-spaces-bar" }, h("i"), h("i"), h("i"))
+            ),
+            h("div", { class: "fz-mock-page" })
+          ),
+          h("i", { class: "fz-mock-download" })
+        );
+        break;
       case "folders":
         for (let i = 0; i < 3; i++) {
           mock.append(

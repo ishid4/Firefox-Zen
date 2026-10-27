@@ -278,7 +278,11 @@
   }
 
   function toggle() {
-    if (root) {
+    // Showing the downloads icon for a new download
+    // (JS/firefox-zen-download-cue.uc.js): open on Downloads.
+    if (window.FirefoxZenDownloadCue?.opensDownloads() && !(root && view === "downloads")) {
+      open("downloads");
+    } else if (root) {
       close();
     } else {
       open();
@@ -379,6 +383,7 @@
     } else if (view === "downloads") {
       main.replaceChildren(...buildDownloadsView());
       startDownloads();
+      window.FirefoxZenDownloadCue?.seen();
     } else if (view === "mods" && window.FirefoxZenMods) {
       main.replaceChildren(window.FirefoxZenMods.buildView());
     } else if (view === "settings" && window.FirefoxZenSettings) {

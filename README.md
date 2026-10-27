@@ -53,6 +53,8 @@ Then open `about:support`, click **Clear startup cache…**, and restart.
 | `firefox-zen.spaces.visible` | 4 | Spaces the footer shows at once (2-8) |
 | `firefox-zen.private-spaces.autolock-minutes` | 10 | Lock every private space after this many idle minutes (0 = never) |
 | `firefox-zen.show-folder-icons` | true | Arc folder icons on tab groups |
+| `firefox-zen.download-cue` | true | A new download flies to the Library button, which ripples, shows a progress ring and opens on Downloads (see [Downloads](#downloads)) |
+| `firefox-zen.download-cue.icon-seconds` | 7 | How long the Library button shows the downloads icon after a download starts (0-10, 0 = never) |
 | `firefox-zen.show-menu-icons` | true | Icons in context menus |
 | `firefox-zen.mods.enabled` | [] | Ids of the [mods](#mods) that are on (JSON); `firefox-zen.mods.trusted` lists the scripts confirmed to run |
 | `firefox-zen.mods.safe-mode` | false | Load no mods on the next start (then clears itself) |
@@ -361,6 +363,17 @@ dragging a tab into the pinned area or onto the Library's Pins does nothing
 then. Windows restored from a session keep all their pinned tabs.
 
 ### Downloads
+
+A download you start flies, as its file icon, from where you clicked to the
+Library button in the spaces footer, which ripples and shows the downloads
+icon for a few seconds (Settings: 0-10, default 7). A compact sidebar slides
+out meanwhile. While it shows that icon, the button opens the Library on
+**Downloads** (otherwise on the view you used last); that tab keeps a dot
+until you've looked at it. While downloads run, a ring
+around the button fills with their progress. Without the
+footer it flies to Firefox's Downloads toolbar button, if that's showing.
+Settings → Browsing → **Download animation** (`firefox-zen.download-cue`)
+turns it off.
 
 Firefox's own download lists (toolbar Downloads panel, Library window,
 about:downloads) also tint failed downloads yellow, so the ones waiting for
