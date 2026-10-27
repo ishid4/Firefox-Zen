@@ -54,6 +54,11 @@ Pinned tabs are global "Pins" and show in every space.
   Existing tabs keep theirs (Firefox can't move a tab into a container without
   reopening it). The space's icon gets a bar in the container's color.
 - Double-click a space's name or icon to rename it inline.
+- Right-click a space → **Export…** saves it as a `.fzspace` file (plain
+  JSON: its name, icon, container name and its tabs with their back/forward
+  history; folders aren't kept). **+** → **Import…** (or the Library's
+  **New** menu) adds it back as a new space; a container with the same name is
+  used if there is one. Private spaces export encrypted (below).
 - Tab right-click menu → **Move to Space** moves the selected tab(s) to another
   (or a new) space.
 - New tabs open in the current space; closing a space's last tab opens a fresh
@@ -68,11 +73,12 @@ Pinned tabs are global "Pins" and show in every space.
 **+** → **Create Private Space…** asks for a password and opens the space in
 its own private window (private browsing is per window in Firefox). The
 Library's **New** → **New Private Space…** does the same but stays in the
-Library, with the new space unlocked there. Firefox writes nothing from it to history, cookies,
-cache or the session file. Its tabs (with back/forward history) and cookies are
-saved instead to `firefox-zen-private/<id>.json` in the profile, encrypted with
-AES-256-GCM using a key derived from the password (PBKDF2-SHA256, 600,000
-rounds), and rewritten every few seconds while it changes.
+Library, with the new space unlocked there. Firefox writes nothing from it to
+history, cookies, cache or the session file. Its tabs (with back/forward
+history), cookies, name and icon, history and downloads list are saved instead
+to `firefox-zen-private/<id>.json` in the profile, encrypted with AES-256-GCM
+using a key derived from the password (PBKDF2-SHA256, 600,000 rounds), and
+rewritten every few seconds while it changes.
 
 - **Hidden by default**: every time Firefox starts, private spaces are hidden
   from the footer, the Library and **Move to Space**. Show or hide them with
@@ -80,34 +86,62 @@ rounds), and rewritten every few seconds while it changes.
   **Ctrl+Alt+P** (in every window at once). Hiding also locks them all.
   Creating one shows them. This only keeps them out of sight; it adds no
   security beyond the password.
-- Its icon in the footer has a padlock while it's locked. Clicking it asks for
-  the password and opens its private window.
+- **Locked**: its real name and icon are encrypted, so it shows as
+  "Private 1", "Private 2"… with a blurred icon and a padlock. Clicking its
+  footer icon asks for the password and opens its private window.
 - **Unlocking** (the Library's **Unlock…** or right-click → **Unlock…**) only
   decrypts it; no window opens. The Library then lists its tabs (kept up to
   date). Clicking the column's header, or one of its tabs, opens its window.
+- **Locking**: middle-click its footer icon, the mask button on its Library
+  column, or right-click → **Lock Space**. Closing its window keeps it
+  unlocked (saved). Quitting Firefox locks it; after a restart every private
+  space starts locked.
+- **Auto-lock**: after `firefox-zen.private-spaces.autolock-minutes` minutes
+  (default 10, 0 = off) with no keyboard or mouse input on the computer, every
+  private space locks.
 - **Moving tabs**: drag tabs onto its Library column or footer button, or use
   the tab menu's **Move to Space** (a locked space asks for its password).
   Drag its tabs to another column, or use **Move to Space** in its window, to
-  move them out, to a normal space or to another private space. A tab's history moves with it; visits it made before moving
-  in stay in normal history. Container tabs lose their container.
+  move them out, to a normal space or to another private space. A tab's
+  history moves with it; visits it made before moving in stay in normal
+  history. Container tabs lose their container.
+- **Its own history and downloads**: pages its tabs visit and files they
+  download are listed only there. In the Library's **History** and
+  **Downloads**, pick it from the list next to the search box (it's there
+  while it's unlocked, and a private space's own window starts on it);
+  **All spaces** shows Firefox's own lists, without any private space's.
+  Downloads still running work as usual there (pause, cancel, speed,
+  progress); once Firefox drops them (its private windows closed) the saved
+  entries can still be opened, shown in their folder or removed. A download
+  still running when its window closes or the space locks is cancelled by
+  Firefox and shows as **Interrupted**, with **Retry** (starts it again from
+  its link, in the space) and remove.
+- A private space's window's Library lists the other private spaces too
+  (locked ones blurred, with **Unlock…**), so tabs can be dragged between
+  them from there.
+- From a private space's window, new spaces and imports are off (they'd only
+  show in other windows); **Create Private Space…** still works. The downloaded files themselves are ordinary files on disk,
+  not encrypted.
+- Right-click a private space: **Rename Space…**, **Change Icon…** (both ask for the
+  password if it's locked), **Change Password…**, **Clear and Lock…** (erases
+  its tabs, history, downloads list and cookies; its name and password stay),
+  **Export…** and **Delete Space…** (erases it all for good). Clear and
+  Delete can also delete its downloaded files from disk.
+- **Export / import**: **Export…** saves it, still encrypted, as a `.fzspace`
+  file; **+** → **Import…** (or the Library's **New** menu) adds one to
+  another profile or PC. Its password is needed to open it there too.
 - It always opens in its own window: Firefox only supports private browsing
   per window, and forcing a private tab into a normal window crashes Firefox.
-- Closing its window keeps it unlocked (saved). **Lock** (the mask button on
-  its Library column, or right-click → **Lock Space**) or quitting Firefox
-  locks it; after a restart every private space starts locked.
-- Right-click a private space: **Change Password…**, **Clear and Lock…**
-  (erases its tabs, history and cookies; the space and password stay) and
-  **Delete Space…** (erases it all for good).
 - Its history never shows up in other spaces. Its address bar still suggests
   your normal history and bookmarks.
 - Several private spaces can be unlocked at once, but only one has its window
   open: private windows share one cookie jar, so opening another's window
   saves and closes the current one (it stays unlocked) to keep their cookies
   apart. For the same reason, opening a private space's window or locking one
-  clears the cookies of any other private window (Ctrl+Shift+P) you have open.
-- The space's name and icon are stored unencrypted in prefs, like other spaces.
+  clears the cookies of any other private window (Ctrl+Shift+P) you have open,
+  and the Library's **All spaces** downloads leave out those windows' downloads.
 - The password can't be recovered. A weak one can be guessed by anyone who
-  copies the file. Downloads, extensions allowed in private windows and
+  copies the file. Downloaded files, extensions allowed in private windows and
   Windows' page file are outside what this protects.
 
 ### Library

@@ -420,10 +420,6 @@
 /* Private space column: mask badge (padlock while locked); locked columns
  * show blurred placeholder rows under an Unlock button */
 .fz-lib-private-column {
-  & .fz-lib-column-head {
-    cursor: pointer;
-  }
-
   & .fz-lib-space-name {
     cursor: inherit;
 
@@ -435,6 +431,24 @@
   & .fz-lib-space-icon:hover {
     background: none !important;
   }
+
+  /* Locked: a blurred placeholder (its real icon is encrypted) */
+  &[locked] .fz-lib-space-icon {
+    filter: blur(2.5px);
+  }
+}
+
+/* History / Downloads: All spaces, or one unlocked private space */
+.fz-lib-source {
+  flex: none;
+  height: 30px;
+  max-width: 220px;
+  padding: 0 8px;
+  border: 1px solid var(--fz-lib-line);
+  border-radius: 7px;
+  background: var(--fz-lib-bg);
+  color: inherit;
+  font: inherit;
 }
 
 /* Mask while unlocked (click to lock), padlock while locked; always shown */

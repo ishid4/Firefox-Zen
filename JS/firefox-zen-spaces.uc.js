@@ -65,7 +65,9 @@
 
   // ---- space list ----
 
-  function readSpaces() {
+  // The list as stored. A private space is just { id, private: true } (older
+  // ones may still carry their name/icon until next unlocked).
+  function readRawSpaces() {
     try {
       const list = JSON.parse(Services.prefs.getStringPref(LIST_PREF, "[]"));
       if (Array.isArray(list) && list.length) {
@@ -77,8 +79,40 @@
     return [];
   }
 
+  // Private spaces get their name and icon from their encrypted data while
+  // unlocked, and a placeholder ("Private 2") while locked.
+  function readSpaces() {
+    let n = 0;
+    return readRawSpaces().map(space => {
+      if (!space.private) {
+        return space;
+      }
+      n++;
+      const meta = privateSpaces()?.meta(space.id);
+      return {
+        id: space.id,
+        private: true,
+        name: meta?.name || `Private ${n}`,
+        icon: meta?.icon || PRIVATE_ICON,
+        locked: !isUnlocked(space.id),
+      };
+    });
+  }
+
+  // Never writes a private space's name or icon (an older entry keeps what
+  // it had until its data takes it over on unlock).
   function writeSpaces(list) {
-    Services.prefs.setStringPref(LIST_PREF, JSON.stringify(list));
+    const raw = new Map(readRawSpaces().map(s => [s.id, s]));
+    const stored = list.map(space => {
+      if (!space.private) {
+        return space;
+      }
+      const old = raw.get(space.id);
+      return privateSpaces()?.meta(space.id) || !old?.name
+        ? { id: space.id, private: true }
+        : { id: space.id, private: true, name: old.name, icon: old.icon };
+    });
+    Services.prefs.setStringPref(LIST_PREF, JSON.stringify(stored));
   }
 
   // There's always at least one normal space.
@@ -297,7 +331,23 @@
     return Services.prompt.prompt(window, title, label, value, null, {}) ? value.value.trim() : null;
   }
 
+  // A private space's name/icon live in its encrypted data (asks for its
+  // password if it's locked).
+  async function setPrivateMeta(id, meta) {
+    if (!(await unlockPrivateSpace(id))) {
+      return;
+    }
+    await privateSpaces().setMeta(id, meta);
+    writeSpaces(readSpaces());
+  }
+
   function setSpaceName(id, name) {
+    if (readSpaces().find(s => s.id === id)?.private) {
+      if (name) {
+        setPrivateMeta(id, { name }).catch(e => console.error("firefox-zen-spaces:", e));
+      }
+      return;
+    }
     const list = readSpaces();
     const space = list.find(s => s.id === id);
     if (space && name && name !== space.name) {
@@ -353,14 +403,25 @@
   function renameSpace(id) {
     const list = readSpaces();
     const space = list.find(s => s.id === id);
+    if (space?.locked) {
+      // Its real name is unknown until it's unlocked.
+      unlockPrivateSpace(id).then(ok => ok && renameSpace(id));
+      return;
+    }
     const name = space && promptText("Rename Space", "Space name:", space.name);
-    if (name) {
+    if (name && space.private) {
+      setSpaceName(id, name);
+    } else if (name) {
       space.name = name;
       writeSpaces(list);
     }
   }
 
   function setSpaceIcon(id, icon) {
+    if (icon && readSpaces().find(s => s.id === id)?.private) {
+      setPrivateMeta(id, { icon: [...icon].slice(0, 2).join("") }).catch(e => console.error("firefox-zen-spaces:", e));
+      return;
+    }
     const list = readSpaces();
     const space = list.find(s => s.id === id);
     if (space && icon) {
@@ -371,6 +432,10 @@
 
   function changeIcon(id) {
     const space = readSpaces().find(s => s.id === id);
+    if (space?.locked) {
+      unlockPrivateSpace(id).then(ok => ok && changeIcon(id));
+      return;
+    }
     const icon = space && promptText("Change Space Icon", "Icon (emoji or a short text):", space.icon);
     if (icon) {
       setSpaceIcon(id, icon);
@@ -379,13 +444,15 @@
 
   // New order of the space list, by id. Ids missing from `ids` keep their
   // relative order at the end.
+  // New order for the spaces in `ids`. Spaces not in it (hidden private
+  // ones, say) keep their places; the listed ones fill the other places in
+  // the new order.
   function reorderSpaces(ids) {
     const list = readSpaces();
-    const rank = id => {
-      const i = ids.indexOf(id);
-      return i < 0 ? ids.length : i;
-    };
-    const sorted = [...list].sort((a, b) => rank(a.id) - rank(b.id));
+    const byId = new Map(list.map(s => [s.id, s]));
+    const queue = ids.filter(id => byId.has(id));
+    const moving = new Set(queue);
+    const sorted = list.map(s => (moving.has(s.id) ? byId.get(queue.shift()) : s));
     if (sorted.some((s, i) => s !== list[i])) {
       writeSpaces(sorted);
     }
@@ -525,15 +592,11 @@
       return;
     }
     const count = readSpaces().filter(s => s.private).length;
-    const space = {
-      id: crypto.randomUUID(),
-      name: count ? `Private ${count + 1}` : "Private",
-      icon: PRIVATE_ICON,
-      private: true,
-    };
+    const space = { id: crypto.randomUUID(), private: true };
+    const meta = { name: count ? `Private ${count + 1}` : "Private", icon: PRIVATE_ICON };
     unlocking = true;
     try {
-      await ps.create(space.id, password);
+      await ps.create(space.id, password, meta);
       await ps.setShown(true);
       writeSpaces([...readSpaces(), space]);
       await ps.unlock(space.id, password);
@@ -569,6 +632,12 @@
       unlocking = true;
       try {
         await ps.unlock(id, password);
+        if (!ps.meta(id)) {
+          // From before names were encrypted: move it out of prefs.
+          const old = readRawSpaces().find(s => s.id === id);
+          await ps.setMeta(id, { name: old?.name || space.name, icon: old?.icon || PRIVATE_ICON });
+          writeSpaces(readSpaces());
+        }
         return true;
       } catch (e) {
         if (e.name !== "WrongPasswordError") {
@@ -600,16 +669,39 @@
     privateSpaces()?.lock(id).catch(e => console.error("firefox-zen-spaces:", e));
   }
 
-  function clearPrivateSpace(id) {
+  // Asks to confirm, with "Also delete its N downloaded files" when it has
+  // any. Resolves { ok, deleteFiles }.
+  async function confirmWithFiles(id, title, text) {
+    const ps = privateSpaces();
+    const files = ps.downloads(id).filter(d => d.path);
+    const check = { value: false };
+    const ok = files.length
+      ? Services.prompt.confirmCheck(
+          window,
+          title,
+          text,
+          `Also delete its ${files.length} downloaded file${files.length > 1 ? "s" : ""} from disk`,
+          check
+        )
+      : Services.prompt.confirm(window, title, text);
+    return { ok, deleteFiles: ok && check.value };
+  }
+
+  async function clearPrivateSpace(id) {
+    const ps = privateSpaces();
     const space = readSpaces().find(s => s.id === id);
-    const ok = Services.prompt.confirm(
-      window,
+    const { ok, deleteFiles } = await confirmWithFiles(
+      id,
       "Clear and Lock",
-      `Erase the tabs, history and cookies in “${space.name}” and lock it? The space and its password stay.`
+      `Erase the tabs, history, downloads list and cookies in “${space.name}” and lock it? The space and its password stay.`
     );
-    if (ok) {
-      privateSpaces()?.clear(id).catch(e => console.error("firefox-zen-spaces:", e));
+    if (!ok) {
+      return;
     }
+    if (deleteFiles) {
+      await ps.deleteDownloadedFiles(id);
+    }
+    await ps.clear(id);
   }
 
   async function changePrivatePassword(id) {
@@ -641,19 +733,169 @@
     }
   }
 
-  function deletePrivateSpace(space) {
-    const ok = Services.prompt.confirm(
-      window,
-      "Delete Private Space",
-      `Delete “${space.name}”? Its tabs, history and cookies are erased for good.`
-    );
+  // Its downloads list is encrypted, so deleting a locked space's files asks
+  // for its password first.
+  async function deletePrivateSpace(space) {
+    const ps = privateSpaces();
+    const title = "Delete Private Space";
+    const text = `Delete “${space.name}”? Its tabs, history, downloads list and cookies are erased for good.`;
+    let ok;
+    let deleteFiles = false;
+    if (ps.isUnlocked(space.id)) {
+      ({ ok, deleteFiles } = await confirmWithFiles(space.id, title, text));
+    } else {
+      const check = { value: false };
+      ok = Services.prompt.confirmCheck(
+        window,
+        title,
+        text,
+        "Also delete its downloaded files from disk (asks for its password)",
+        check
+      );
+      deleteFiles = ok && check.value && (await unlockPrivateSpace(space.id));
+    }
     if (!ok) {
       return;
     }
-    privateSpaces()
-      ?.destroy(space.id)
-      .then(() => writeSpaces(readSpaces().filter(s => s.id !== space.id)))
-      .catch(e => console.error("firefox-zen-spaces:", e));
+    try {
+      if (deleteFiles) {
+        await ps.deleteDownloadedFiles(space.id);
+      }
+      await ps.destroy(space.id);
+      writeSpaces(readSpaces().filter(s => s.id !== space.id));
+    } catch (e) {
+      console.error("firefox-zen-spaces:", e);
+    }
+  }
+
+  // ---- export / import ----
+
+  function pickFile(mode, title, defaultName = "") {
+    const fp = Cc["@mozilla.org/filepicker;1"].createInstance(Ci.nsIFilePicker);
+    fp.init(window.browsingContext, title, mode);
+    fp.appendFilter("Space", "*.fzspace");
+    fp.appendFilters(Ci.nsIFilePicker.filterAll);
+    fp.defaultString = defaultName;
+    fp.defaultExtension = "fzspace";
+    return new Promise(resolve =>
+      fp.open(rv => resolve(rv === Ci.nsIFilePicker.returnCancel ? null : fp.file.path))
+    );
+  }
+
+  async function exportPrivateSpace(id) {
+    const space = readSpaces().find(s => s.id === id);
+    // A locked space's name isn't known here; don't put the placeholder in the file name.
+    const name = (space?.locked ? "private-space" : space?.name || "private-space").replace(/[\\/:*?"<>|]+/g, "-");
+    const path = await pickFile(Ci.nsIFilePicker.modeSave, "Export Private Space", `${name}.fzspace`);
+    if (!path) {
+      return;
+    }
+    try {
+      await privateSpaces().exportTo(id, path);
+    } catch (e) {
+      Services.prompt.alert(window, "Export Private Space", `Couldn't export it: ${e.message}`);
+    }
+  }
+
+  const SPACE_FORMAT = "firefox-zen-space";
+
+  // A normal space as plain JSON: its name, icon, container and its tabs'
+  // SessionStore states (history included), from every window. Folders
+  // aren't kept: their tabs come back loose.
+  async function exportNormalSpace(id) {
+    const space = readSpaces().find(s => s.id === id);
+    const name = (space?.name || "space").replace(/[\\/:*?"<>|]+/g, "-");
+    const path = await pickFile(Ci.nsIFilePicker.modeSave, "Export Space", `${name}.fzspace`);
+    if (!path) {
+      return;
+    }
+    try {
+      const { TabStateFlusher } = ChromeUtils.importESModule(FLUSHER_MODULE);
+      const tabs = [];
+      for (const win of Services.wm.getEnumerator("navigator:browser")) {
+        for (const tab of win.gBrowser.tabs) {
+          if (!tab.pinned && !tab.closing && SessionStore.getCustomTabValue(tab, TAB_KEY) === id) {
+            await TabStateFlusher.flush(tab.linkedBrowser).catch(() => {});
+            const raw = SessionStore.getTabState(tab);
+            const state = typeof raw === "string" ? JSON.parse(raw) : structuredClone(raw);
+            delete state.groupId;
+            delete state.hidden;
+            tabs.push(state);
+          }
+        }
+      }
+      const container = containerOf(space);
+      await IOUtils.writeJSON(path, {
+        format: SPACE_FORMAT,
+        space: {
+          name: space.name,
+          icon: space.icon,
+          container: container ? ContextualIdentityService.getUserContextLabel(container) : null,
+        },
+        tabs,
+      });
+    } catch (e) {
+      Services.prompt.alert(window, "Export Space", `Couldn't export it: ${e.message}`);
+    }
+  }
+
+  function exportSpace(id) {
+    if (readSpaces().find(s => s.id === id)?.private) {
+      exportPrivateSpace(id);
+    } else {
+      exportNormalSpace(id);
+    }
+  }
+
+  // Imports either kind of export; resolves with the new space's id.
+  async function importSpace() {
+    const path = await pickFile(Ci.nsIFilePicker.modeOpen, "Import Space");
+    if (!path) {
+      return null;
+    }
+    try {
+      const data = await IOUtils.readJSON(path);
+      if (data?.format === SPACE_FORMAT) {
+        return await importNormalSpace(data);
+      }
+      const ps = privateSpaces();
+      const id = await ps.importFrom(path);
+      await ps.setShown(true);
+      writeSpaces([...readSpaces(), { id, private: true }]);
+      return id;
+    } catch (e) {
+      Services.prompt.alert(window, "Import Space", `Couldn't import it: ${e.message}`);
+      return null;
+    }
+  }
+
+  // A new space (new id) with the export's tabs, in a normal window. Its
+  // container is matched by name, if one by that name exists.
+  async function importNormalSpace(data) {
+    const id = crypto.randomUUID();
+    const container =
+      data.space?.container &&
+      ContextualIdentityService.getPublicIdentities().find(
+        identity => ContextualIdentityService.getUserContextLabel(identity.userContextId) === data.space.container
+      );
+    writeSpaces([
+      ...readSpaces(),
+      {
+        id,
+        name: String(data.space?.name || "Imported"),
+        icon: String(data.space?.icon || DEFAULT_ICONS[0]),
+        container: container?.userContextId || 0,
+      },
+    ]);
+    const win = await normalWindow();
+    for (const state of Array.isArray(data.tabs) ? data.tabs : []) {
+      state.extData = { ...state.extData, [TAB_KEY]: id };
+      state.userContextId = container?.userContextId || 0;
+      const tab = win.gBrowser.addTrustedTab(null, { inBackground: true, skipAnimation: true, skipLoad: true });
+      SessionStore.setTabState(tab, state);
+    }
+    win.FirefoxZenSpaces?.refresh();
+    return id;
   }
 
   // A normal browser window (this one if it is), opening one if needed.
@@ -908,10 +1150,19 @@
         btn.title = `${space.name} (${ContextualIdentityService.getUserContextLabel(container)})`;
       }
       if (space.private) {
-        // A badge (CSS): mask while open, padlock while locked.
-        const locked = !isUnlocked(space.id);
+        // A badge (CSS): mask while unlocked, padlock while locked.
+        const locked = space.locked;
         btn.classList.add("fz-space-private");
         btn.toggleAttribute("fz-locked", locked);
+        // The icon in its own element, so locking can blur it under the badge.
+        btn.replaceChildren(h("span", { class: "fz-space-icon", text: space.icon }));
+        // Middle-click locks it.
+        btn.addEventListener("auxclick", e => {
+          if (e.button === 1 && !locked) {
+            e.preventDefault();
+            lockPrivateSpace(space.id);
+          }
+        });
         btn.title = `${space.name} (private, ${locked ? "locked" : "unlocked"})`;
       }
       btn.addEventListener("click", () => switchTo(space.id));
@@ -1140,6 +1391,7 @@
     menu.append(
       item("Create Space", "chrome://browser/skin/window.svg", "space"),
       item("Create Private Space…", "chrome://browser/skin/privateBrowsing.svg", "private"),
+      item("Import…", "chrome://browser/skin/import.svg", "import"),
       item("Show Private Spaces", "chrome://browser/skin/privateBrowsing.svg", "toggle-private"),
       item("Create Folder", "chrome://browser/skin/tabbrowser/tab-groups.svg", "folder"),
       document.createXULElement("menuseparator"),
@@ -1156,6 +1408,9 @@
         case "toggle-private":
           togglePrivateShown();
           break;
+        case "import":
+          importSpace();
+          break;
         case "folder":
           createFolder();
           break;
@@ -1170,6 +1425,11 @@
 
   function openPlusMenu(anchor) {
     const menu = ensurePlusMenu();
+    // From a private space's window a new space (or an import) would only show
+    // in other windows; a new private space opens its own window, so it stays.
+    for (const action of ["space", "import"]) {
+      menu.querySelector(`[data-action="${action}"]`).disabled = !!ownPrivateId;
+    }
     const toggle = menu.querySelector('[data-action="toggle-private"]');
     toggle.setAttribute("label", `${privateShown() ? "Hide" : "Show"} Private Spaces`);
     toggle.setAttribute("acceltext", "Ctrl+Alt+P");
@@ -1238,6 +1498,7 @@
       item("Lock Space", "lock"),
       item("Change Password…", "password"),
       item("Clear and Lock…", "clear"),
+      item("Export…", "export"),
       document.createXULElement("menuseparator"),
       item("Delete Space…", "delete")
     );
@@ -1265,6 +1526,9 @@
         case "clear":
           clearPrivateSpace(id);
           break;
+        case "export":
+          exportSpace(id);
+          break;
         case "delete":
           deleteSpace(id);
           break;
@@ -1289,6 +1553,7 @@
     set("lock", "hidden", !open);
     set("password", "hidden", !isPrivate);
     set("clear", "hidden", !open);
+    set("export", "hidden", false);
     menu.openPopupAtScreen(event.screenX, event.screenY, true, event);
   }
 
@@ -1494,14 +1759,27 @@
     enabled,
     // The spaces whose tabs are in this window.
     list: localSpaces,
-    // Private spaces living in their own windows (none from a private space's window).
-    privateList: () => (ownPrivateId || !privateShown() ? [] : readSpaces().filter(s => s.private)),
+    // Ids of every space shown here (the footer's order).
+    shownIds: () => visibleSpaces().map(s => s.id),
+    // Private spaces living in their own windows.
+    // From a private space's window: the other private spaces.
+    privateList: () => (privateShown() ? readSpaces().filter(s => s.private && s.id !== ownPrivateId) : []),
     privateShown,
     togglePrivate: togglePrivateShown,
     isUnlocked,
     // Asks for the password and opens it, keeping this window in front.
     unlockPrivate: id => unlockPrivateSpace(id),
     createPrivate: () => createPrivateSpace({ showWindow: false }),
+    importSpace,
+    // The private space this window belongs to (null in other windows).
+    ownPrivateId: () => ownPrivateId,
+    privateLiveDownload: key => privateSpaces()?.liveDownload(key) ?? null,
+    // Unlocked private spaces shown here, for the Library's history/downloads.
+    unlockedPrivate: () => (privateShown() ? readSpaces().filter(s => s.private && !s.locked) : []),
+    privateHistory: id => privateSpaces()?.history(id) ?? [],
+    removePrivateHistory: (id, url) => privateSpaces()?.removeHistory(id, url),
+    privateDownloads: id => privateSpaces()?.downloads(id) ?? [],
+    removePrivateDownload: (id, key) => privateSpaces()?.removeDownload(id, key),
     lockPrivate: lockPrivateSpace,
     // Shows its window, selecting its tab at `index`.
     showPrivate: (id, index = null) => openPrivateSpace(id, { select: index }),
@@ -1551,6 +1829,30 @@
     tc.addEventListener("TabClose", onTabClose);
     tc.addEventListener("TabUnpinned", onTabUnpinned);
     tc.addEventListener("SSTabRestoring", () => enabled() && apply());
+    // Its own history: top-level pages its tabs land on, and their titles.
+    if (ownPrivateId) {
+      const ps = privateSpaces();
+      const skip =
+        Ci.nsIWebProgressListener.LOCATION_CHANGE_ERROR_PAGE |
+        Ci.nsIWebProgressListener.LOCATION_CHANGE_RELOAD |
+        Ci.nsIWebProgressListener.LOCATION_CHANGE_SESSION_STORE;
+      // Loads from session history (restoring its tabs, back/forward) revisit
+      // pages already listed. The load command is the type's high 16 bits.
+      const LOAD_CMD_HISTORY = 0x4;
+      gBrowser.addTabsProgressListener({
+        onLocationChange(browser, webProgress, _request, location, flags) {
+          const fromHistory = ((webProgress.loadType >>> 16) & LOAD_CMD_HISTORY) !== 0;
+          if (webProgress.isTopLevel && !(flags & skip) && !fromHistory) {
+            ps.recordVisit(window, location.spec, browser.contentTitle);
+          }
+        },
+      });
+      tc.addEventListener("TabAttrModified", e => {
+        if (e.detail?.changed?.includes("label")) {
+          ps.recordTitle(window, e.target.linkedBrowser.currentURI.spec, e.target.label);
+        }
+      });
+    }
     // Other windows' Libraries list this private space's tabs.
     if (ownPrivateId) {
       const notify = e => {
@@ -1608,6 +1910,24 @@
     if (privateTopic) {
       Services.obs.addObserver(privateObserver, privateTopic);
     }
+    // Its history / downloads changed: the Library's lists follow.
+    const relay = type => ({ observe: (_s, _t, id) => window.dispatchEvent(new CustomEvent(type, { detail: id })) });
+    const relays = [
+      [privateSpaces()?.HISTORY_TOPIC, relay("FzPrivateHistoryChanged")],
+      [privateSpaces()?.DOWNLOADS_TOPIC, relay("FzPrivateDownloadsChanged")],
+    ].filter(([topic]) => topic);
+    for (const [topic, observer] of relays) {
+      Services.obs.addObserver(observer, topic);
+    }
+    window.addEventListener(
+      "unload",
+      () => {
+        for (const [topic, observer] of relays) {
+          Services.obs.removeObserver(observer, topic);
+        }
+      },
+      { once: true }
+    );
     const privateTabsObserver = {
       observe: () => window.dispatchEvent(new CustomEvent("FzPrivateTabsChanged")),
     };

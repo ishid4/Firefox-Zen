@@ -477,13 +477,29 @@
         mi.addEventListener("command", command);
         return mi;
       };
+      menu.addEventListener("popupshowing", () => {
+        // From a private space's window, new spaces would show up in other
+        // windows instead; create them there.
+        const inPrivate = !!api()?.ownPrivateId?.();
+        for (const mi of menu.children) {
+          mi.disabled = inPrivate;
+        }
+      });
       menu.append(
         item("New Space", "chrome://browser/skin/window.svg", () => newSpace()),
-        item("New Private Space…", "chrome://browser/skin/privateBrowsing.svg", () => newPrivateSpace())
+        item("New Private Space…", "chrome://browser/skin/privateBrowsing.svg", () => newPrivateSpace()),
+        item("Import…", "chrome://browser/skin/import.svg", () => importSpace())
       );
       document.getElementById("mainPopupSet").append(menu);
     }
     menu.openPopup(anchor, "after_start");
+  }
+
+  async function importSpace() {
+    const id = await api().importSpace?.();
+    if (id) {
+      renderBoard();
+    }
   }
 
   // Asks for a password; the new space stays here, unlocked, with its column
@@ -538,12 +554,20 @@
       return;
     }
 
+    // In the space list's order (the footer's), private spaces included.
+    const local = api().list();
+    const privates = api().privateList?.() ?? [];
+    const order = api().shownIds?.() ?? [];
+    const rank = id => {
+      const i = order.indexOf(id);
+      return i < 0 ? order.length : i;
+    };
     const columns = [
-      ...api()
-        .list()
-        .map(space => buildColumn(space)),
-      ...(api().privateList?.() ?? []).map(space => buildPrivateColumn(space)),
-    ];
+      ...local.map(space => [space.id, buildColumn(space)]),
+      ...privates.map(space => [space.id, buildPrivateColumn(space)]),
+    ]
+      .sort((a, b) => rank(a[0]) - rank(b[0]))
+      .map(([, column]) => column);
     const newColumn = h(
       "button",
       {
@@ -556,9 +580,11 @@
       h("span", { text: "New space" }),
       h("span", { class: "fz-lib-hint", text: "or drop tabs here" })
     );
+    // A private space's window lists just it: no new spaces from here.
+    const inPrivate = !!api().ownPrivateId?.();
     board.replaceChildren(
       buildPins(),
-      h("div", { class: "fz-lib-board", "data-drop": "board" }, ...columns, newColumn)
+      h("div", { class: "fz-lib-board", "data-drop": "board" }, ...columns, inPrivate ? null : newColumn)
     );
     restoreScroll(scroll);
     flip(before);
@@ -767,7 +793,8 @@
       "div",
       {
         class: "fz-lib-column-head",
-        title: "Private space · click to open its window",
+        "data-drag": "space",
+        title: "Private space · click to open its window · drag to reorder",
         onclick: () => {
           close();
           api().showPrivate(space.id);
@@ -1203,7 +1230,7 @@
       }
       case "space": {
         const column = d.source.closest(".fz-lib-column");
-        const space = api().list().find(s => s.id === column?.dataset.space);
+        const space = [...api().list(), ...(api().privateList?.() ?? [])].find(s => s.id === column?.dataset.space);
         if (!space) {
           return false;
         }
@@ -1531,9 +1558,9 @@
   function drop(d, target) {
     switch (d.kind) {
       case "space": {
-        const ids = api()
-          .list()
-          .map(s => s.id)
+        // The columns' order, private ones included.
+        const ids = [...board.querySelectorAll(".fz-lib-column[data-space]")]
+          .map(c => c.dataset.space)
           .filter(id => id !== d.payload);
         const index = target.beforeSpace ? ids.indexOf(target.beforeSpace) : ids.length;
         ids.splice(index < 0 ? ids.length : index, 0, d.payload);
@@ -1659,9 +1686,46 @@
     }
   }
 
+  // ---- history / downloads source: all spaces, or one unlocked private space ----
+  // A private space keeps its own (encrypted) history and downloads list,
+  // never mixed into Firefox's; this picks which list the view shows.
+
+  let historySource = "";
+  let dlSource = "";
+  // A private space's own window starts on its own history and downloads.
+  let sourcesDefaulted = false;
+
+  function defaultSources() {
+    if (!sourcesDefaulted && spacesOn()) {
+      sourcesDefaulted = true;
+      historySource = dlSource = api().ownPrivateId?.() ?? "";
+    }
+  }
+
+  // The private space a source names, if it's still unlocked and shown.
+  function privateSource(id) {
+    return id && spacesOn() ? (api().unlockedPrivate?.() ?? []).find(s => s.id === id) ?? null : null;
+  }
+
+  function buildSourcePicker(current, onPick) {
+    const spaces = spacesOn() ? (api().unlockedPrivate?.() ?? []) : [];
+    if (!spaces.length) {
+      return null;
+    }
+    const select = h(
+      "select",
+      { class: "fz-lib-source", "aria-label": "Show", onchange: e => onPick(e.target.value) },
+      h("option", { value: "", text: "All spaces" }),
+      ...spaces.map(space => h("option", { value: space.id, text: `${space.icon} ${space.name} (private)` }))
+    );
+    select.value = privateSource(current) ? current : "";
+    return select;
+  }
+
   // ---- history view ----
 
   let historyQuery = "";
+  let privateHistoryTimer = null;
   let historyOffset = 0;
   let historyDone = false;
   let historyLoading = false;
@@ -1692,12 +1756,23 @@
         }
       },
     });
-    const clear = h("button", {
-      type: "button",
-      class: "fz-lib-button",
-      text: "Clear recent history…",
-      onclick: () => document.getElementById("Tools:Sanitize")?.doCommand(),
+    defaultSources();
+    if (!privateSource(historySource)) {
+      historySource = "";
+    }
+    const source = buildSourcePicker(historySource, id => {
+      historySource = id;
+      renderView();
     });
+    // A private space's history is cleared with Clear and Lock.
+    const clear = historySource
+      ? null
+      : h("button", {
+          type: "button",
+          class: "fz-lib-button",
+          text: "Clear recent history…",
+          onclick: () => document.getElementById("Tools:Sanitize")?.doCommand(),
+        });
     historyList = h("div", {
       class: "fz-lib-history-list",
       onscroll: e => {
@@ -1720,7 +1795,7 @@
           )
       : [];
     return [
-      h("header", { class: "fz-lib-toolbar" }, search, clear),
+      h("header", { class: "fz-lib-toolbar" }, search, source, clear),
       h(
         "div",
         { class: "fz-lib-history-body" },
@@ -1731,6 +1806,13 @@
   }
 
   async function queryHistory(text, offset) {
+    if (historySource) {
+      const q = text.toLowerCase();
+      return api()
+        .privateHistory(historySource)
+        .filter(v => !q || v.url.toLowerCase().includes(q) || (v.title ?? "").toLowerCase().includes(q))
+        .slice(offset, offset + HISTORY_PAGE);
+    }
     const db = await PlacesUtils.promiseDBConnection();
     let where = "h.last_visit_date NOT NULL AND h.hidden = 0";
     const params = { limit: HISTORY_PAGE, offset };
@@ -1819,22 +1901,22 @@
         "data-url": entry.url,
         "data-title": entry.title ?? "",
         title: entry.url,
-        onclick: e => openUrl(entry.url, { background: e.ctrlKey || e.metaKey }),
+        onclick: e => openUrl(entry.url, { spaceId: historySource || null, background: e.ctrlKey || e.metaKey }),
         onauxclick: e => {
           if (e.button === 1) {
             e.preventDefault();
-            openUrl(entry.url, { background: true });
+            openUrl(entry.url, { spaceId: historySource || null, background: true });
           }
         },
         onkeydown: e => {
           if (e.key === "Enter") {
-            openUrl(entry.url);
+            openUrl(entry.url, { spaceId: historySource || null });
           } else if (e.key === "Delete") {
             removeHistory(entry.url, row);
           }
         },
       },
-      h("img", { class: "fz-lib-favicon", src: `page-icon:${entry.url}`, alt: "" }),
+      h("img", { class: "fz-lib-favicon", src: historySource ? DEFAULT_FAVICON : `page-icon:${entry.url}`, alt: "" }),
       h("span", { class: "fz-lib-history-title", text: entry.title || entry.url }),
       h("span", { class: "fz-lib-history-host", text: host }),
       h("span", { class: "fz-lib-history-time", text: timeFormat.format(entry.time) }),
@@ -1853,7 +1935,11 @@
   }
 
   function removeHistory(url, row) {
-    PlacesUtils.history.remove(url).catch(ex => console.error("firefox-zen-library:", ex));
+    if (historySource) {
+      api().removePrivateHistory(historySource, url);
+    } else {
+      PlacesUtils.history.remove(url).catch(ex => console.error("firefox-zen-library:", ex));
+    }
     const prev = row.previousElementSibling;
     const next = row.nextElementSibling;
     row.remove();
@@ -1868,9 +1954,17 @@
   function openUrl(url, { spaceId = null, background = false } = {}) {
     const spaces = spacesOn() ? api() : null;
     const space = spaceId ?? spaces?.activeId();
-    // Never load it outside a private space.
+    // Never load it outside a private space: it's added there, then shown.
     if (space && spaces?.isPrivate?.(space)) {
-      spaces.openInPrivate(space, url);
+      spaces
+        .openInPrivate(space, url)
+        .then(() => {
+          if (!background) {
+            close();
+            spaces.showPrivate(space, spaces.privateTabs(space).length - 1);
+          }
+        })
+        .catch(ex => console.error("firefox-zen-library:", ex));
       return;
     }
     const tab = gBrowser.addTrustedTab(url, {
@@ -1886,7 +1980,8 @@
   }
 
   // ---- downloads view ----
-  // Firefox's download list (Downloads.ALL), kept live with a list view while
+  // Firefox's download list (Downloads.PUBLIC: private ones belong to private
+  // spaces, below), kept live with a list view while
   // the view is shown. Failed downloads are marked [attention] (yellow), like
   // Firefox's own lists (theme/downloads.css).
 
@@ -1953,7 +2048,8 @@
     });
   }
 
-  function buildDownloadRow(d) {
+  // `remove`: takes it off its list (Firefox's, or a private space's).
+  function buildDownloadRow(d, remove = () => dlList?.remove(d)) {
     const running = !d.stopped;
     const actions = [];
     if (running) {
@@ -1998,7 +2094,7 @@
           if (e.key === "Enter" && d.succeeded) {
             d.launch().catch(() => {});
           } else if (e.key === "Delete" && d.stopped) {
-            dlList?.remove(d);
+            remove();
           }
         },
       },
@@ -2024,7 +2120,7 @@
             "aria-label": "Remove from list",
             onclick: e => {
               e.stopPropagation();
-              dlList?.remove(d);
+              remove();
             },
           })
         : null
@@ -2035,8 +2131,124 @@
     !dlQuery || dlName(d).toLowerCase().includes(dlQuery) || d.source.url.toLowerCase().includes(dlQuery);
 
   // Rebuild the list: newest first, grouped by day.
+  // A private space's download (a saved record, not a live Download).
+  // Only shown once Firefox no longer has the download (else the live row is).
+  function buildPrivateDownloadRow(spaceId, d) {
+    // Still marked running, but nothing is behind it anymore.
+    const interrupted = d.state === "interrupted" || d.state === "downloading";
+    const name = d.path ? PathUtils.filename(d.path) : d.url;
+    const host = URL.parse(d.url)?.host ?? "";
+    const file = () => {
+      const f = Cc["@mozilla.org/file/local;1"].createInstance(Ci.nsIFile);
+      f.initWithPath(d.path);
+      return f;
+    };
+    const status =
+      d.state === "done"
+        ? [formatBytes(d.totalBytes || d.currentBytes), host].filter(Boolean).join(" · ")
+        : d.state === "downloading"
+          ? d.totalBytes
+            ? `${formatBytes(d.currentBytes)} of ${formatBytes(d.totalBytes)}`
+            : formatBytes(d.currentBytes)
+          : d.state === "failed"
+            ? "Failed"
+            : "Canceled";
+    const shownStatus = interrupted
+      ? `Interrupted · ${d.totalBytes ? `${formatBytes(d.currentBytes)} of ${formatBytes(d.totalBytes)}` : formatBytes(d.currentBytes)}`
+      : status;
+    const remove = () => {
+      // An interrupted download's leftover partial file is useless.
+      if (interrupted && d.path) {
+        IOUtils.remove(`${d.path}.part`, { ignoreAbsent: true }).catch(() => {});
+      }
+      api().removePrivateDownload(spaceId, d.key);
+    };
+    const fileUrl = d.path ? PathUtils.toFileURI(d.path) : "";
+    return h(
+      "div",
+      {
+        class: "fz-lib-dl-row",
+        tabindex: "0",
+        title: d.path || d.url,
+        attention: d.state === "failed" || interrupted,
+        done: d.state === "done",
+        onclick: () => {
+          if (d.state === "done" && d.path) {
+            try {
+              file().launch();
+            } catch (ex) {
+              console.error("firefox-zen-library:", ex);
+            }
+          }
+        },
+      },
+      h("img", { class: "fz-lib-dl-icon", src: fileUrl ? `moz-icon://${fileUrl}?size=32` : DEFAULT_FAVICON, alt: "" }),
+      h(
+        "div",
+        { class: "fz-lib-dl-text" },
+        h("span", { class: "fz-lib-dl-name", text: name }),
+        h("span", { class: "fz-lib-dl-status", text: shownStatus })
+      ),
+      h("span", { class: "fz-lib-history-time", text: timeFormat.format(d.startTime) }),
+      d.state === "done" && d.path
+        ? dlAction("Show in folder", "", () => file().reveal())
+        : null,
+      // Starts it again from its link, in the private space (the old entry goes).
+      interrupted || d.state === "failed" || d.state === "canceled"
+        ? dlAction("Retry", "fz-lib-dl-retry", () => {
+            remove();
+            openUrl(d.url, { spaceId });
+          })
+        : null,
+      h("button", {
+        type: "button",
+        class: "fz-lib-icon-button fz-lib-close-tab",
+        title: "Remove from list",
+        "aria-label": "Remove from list",
+        onclick: e => {
+          e.stopPropagation();
+          remove();
+        },
+      })
+    );
+  }
+
+  function renderPrivateDownloads() {
+    const items = api()
+      .privateDownloads(dlSource)
+      .filter(d => !dlQuery || d.url.toLowerCase().includes(dlQuery) || d.path.toLowerCase().includes(dlQuery));
+    const children = [];
+    let lastDay = null;
+    for (const d of items) {
+      const day = dayLabel(d.startTime);
+      if (day !== lastDay) {
+        lastDay = day;
+        children.push(h("h3", { class: "fz-lib-day", text: day }));
+      }
+      // Still in Firefox's list: the same live row as other downloads.
+      const live = api().privateLiveDownload?.(d.key);
+      children.push(
+        live
+          ? buildDownloadRow(live, () => api().removePrivateDownload(dlSource, d.key))
+          : buildPrivateDownloadRow(dlSource, d)
+      );
+    }
+    if (!children.length) {
+      children.push(
+        h("div", { class: "fz-lib-empty", text: dlQuery ? "No downloads match your search." : "No downloads yet." })
+      );
+    }
+    const scroll = dlListEl.scrollTop;
+    dlListEl.replaceChildren(...children);
+    dlListEl.scrollTop = scroll;
+  }
+
   function renderDownloads() {
     if (!dlListEl) {
+      return;
+    }
+    if (dlSource) {
+      renderPrivateDownloads();
       return;
     }
     const downloads = [...dlRows.keys()].filter(dlMatches).sort((a, b) => b.startTime - a.startTime);
@@ -2075,7 +2287,11 @@
   }
 
   async function startDownloads() {
-    const list = await Downloads.getList(Downloads.ALL);
+    if (dlSource) {
+      renderDownloads();
+      return;
+    }
+    const list = await Downloads.getList(Downloads.PUBLIC);
     if (view !== "downloads" || !dlListEl?.isConnected || dlView) {
       return;
     }
@@ -2151,14 +2367,32 @@
         file.launch();
       },
     });
+    defaultSources();
+    if (!privateSource(dlSource)) {
+      dlSource = "";
+    }
+    const source = buildSourcePicker(dlSource, id => {
+      dlSource = id;
+      renderView();
+    });
     const clear = h("button", {
       type: "button",
       class: "fz-lib-button",
       text: "Clear finished",
-      onclick: () => dlList?.removeFinished(),
+      onclick: () => {
+        if (dlSource) {
+          for (const d of api().privateDownloads(dlSource)) {
+            if (d.state !== "downloading") {
+              api().removePrivateDownload(dlSource, d.key);
+            }
+          }
+        } else {
+          dlList?.removeFinished();
+        }
+      },
     });
     dlListEl = h("div", { class: "fz-lib-history-list fz-lib-dl-list" });
-    return [h("header", { class: "fz-lib-toolbar" }, search, folder, clear), dlListEl];
+    return [h("header", { class: "fz-lib-toolbar" }, search, source, folder, clear), dlListEl];
   }
 
   // ---- events ----
@@ -2212,6 +2446,26 @@
     window.addEventListener("FzSpacesChanged", onTabsChanged);
     // An open private space's tabs changed in its own window.
     window.addEventListener("FzPrivateTabsChanged", onTabsChanged);
+    // A private space's history / downloads list changed.
+    window.addEventListener("FzPrivateHistoryChanged", e => {
+      if (root && view === "history" && historySource && e.detail === historySource) {
+        clearTimeout(privateHistoryTimer);
+        privateHistoryTimer = setTimeout(() => loadHistory({ reset: true }), 300);
+      }
+    });
+    window.addEventListener("FzPrivateDownloadsChanged", e => {
+      if (root && view === "downloads" && dlSource && e.detail === dlSource) {
+        queueDownloadsRender();
+      }
+    });
+    // Locking/hiding: a private source may be gone; the picker follows.
+    window.addEventListener("FzSpacesChanged", () => {
+      if (root && ((view === "history" && historySource) || (view === "downloads" && dlSource))) {
+        if (!privateSource(view === "history" ? historySource : dlSource)) {
+          renderView();
+        }
+      }
+    });
     window.addEventListener("resize", place);
     // Clicking a tab in the sidebar means "show me the page".
     document.getElementById("tabbrowser-tabs")?.addEventListener("mousedown", e => {

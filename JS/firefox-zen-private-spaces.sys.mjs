@@ -7,8 +7,9 @@
 // The window side is in JS/firefox-zen-spaces.uc.js.
 //
 // Model
-// - A private space is an entry in the space list with private: true. Its
-//   name and icon are in prefs like any space; everything else is here.
+// - A private space is an entry in the space list with just its id and
+//   private: true. Its name and icon are encrypted with the rest (`meta`);
+//   while it's locked the window side shows a placeholder.
 // - Unlocking decrypts it into memory only. Its tabs open in its own private
 //   window when asked for, so Firefox writes none of it to places.sqlite,
 //   cookies.sqlite, the cache or sessionstore. Tabs can be moved in (their
@@ -27,6 +28,11 @@
 //   other's cookies.
 // - Private spaces are hidden from the footer and the Library at every start
 //   until shown (Library toggle, + menu, Ctrl+Alt+P); hiding locks them all.
+// - It keeps its own history (pages its tabs visited) and download list,
+//   encrypted with it; Firefox's private ones are dropped when its window
+//   closes. Downloaded files themselves stay on disk, unencrypted.
+// - After AUTOLOCK_PREF minutes of no input (0 = off) every private space locks.
+// - Export writes its encrypted file (with its id) for import elsewhere.
 // - Closing the space's window keeps it unlocked (saved, window-less); Lock
 //   or quitting forgets the key. "Clear and Close" empties it for good;
 //   deleting the space deletes its file.
@@ -39,6 +45,7 @@ ChromeUtils.defineESModuleGetters(lazy, {
   SessionStore: "moz-src:///browser/components/sessionstore/SessionStore.sys.mjs",
   TabStateFlusher: "moz-src:///browser/components/sessionstore/TabStateFlusher.sys.mjs",
   BrowserWindowTracker: "resource:///modules/BrowserWindowTracker.sys.mjs",
+  Downloads: "resource://gre/modules/Downloads.sys.mjs",
 });
 
 const VERSION = 1;
@@ -47,6 +54,12 @@ const SAVE_INTERVAL_MS = 5000;
 const DIR_NAME = "firefox-zen-private";
 const CHANGED_TOPIC = "firefox-zen-private-spaces-changed";
 const PRIVATE_OA = { privateBrowsingId: 1 };
+const HISTORY_TOPIC = "firefox-zen-private-history-changed";
+const DOWNLOADS_TOPIC = "firefox-zen-private-downloads-changed";
+const AUTOLOCK_PREF = "firefox-zen.private-spaces.autolock-minutes";
+const AUTOLOCK_DEFAULT = 10;
+const HISTORY_MAX = 5000;
+const EXPORT_FORMAT = "firefox-zen-private-space";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -159,7 +172,9 @@ function writeFile(id, sealed) {
 
 // ---- snapshots ----
 
-const EMPTY_SNAPSHOT = { window: null, cookies: [] };
+// window: SessionStore window state; meta: { name, icon }; history:
+// [{ url, title, time }] oldest first; downloads: see downloadRecord().
+const EMPTY_SNAPSHOT = { window: null, cookies: [], meta: null, history: [], downloads: [] };
 
 function collectCookies() {
   return Services.cookies.getCookiesWithOriginAttributes(JSON.stringify(PRIVATE_OA)).map(c => ({
@@ -286,7 +301,13 @@ async function save(id, { flush = false, fillGaps = false } = {}) {
   if (!state) {
     return;
   }
-  const snapshot = { window: state, cookies: win ? collectCookies() : entry.cookies };
+  const snapshot = {
+    window: state,
+    cookies: win ? collectCookies() : entry.cookies,
+    meta: entry.meta,
+    history: entry.history,
+    downloads: entry.downloads,
+  };
   const json = JSON.stringify(snapshot);
   if (json === entry.lastJson) {
     return;
@@ -355,6 +376,11 @@ async function closeWindow(entry) {
   entry.window = null;
 }
 
+// Favicons the Library may show: ones already in memory (private tabs keep
+// theirs as data: URIs). Anything that would be fetched is dropped, so
+// showing a private space's tabs never touches the network.
+const localImage = src => (/^(data|chrome|moz-icon|resource):/.test(src ?? "") ? src : null);
+
 // Tabs in the window-less snapshot, as the Library lists them.
 function snapshotTabs(entry) {
   const tabs = entry.snapshot?.tabs ?? [];
@@ -364,7 +390,7 @@ function snapshotTabs(entry) {
       index,
       label: current.title || (/^about:(blank|newtab|home|privatebrowsing)?$/.test(current.url ?? "") ? "New Tab" : current.url),
       url: current.url || "",
-      image: tab.image || null,
+      image: localImage(tab.image),
       selected: index === (entry.snapshot.selected || 1) - 1,
       tab: null,
     };
@@ -418,15 +444,143 @@ export const FzPrivateSpaces = {
         index,
         label: tab.label,
         url: tab.linkedBrowser?.currentURI?.spec ?? "",
-        image: tab.getAttribute("image") || null,
+        image: localImage(tab.getAttribute("image")),
         selected: tab.selected,
         tab,
       }));
   },
 
+  HISTORY_TOPIC,
+  DOWNLOADS_TOPIC,
+
   // A new, empty private space protected by `password`.
-  async create(id, password) {
-    await writeFile(id, await seal(id, await newKey(password), EMPTY_SNAPSHOT));
+  async create(id, password, meta = null) {
+    await writeFile(id, await seal(id, await newKey(password), { ...EMPTY_SNAPSHOT, meta }));
+  },
+
+  // Its name and icon ({ name, icon }) while unlocked, else null.
+  meta: id => unlocked.get(id)?.meta ?? null,
+
+  async setMeta(id, meta) {
+    const entry = unlocked.get(id);
+    if (!entry) {
+      throw new Error("This private space is locked.");
+    }
+    entry.meta = { ...entry.meta, ...meta };
+    notifyChanged();
+    await saveLogged(id);
+  },
+
+  // ---- history ----
+
+  // Pages its tabs visited, newest first.
+  history: id => [...(unlocked.get(id)?.history ?? [])].reverse(),
+
+  // From the space's window (see firefox-zen-spaces).
+  recordVisit(win, url, title = "") {
+    const [id, entry] = entryForWindow(win);
+    if (!id || !/^(https?|file|ftp):/.test(url)) {
+      return;
+    }
+    if (entry.restoring?.delete(url)) {
+      return;
+    }
+    const last = entry.history.at(-1);
+    // The same page again right away (reload, redirect back): refresh it.
+    if (last?.url === url && Date.now() - last.time < 30000) {
+      last.time = Date.now();
+      last.title ||= title;
+    } else {
+      entry.history.push({ url, title, time: Date.now() });
+      if (entry.history.length > HISTORY_MAX) {
+        entry.history.splice(0, entry.history.length - HISTORY_MAX);
+      }
+    }
+    Services.obs.notifyObservers(null, HISTORY_TOPIC, id);
+  },
+
+  recordTitle(win, url, title) {
+    const [id, entry] = entryForWindow(win);
+    const visit = id && entry.history.findLast(v => v.url === url);
+    if (visit && title && visit.title !== title) {
+      visit.title = title;
+      Services.obs.notifyObservers(null, HISTORY_TOPIC, id);
+    }
+  },
+
+  async removeHistory(id, url) {
+    const entry = unlocked.get(id);
+    if (entry) {
+      entry.history = entry.history.filter(v => v.url !== url);
+      Services.obs.notifyObservers(null, HISTORY_TOPIC, id);
+      await saveLogged(id);
+    }
+  },
+
+  // ---- downloads ----
+
+  // Its downloads, newest first (see downloadRecord()).
+  downloads: id => [...(unlocked.get(id)?.downloads ?? [])].sort((a, b) => b.startTime - a.startTime),
+
+  // Firefox's Download for a record, while it still has it.
+  liveDownload: key => liveDownloads.get(key) ?? null,
+
+  async removeDownload(id, key) {
+    const live = liveDownloads.get(key);
+    if (live?.stopped) {
+      liveDownloads.delete(key);
+      lazy.Downloads.getList(lazy.Downloads.PRIVATE)
+        .then(list => list.remove(live))
+        .catch(() => {});
+    }
+    const entry = unlocked.get(id);
+    if (entry) {
+      entry.downloads = entry.downloads.filter(d => d.key !== key);
+      Services.obs.notifyObservers(null, DOWNLOADS_TOPIC, id);
+      await saveLogged(id);
+    }
+  },
+
+  // Deletes the files its downloads saved; resolves with how many.
+  async deleteDownloadedFiles(id) {
+    let count = 0;
+    for (const d of unlocked.get(id)?.downloads ?? []) {
+      if (d.path && (await IOUtils.exists(d.path))) {
+        await IOUtils.remove(d.path, { ignoreAbsent: true });
+        count++;
+      }
+    }
+    return count;
+  },
+
+  // ---- export / import ----
+
+  // Writes its encrypted file (and id) to `path`. An unlocked space is saved first.
+  async exportTo(id, path) {
+    if (unlocked.has(id)) {
+      await saveLogged(id, { flush: true });
+      await writeQueues.get(id);
+    }
+    const file = await readFile(id);
+    if (!file) {
+      throw new Error("This private space's saved data is missing.");
+    }
+    await IOUtils.writeJSON(path, { format: EXPORT_FORMAT, id, file });
+  },
+
+  // Reads an export; resolves with its space id (the caller lists it).
+  // Refuses an id that already has data here.
+  async importFrom(path) {
+    const data = await IOUtils.readJSON(path);
+    if (data?.format !== EXPORT_FORMAT || !data.file?.data || typeof data.id !== "string") {
+      throw new Error("This isn't an exported private space.");
+    }
+    filePath(data.id); // throws for a malformed id
+    if (await readFile(data.id)) {
+      throw new Error("This private space is already here.");
+    }
+    await writeFile(data.id, data.file);
+    return data.id;
   },
 
   // Checks the password and keeps the space decrypted in memory, without a
@@ -440,11 +594,21 @@ export const FzPrivateSpaces = {
       throw new Error("This private space's saved data is missing.");
     }
     const { keyInfo, snapshot } = await open(id, file, password);
+    watchDownloads();
+    // Nothing can still be running from before it was locked.
+    for (const d of snapshot.downloads ?? []) {
+      if (d.state === "downloading" && !liveDownloads.has(d.key)) {
+        d.state = "interrupted";
+      }
+    }
     unlocked.set(id, {
       keyInfo,
       window: null,
       snapshot: snapshot.window ?? { tabs: [], selected: 0 },
       cookies: snapshot.cookies ?? [],
+      meta: snapshot.meta ?? null,
+      history: snapshot.history ?? [],
+      downloads: snapshot.downloads ?? [],
       timer: null,
       lastJson: JSON.stringify(snapshot),
       closing: false,
@@ -485,6 +649,8 @@ export const FzPrivateSpaces = {
         await lazy.SessionStore.promiseInitialized;
         win.addEventListener("SSWindowClosing", onWindowClosing);
         if (entry.snapshot?.tabs?.length) {
+          // Their pages loading again isn't a new visit (see recordVisit()).
+          entry.restoring = new Set(snapshotTabs(entry).map(t => t.url));
           const state = { ...entry.snapshot };
           if (select != null) {
             state.selected = select + 1;
@@ -591,7 +757,8 @@ export const FzPrivateSpaces = {
       return;
     }
     await closeWindow(entry);
-    await writeFile(id, await seal(id, entry.keyInfo, EMPTY_SNAPSHOT));
+    // Keeps its name and icon.
+    await writeFile(id, await seal(id, entry.keyInfo, { ...EMPTY_SNAPSHOT, meta: entry.meta }));
     await clearPrivateData();
     notifyChanged();
   },
@@ -629,6 +796,145 @@ export const FzPrivateSpaces = {
     await writeFile(id, await seal(id, keyInfo, snapshot));
   },
 };
+
+// ---- downloads ----
+
+// Private downloads (Firefox drops its own list of them when the last private
+// window closes) are recorded in the space whose window started them.
+let downloadsWatched = false;
+const downloadKeys = new WeakMap();
+// Record key -> Firefox's Download, while Firefox still has it (until the
+// private windows close), so the Library can pause, cancel or retry it.
+const liveDownloads = new Map();
+
+// The private space whose window a download came from.
+function spaceOfDownload(download) {
+  const topId = BrowsingContext.get(download.source.browsingContextId ?? 0)?.top?.id;
+  if (!topId) {
+    return null;
+  }
+  for (const [id, entry] of unlocked) {
+    const win = liveWindow(entry);
+    if (win?.gBrowser.browsers.some(b => b.browsingContext?.id === topId)) {
+      return id;
+    }
+  }
+  return null;
+}
+
+// { key, url, path, startTime, totalBytes, currentBytes, state }
+// state: "downloading" | "done" | "failed" | "canceled" | "interrupted"
+// ("interrupted": it was still running when Firefox dropped it, e.g. its
+// private window closed or the space locked).
+function downloadRecord(download, key) {
+  return {
+    key,
+    url: download.source.url,
+    path: download.target?.path ?? "",
+    startTime: download.startTime?.getTime?.() ?? Date.now(),
+    totalBytes: download.totalBytes || 0,
+    currentBytes: download.currentBytes || 0,
+    state: download.succeeded
+      ? "done"
+      : download.error
+        ? "failed"
+        : download.canceled
+          ? "canceled"
+          : "downloading",
+  };
+}
+
+function updateDownload(download) {
+  let tracked = downloadKeys.get(download);
+  if (!tracked) {
+    const id = spaceOfDownload(download);
+    if (!id) {
+      return;
+    }
+    tracked = { id, key: crypto.randomUUID() };
+    downloadKeys.set(download, tracked);
+  }
+  liveDownloads.set(tracked.key, download);
+  const entry = unlocked.get(tracked.id);
+  if (!entry) {
+    return;
+  }
+  const record = downloadRecord(download, tracked.key);
+  const index = entry.downloads.findIndex(d => d.key === tracked.key);
+  if (index < 0) {
+    entry.downloads.push(record);
+  } else {
+    entry.downloads[index] = record;
+  }
+  Services.obs.notifyObservers(null, DOWNLOADS_TOPIC, tracked.id);
+  if (record.state !== "downloading") {
+    saveLogged(tracked.id);
+  }
+}
+
+// Records still "downloading" with no download behind them anymore.
+function markInterrupted(entry) {
+  for (const d of entry?.downloads ?? []) {
+    if (d.state === "downloading" && !liveDownloads.has(d.key)) {
+      d.state = "interrupted";
+    }
+  }
+}
+
+function watchDownloads() {
+  if (downloadsWatched) {
+    return;
+  }
+  downloadsWatched = true;
+  lazy.Downloads.getList(lazy.Downloads.PRIVATE)
+    .then(list =>
+      list.addView({
+        onDownloadAdded: updateDownload,
+        onDownloadChanged: updateDownload,
+        onDownloadRemoved: download => {
+          const tracked = downloadKeys.get(download);
+          if (tracked && liveDownloads.get(tracked.key) === download) {
+            liveDownloads.delete(tracked.key);
+            markInterrupted(unlocked.get(tracked.id));
+            Services.obs.notifyObservers(null, DOWNLOADS_TOPIC, tracked.id);
+          }
+        },
+      })
+    )
+    .catch(e => console.error("firefox-zen-private-spaces: downloads", e));
+}
+
+// ---- auto-lock ----
+
+// Locks every private space after AUTOLOCK_PREF minutes without input
+// (anywhere on the computer, as Firefox's idle service counts it).
+const idleService = Cc["@mozilla.org/widget/useridleservice;1"].getService(Ci.nsIUserIdleService);
+let idleSeconds = 0;
+const idleObserver = {
+  observe(_subject, topic) {
+    if (topic === "idle" && unlocked.size) {
+      (async () => {
+        for (const id of [...unlocked.keys()]) {
+          await FzPrivateSpaces.lock(id);
+        }
+      })().catch(e => console.error("firefox-zen-private-spaces: auto-lock", e));
+    }
+  },
+};
+
+function setUpAutoLock() {
+  if (idleSeconds) {
+    idleService.removeIdleObserver(idleObserver, idleSeconds);
+  }
+  const minutes = Services.prefs.getIntPref(AUTOLOCK_PREF, AUTOLOCK_DEFAULT);
+  idleSeconds = Math.max(0, minutes) * 60;
+  if (idleSeconds) {
+    idleService.addIdleObserver(idleObserver, idleSeconds);
+  }
+}
+
+setUpAutoLock();
+Services.prefs.addObserver(AUTOLOCK_PREF, setUpAutoLock);
 
 // ---- quit ----
 

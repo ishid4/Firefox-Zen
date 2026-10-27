@@ -205,6 +205,11 @@
   &[fz-locked]::after {
     background-image: url("icons/security.svg");
   }
+
+  /* Locked: a blurred placeholder (its real icon is encrypted) */
+  &[fz-locked] > .fz-space-icon {
+    filter: blur(2.5px);
+  }
 }
 
 .fz-space-add {
