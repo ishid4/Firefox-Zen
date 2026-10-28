@@ -454,6 +454,18 @@
   opacity: 0;
 }
 
+/* Window border: the page inset in a frame, or edge to edge */
+.fz-preview-border .fz-mock-page {
+  margin: 0;
+  border-radius: 0;
+  transition: margin 0.2s ease, border-radius 0.2s ease;
+}
+
+.fz-setting[data-on] .fz-preview-border .fz-mock-page {
+  margin: 4px;
+  border-radius: 4px;
+}
+
 /* Compact sidebar: tab strip slides out to a sliver at the edge */
 .fz-mock-body {
   flex: 1;

@@ -40,6 +40,8 @@ Then open `about:support`, click **Clear startup cache…**, and restart.
 | --- | --- | --- |
 | `firefox-zen.compact-toolbar` | false | Hide the toolbar until hovered (with the address bar in the sidebar: the window controls hide too and the sidebar/page use the full window height) |
 | `firefox-zen.compact-sidebar` | false | Hide the vertical tabs sidebar until its edge is hovered |
+| `firefox-zen.window-border` | true | A thin frame in the toolbar's color around the page, with rounded corners (not in fullscreen) |
+| `firefox-zen.window-border.width` | 6 | The window border's width in pixels (1-24) |
 | `firefox-zen.spaces` | false | Zen-style Spaces (see below) |
 | `firefox-zen.tab-sections` | true | Folders (and tabs you drag there) above a line, New Tab and new tabs below it; hover the sidebar for **Clear** (see below) |
 | `firefox-zen.show-customize-button` | true | Firefox's "Customize sidebar" gear in the sidebar tools (toggle it under Customize Sidebar → Tools) |

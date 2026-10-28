@@ -205,6 +205,29 @@ toolbar .toolbarbutton-1 {
   }
 }
 
+/* Window border: a thin frame in the toolbar's color (theme included) around
+ * the page, which gets rounded corners, like Arc. Not in fullscreen.
+ * On with firefox-zen.window-border */
+@media -moz-pref("firefox-zen.window-border") {
+  :root:not([inFullscreen], [inDOMFullscreen]) {
+    /* Width from Settings (firefox-zen.window-border.width), set by
+     * JS/firefox-zen-settings.uc.js */
+    --fz-window-border: var(--fz-window-border-width, 6px);
+
+    #browser {
+      background-color: light-dark(#e8e8e8, #202020);
+      background-image: var(--toolbox-background-gradient, none), image(var(--toolbox-background-color));
+      background-size: 100vw 100vh, auto;
+    }
+
+    #tabbrowser-tabbox {
+      margin: var(--fz-window-border) !important;
+      overflow: clip;
+      box-shadow: 0 0 0 1px light-dark(rgb(0 0 0 / 0.08), rgb(255 255 255 / 0.06));
+    }
+  }
+}
+
 /* Collapsed launcher width: the collapsed sidebar is sized from its content,
  * but #vertical-tabs (overflow: hidden, its tabs at flex-basis 0%) can report
  * 0 width, so the whole collapsed strip vanishes (seen on 158.0.1). Keep it at

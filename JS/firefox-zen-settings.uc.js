@@ -66,6 +66,17 @@
     hint: "The Library button turns into a downloads icon after one starts. 0 keeps the Library icon.",
   };
 
+  // Applied here (applyBorderWidth), read by theme/general.css.
+  const BORDER_WIDTH = {
+    type: "number",
+    pref: "window-border.width",
+    default: 6,
+    min: 1,
+    max: 24,
+    unit: "px",
+    label: "Border width",
+  };
+
   // Which modifiers + click open a glance (JS/firefox-zen-glance.uc.js).
   const GLANCE_MODIFIERS = {
     type: "modifiers",
@@ -198,6 +209,15 @@
             "Replaces Firefox's “Expand sidebar on hover”; your choice comes back when this is off.",
             "Turning “Expand sidebar on hover” back on turns this off.",
           ],
+        },
+        {
+          pref: "window-border",
+          default: true,
+          label: "Window border",
+          description: "A thin frame in the toolbar's color around the page, with rounded corners.",
+          preview: "border",
+          tips: ["Hidden in fullscreen."],
+          options: [BORDER_WIDTH],
         },
         {
           pref: "show-customize-button",
@@ -538,6 +558,9 @@
             h("div", { class: "fz-mock-page" })
           )
         );
+        break;
+      case "border":
+        mock.append(h("div", { class: "fz-mock-page" }));
         break;
       case "gear":
         mock.append(
@@ -1029,14 +1052,25 @@
     }
   }
 
+  // CSS can't read a number pref: pass the window border's width on.
+  function applyBorderWidth() {
+    const { pref, default: fallback, min, max } = BORDER_WIDTH;
+    const width = Math.min(max, Math.max(min, Services.prefs.getIntPref(PREF_BRANCH + pref, fallback)));
+    document.documentElement.style.setProperty("--fz-window-border-width", `${width}px`);
+  }
+
   // ---- per-window setup ----
   applyDefaults();
   syncSidebarVisibility();
+  applyBorderWidth();
 
   const observer = {
     observe(_subject, _topic, name) {
       if (name === COMPACT_SIDEBAR_PREF || name === VISIBILITY_PREF) {
         syncSidebarVisibility(name);
+      }
+      if (name === PREF_BRANCH + BORDER_WIDTH.pref) {
+        applyBorderWidth();
       }
       sync();
     },
