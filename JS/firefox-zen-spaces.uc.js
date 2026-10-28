@@ -1106,7 +1106,18 @@
     }
     const name = h("span", { class: "fz-space-name", text: active.name, title: "Double-click to rename" });
     name.addEventListener("dblclick", () => startInlineRename(active.id, name));
-    header.replaceChildren(h("span", { class: "fz-space-header-icon", text: active.icon || "" }), name);
+    const more = h("button", {
+      class: "fz-space-header-more",
+      type: "button",
+      title: "Space options",
+      "aria-label": "Space options",
+      "aria-haspopup": "menu",
+    });
+    more.addEventListener("click", () => openMenu(active.id, null, more));
+    // Keep a double-click on it from renaming, and the drag from starting
+    more.addEventListener("dblclick", e => e.stopPropagation());
+    more.addEventListener("mousedown", e => e.stopPropagation());
+    header.replaceChildren(h("span", { class: "fz-space-header-icon", text: active.icon || "" }), name, more);
     header.classList.toggle("fz-space-header-private", !!active.private);
     header.oncontextmenu = e => {
       e.preventDefault();
@@ -1191,7 +1202,6 @@
       title: "Create…",
       "aria-label": "Create",
       "aria-haspopup": "menu",
-      text: "+",
     });
     add.addEventListener("click", () => openPlusMenu(add));
 
@@ -1533,7 +1543,8 @@
     return menu;
   }
 
-  function openMenu(id, event) {
+  // At the pointer (right-click), or under `anchor` (the header's "…" button)
+  function openMenu(id, event, anchor = null) {
     const menu = ensureMenu();
     menu.dataset.spaceId = id;
     const isPrivate = !!readSpaces().find(s => s.id === id)?.private;
@@ -1549,7 +1560,21 @@
     set("password", "hidden", !isPrivate);
     set("clear", "hidden", !open);
     set("export", "hidden", false);
-    menu.openPopupAtScreen(event.screenX, event.screenY, true, event);
+    if (anchor) {
+      // Pressed look while open
+      anchor.setAttribute("open", "true");
+      const onHidden = e => {
+        // Not the Set Container submenu closing
+        if (e.target === menu) {
+          menu.removeEventListener("popuphidden", onHidden);
+          anchor.removeAttribute("open");
+        }
+      };
+      menu.addEventListener("popuphidden", onHidden);
+      menu.openPopup(anchor, "after_end");
+    } else {
+      menu.openPopupAtScreen(event.screenX, event.screenY, true, event);
+    }
   }
 
   // ---- tab context menu: Move to Space ----

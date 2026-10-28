@@ -60,7 +60,8 @@
       width: 100% !important;
       min-width: 0 !important;
       max-width: none !important;
-      margin-inline: 0 !important;
+      /* Back to the tabs' edges (the row's padding is 1px short, see below) */
+      margin-inline: 1px !important;
       margin-block-start: 2px !important;
       padding-inline: 0 !important;
       --urlbar-container-height: 38px !important;
@@ -78,9 +79,47 @@
       display: none !important;
     }
 
-    /* Toolbar-only spacing pieces */
-    & :is(#vertical-spacer, .titlebar-spacer) {
+    /* Toolbar-only spacing pieces, and spaces placed after the URL bar (its
+     * other items moved to the panel; a space would keep the last button off
+     * the row's end) */
+    & :is(#vertical-spacer, .titlebar-spacer, #urlbar-container ~ :is(toolbarspring, toolbarspacer)) {
       display: none !important;
+    }
+
+    /* Row 1: buttons of one size, 2px apart, reaching the same edges as the
+     * URL bar and the tabs (Firefox gives some, like reload, extra padding).
+     * The spacing is each button's 1px padding, not a flex gap, which the
+     * row's invisible keyboard tab stops would get too. */
+    --toolbarbutton-outer-padding: 0px;
+    --toolbarbutton-inner-padding: 6px;
+    padding-inline: calc(var(--tab-margin-inline-inner, 6px) - 1px) !important;
+
+    & :is(.toolbarbutton-1, #stop-reload-button, #PanelUI-button) {
+      margin: 0 !important;
+      padding: 0 !important;
+      scale: none !important;
+    }
+
+    & :is(#nav-bar-customization-target > :is(toolbarbutton, toolbaritem):not(#urlbar-container), #PanelUI-button) {
+      padding-inline: 1px !important;
+    }
+
+    /* The sidebar is open whenever this row shows: no pressed look */
+    & #sidebar-button[checked]:not(:hover) > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) {
+      background-color: transparent !important;
+    }
+
+    & .toolbarbutton-1 > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) {
+      box-sizing: border-box !important;
+      width: 28px !important;
+      height: 28px !important;
+      padding: 6px !important;
+    }
+
+    & .toolbarbutton-1 > .toolbarbutton-badge-stack > .toolbarbutton-icon {
+      width: 16px !important;
+      height: 16px !important;
+      padding: 0 !important;
     }
   }
 

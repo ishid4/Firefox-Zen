@@ -153,6 +153,183 @@
     }
   }
 
+  // ---- dragging a tab into the pinned tabs: show where it lands ----
+
+  // Firefox pins a tab dropped on the pinned tabs, always as the last one, and
+  // shows nothing while it's dragged there. While an unpinned tab is over
+  // them, the tiles slide apart to open a slot at the pointer, an empty tile
+  // (#fz-pin-slot, theme/general.css) marks it, and the drop pins the tab
+  // into that slot. A new row is added when the slot needs one.
+  const TAB_DROP_TYPE = "application/x-moz-tabbrowser-tab";
+  const SLOT_ID = "fz-pin-slot";
+
+  let pinSlot = null; // { grid, index, tabs, grown } while showing a slot
+
+  const pinnedTiles = () =>
+    [...(document.getElementById("pinned-tabs-container")?.children ?? [])].filter(
+      t => t.localName === "tab" && !t.hidden
+    );
+
+  // Unpinned tabs of this window being dragged (none for other drags)
+  function draggedToPin(e) {
+    const dragged = e.dataTransfer?.mozGetDataAt(TAB_DROP_TYPE, 0);
+    if (!dragged || dragged.ownerDocument !== document || dragged.pinned || e.dataTransfer.dropEffect === "copy") {
+      return [];
+    }
+    return (dragged._dragData?.movingTabs ?? [dragged]).filter(t => t.localName === "tab" && !t.pinned);
+  }
+
+  // Positions of the grid's slots, from the tiles already in it
+  function gridOf(tiles, container) {
+    const first = tiles[0].getBoundingClientRect();
+    const rowCount = tiles.filter(t => Math.abs(t.getBoundingClientRect().top - first.top) < 1).length;
+    const width = container.shadowRoot?.querySelector("[part~='items-wrapper']")?.clientWidth ?? container.clientWidth;
+    const cols = rowCount < tiles.length ? rowCount : Math.max(rowCount, Math.floor(width / first.width) || 1);
+    const pitchX = tiles[1] && rowCount > 1 ? tiles[1].getBoundingClientRect().left - first.left : first.width;
+    const pitchY = first.height;
+    const bg = tiles[0].querySelector(".tab-background")?.getBoundingClientRect() ?? first;
+    return {
+      cols,
+      slot(i) {
+        const left = first.left + (i % cols) * pitchX;
+        const top = first.top + Math.floor(i / cols) * pitchY;
+        // The tile's visible background, not its whole box
+        return {
+          left: left + bg.left - first.left,
+          top: top + bg.top - first.top,
+          width: bg.width,
+          height: bg.height,
+          dx: (i % cols) * pitchX,
+          dy: Math.floor(i / cols) * pitchY,
+        };
+      },
+      rows: n => Math.ceil(n / cols),
+      pitchY,
+      tileWidth: first.width,
+    };
+  }
+
+  // The dragged tab(s) as a pinned-tab-sized tile under the pointer
+  // (theme/general.css hides the title meanwhile). Firefox moves them only
+  // up and down; this moves them sideways too.
+  function placeGhost(e, tabs, grid) {
+    const tc = gBrowser.tabContainer;
+    tc.style.setProperty("--fz-pin-ghost-width", `${grid.tileWidth}px`);
+    pinSlot.ghostLeft ??= Math.min(...tabs.map(t => t.getBoundingClientRect().left));
+    const box = tc.getBoundingClientRect();
+    const left = Math.min(Math.max(e.clientX - grid.tileWidth / 2, box.left), box.right - grid.tileWidth);
+    for (const tab of tabs) {
+      tab.style.translate = `${left - pinSlot.ghostLeft}px 0`;
+    }
+  }
+
+  function hidePinSlot() {
+    if (!pinSlot) {
+      return;
+    }
+    for (const tab of [...pinnedTiles(), ...(pinSlot.tabs ?? [])]) {
+      tab.style.removeProperty("translate");
+    }
+    document.getElementById(SLOT_ID)?.remove();
+    gBrowser.tabContainer.removeAttribute("fz-pin-drop");
+    gBrowser.tabContainer.style.removeProperty("--fz-pin-ghost-width");
+    const container = document.getElementById("pinned-tabs-container");
+    if (pinSlot.grown && container) {
+      container.style.setProperty("--fz-pinned-rows", pinSlot.grown.rows);
+      container.style.minHeight = pinSlot.grown.minHeight;
+      container.scrollbox.style.height = pinSlot.grown.height;
+    }
+    pinSlot = null;
+  }
+
+  function onPinDragOver(e) {
+    const container = document.getElementById("pinned-tabs-container");
+    const tiles = pinnedTiles();
+    const tabs = tiles.length ? draggedToPin(e) : [];
+    const box = container?.getBoundingClientRect();
+    const over =
+      box && e.clientX >= box.left && e.clientX <= box.right && e.clientY >= box.top && e.clientY <= box.bottom;
+    if (!tabs.length || !over || pinCount() + tabs.length > maxPins()) {
+      hidePinSlot();
+      return;
+    }
+    // Measured once: the tiles move while the slot shows
+    const grid = pinSlot?.grid ?? gridOf(tiles, container);
+    // Before the first tile whose row is below the pointer, or that starts
+    // right of it in the pointer's row
+    let index = tiles.findIndex((t, i) => {
+      const s = grid.slot(i);
+      return e.clientY < s.top - 2 || (e.clientY < s.top + s.height + 2 && e.clientX < s.left + s.width / 2);
+    });
+    if (index === -1) {
+      index = tiles.length;
+    }
+    pinSlot ??= {};
+    placeGhost(e, tabs, grid);
+    if (pinSlot.index === index) {
+      return;
+    }
+
+    // Room for a new row
+    if (!pinSlot.grown && grid.rows(tiles.length + 1) > grid.rows(tiles.length)) {
+      const grown = {
+        rows: container.style.getPropertyValue("--fz-pinned-rows"),
+        minHeight: container.style.minHeight,
+        height: container.scrollbox.style.height,
+      };
+      const height = container.getBoundingClientRect().height + grid.pitchY;
+      container.style.setProperty("--fz-pinned-rows", String(grid.rows(tiles.length + 1)));
+      container.style.minHeight = `${height}px`;
+      container.scrollbox.style.height = `${container.scrollbox.getBoundingClientRect().height + grid.pitchY}px`;
+      pinSlot = { ...pinSlot, grown };
+    }
+
+    // Tiles from the slot on move one slot forward
+    tiles.forEach((tile, i) => {
+      if (i < index) {
+        tile.style.removeProperty("translate");
+      } else {
+        const here = grid.slot(i);
+        const next = grid.slot(i + 1);
+        tile.style.translate = `${next.dx - here.dx}px ${next.dy - here.dy}px`;
+      }
+    });
+
+    let slot = document.getElementById(SLOT_ID);
+    if (!slot) {
+      slot = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
+      slot.id = SLOT_ID;
+      gBrowser.tabContainer.append(slot);
+    }
+    const s = grid.slot(index);
+    const origin = gBrowser.tabContainer.getBoundingClientRect();
+    Object.assign(slot.style, {
+      left: `${s.left - origin.left}px`,
+      top: `${s.top - origin.top}px`,
+      width: `${s.width}px`,
+      height: `${s.height}px`,
+    });
+    gBrowser.tabContainer.setAttribute("fz-pin-drop", "");
+    pinSlot = { ...pinSlot, grid, index, tabs, before: tiles[index] ?? null };
+  }
+
+  // Firefox pins the tabs (at the end) in its own drop handler, after this
+  // capturing one: move them into the slot afterwards, before the tile that
+  // was there (tab indexes also count pinned tabs hidden in other spaces).
+  function onPinDrop() {
+    const drop = pinSlot;
+    hidePinSlot();
+    if (drop?.before) {
+      setTimeout(() => {
+        for (const tab of drop.tabs) {
+          if (tab.pinned && !tab.closing && drop.before.pinned) {
+            gBrowser.moveTabTo(tab, { tabIndex: drop.before.index });
+          }
+        }
+      }, 0);
+    }
+  }
+
   // ---- hold the compact sidebar out while its popups are open ----
 
   // A right-click menu (tab, sidebar, space menus) is a popup outside the
@@ -267,6 +444,15 @@
       gBrowser.tabContainer.addEventListener(type, queuePinnedRows);
     }
     window.addEventListener("SSWindowRestored", queuePinnedRows);
+    gBrowser.tabContainer.addEventListener("dragover", onPinDragOver, true);
+    gBrowser.tabContainer.addEventListener("drop", onPinDrop, true);
+    // Left the tab strip, or the drag ended anywhere else
+    gBrowser.tabContainer.addEventListener("dragleave", e => {
+      if (!gBrowser.tabContainer.contains(e.relatedTarget)) {
+        hidePinSlot();
+      }
+    });
+    window.addEventListener("dragend", hidePinSlot, true);
     window.addEventListener("SidebarShown", () => {
       injectCheckbox().catch(e => console.error("firefox-zen-sidebar-tools:", e));
     });

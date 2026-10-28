@@ -16,31 +16,32 @@
   }
 }
 
-/* ---- Header: "🛠 Work" between Essentials (pinned) and the space's tabs ---- */
+/* ---- Header: "🛠 Work" between Essentials (pinned) and the space's tabs ----
+ * A row like a tab: hovering it lights it up and shows a "…" button that opens
+ * the space's menu (so does right-clicking it). */
 #fz-space-header {
   /* Icon sits on the collapsed tab-icon column in both sidebar states, and the
    * header keeps one fixed height, so nothing shifts on collapse/expand. */
-  --fz-header-icon-size: 14px;
+  --fz-header-icon-size: 16px;
 
   display: flex;
   align-items: center;
   gap: 8px;
   flex: none;
   box-sizing: border-box;
-  height: 28px;
+  height: 32px;
   min-width: 0;
-  margin: 4px 0 2px;
-  padding-inline: calc(var(--tab-margin-inline-inner, 6px) + var(--tab-collapsed-background-width, 32px) / 2 - var(--fz-header-icon-size) / 2)
-    calc(var(--tab-margin-inline-inner, 6px) + 4px);
+  margin: 2px var(--tab-margin-inline-inner, 6px) 4px;
+  padding-inline: calc(var(--tab-collapsed-background-width, 32px) / 2 - var(--fz-header-icon-size) / 2) 4px;
+  border-radius: var(--tab-border-radius, 8px);
   color: var(--toolbox-text-color, inherit);
-  opacity: 0.6;
   font: menu;
-  font-size: 0.85em;
   font-weight: 600;
-  transition: opacity 0.15s ease;
+  transition: background-color 0.15s ease;
 
-  &:hover {
-    opacity: 0.9;
+  &:hover,
+  &:has(.fz-space-header-more[open]) {
+    background-color: var(--tab-hover-background-color, color-mix(in srgb, currentColor 8%, transparent));
   }
 
   &[hidden] {
@@ -52,7 +53,7 @@
   flex: none;
   width: var(--fz-header-icon-size);
   text-align: center;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1;
 
   &:empty {
@@ -61,11 +62,48 @@
 }
 
 .fz-space-name {
+  flex: 1;
   min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  cursor: text;
+  opacity: 0.85;
+  cursor: default;
+}
+
+/* "…": the space's menu, shown while the header is hovered */
+.fz-space-header-more {
+  appearance: none;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: url("chrome://global/skin/icons/more.svg") center / 16px no-repeat;
+  -moz-context-properties: fill, fill-opacity;
+  fill: currentColor;
+  color: inherit;
+  opacity: 0;
+  transition: opacity 0.15s ease, background-color 0.15s ease;
+
+  #fz-space-header:hover &,
+  &[open],
+  &:focus-visible {
+    opacity: 0.7;
+  }
+
+  &:hover,
+  &[open] {
+    opacity: 1 !important;
+    background-color: color-mix(in srgb, currentColor 12%, transparent);
+  }
+
+  &:focus-visible {
+    outline: var(--focus-outline, 2px solid AccentColor);
+    outline-offset: 0;
+  }
 }
 
 /* Inline rename (double-click the space name or its icon) */
@@ -89,9 +127,11 @@
 }
 
 /* Private space's window: a mask after the space's name */
-#fz-space-header.fz-space-header-private::after {
+#fz-space-header.fz-space-header-private > .fz-space-name::after {
   content: "";
-  flex: none;
+  display: inline-block;
+  vertical-align: -1px;
+  margin-inline-start: 6px;
   width: 12px;
   height: 12px;
   background: url("icons/privateBrowsing.svg") center / contain no-repeat;
@@ -117,7 +157,7 @@
     display: none;
   }
 
-  & #fz-space-header .fz-space-name {
+  & #fz-space-header :is(.fz-space-name, .fz-space-header-more) {
     display: none;
   }
 }
@@ -131,7 +171,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  #fz-space-header {
+  #fz-space-header,
+  .fz-space-header-more {
     transition: none !important;
   }
 }

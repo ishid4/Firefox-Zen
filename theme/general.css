@@ -233,10 +233,72 @@ toolbar .toolbarbutton-1 {
   outline: none !important;
 }
 
+/* No resize handle under the pinned tabs (Essentials): they always show in
+ * full, so drop the height Firefox restores from an earlier drag of it.
+ * Expand-on-hover sizes them below. */
+#vertical-pinned-tabs-splitter {
+  display: none !important;
+}
+
+#tabbrowser-tabs[orient="vertical"] > #pinned-tabs-container {
+  height: auto !important;
+  max-height: 50vh;
+}
+
+/* A tab dragged over the pinned tabs (JS/firefox-zen-sidebar-tools.uc.js):
+ * the tiles slide apart and an empty tile marks where it will be pinned */
+#tabbrowser-tabs[orient="vertical"] {
+  /* Positions dragged tabs and the empty tile: Firefox places dragged tabs
+   * from the top of #tabbrowser-tabs, assuming nothing above it in the
+   * sidebar is positioned (the toolbar in the sidebar, the compact sidebar) */
+  position: relative;
+
+  &[movingtab] > #pinned-tabs-container > .tabbrowser-tab {
+    transition: translate 0.2s ease;
+  }
+
+  /* The dragged tab becomes a pinned-tab-sized tile (icon only), placed
+   * under the pointer by the script; slightly see-through over the empty
+   * tile */
+  &[fz-pin-drop] .tabbrowser-tab[dragtarget] {
+    width: var(--fz-pin-ghost-width) !important;
+    max-width: none !important;
+    opacity: 0.85;
+
+    .tab-content {
+      justify-content: center;
+    }
+
+    :is(.tab-label-container, .tab-close-button, .tab-secondary-label) {
+      display: none !important;
+    }
+  }
+}
+
+#fz-pin-slot {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1.5px dashed color-mix(in srgb, currentColor 35%, transparent);
+  border-radius: var(--tab-border-radius, 10px);
+  background-color: color-mix(in srgb, currentColor 8%, transparent);
+  pointer-events: none;
+  z-index: 2;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #tabbrowser-tabs[movingtab] > #pinned-tabs-container > .tabbrowser-tab {
+    transition: none;
+  }
+}
+
 /* Expanded vertical tabs, every sidebar mode: pinned tiles three per row,
  * like Zen's Essentials (read by JS/firefox-zen-sidebar-tools.uc.js) */
 #tabbrowser-tabs[orient="vertical"][expanded] > #pinned-tabs-container {
   --fz-pinned-columns: repeat(3, minmax(0, 1fr));
+  /* Tile edges line up with the tabs (and the sidebar URL bar) below */
+  --tab-container-margin-inline-pinned-expanded: calc(
+    var(--tab-margin-inline-inner) - var(--tab-margin-inline-pinned-expanded)
+  );
 }
 
 /* Expand-on-hover: Firefox lists pinned tabs as full-width rows there, and
@@ -487,6 +549,32 @@ toolbar .toolbarbutton-1 {
     width: var(--fz-urlbar-width) !important;
     max-height: calc(100vh - var(--fz-urlbar-top) - var(--fz-urlbar-height) - 24px) !important;
     margin: 0 !important;
+
+    /* Firefox stretches its background past the list (sideways and up behind
+     * the in-toolbar input); here it's exactly the list, under the input */
+    & > .urlbarView-background {
+      inset: 0 !important;
+      /* Its clip hid the part behind the input; keep only the shadow's */
+      clip-path: inset(0 -32px -32px) !important;
+      border-start-start-radius: 0 !important;
+      border-start-end-radius: 0 !important;
+      border-end-start-radius: 12px !important;
+      border-end-end-radius: 12px !important;
+    }
+  }
+
+  /* Address bar in the sidebar: editing it floats it in place, over the
+   * sidebar's field and wider than it (placed by the script) */
+  #urlbar[fz-float="anchored"] {
+    --fz-urlbar-top: var(--fz-anchor-top);
+    --fz-urlbar-width: var(--fz-anchor-width);
+
+    & > .urlbar-input-container:popover-open,
+    &:has(> .urlbar-input-container:popover-open) > .urlbarView:popover-open {
+      inset-inline: auto !important;
+      left: var(--fz-anchor-left) !important;
+      translate: none !important;
+    }
   }
 
   /* Join the input with the results list below it */
@@ -525,7 +613,7 @@ toolbar .toolbarbutton-1 {
 
     /* Adjust position of search entry categories */
     .urlbarView-row[label]::before {
-      top: calc(var(--urlbarView-labeled-row-label-top) - 2px) !important;
+      top: calc(var(--urlbarview-labeled-row-label-top) - 2px) !important;
     }
   }
 }

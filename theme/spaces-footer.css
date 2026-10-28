@@ -13,6 +13,17 @@
   min-height: 0;
 }
 
+/* No resize handle between the tabs and the tools row: the row is one line
+ * here, so its height (Firefox restores the one last dragged to) follows
+ * its buttons */
+:host([fz-spaces-footer]) #sidebar-tools-and-extensions-splitter {
+  display: none !important;
+}
+
+:host([fz-spaces-footer][expanded]) .buttons-wrapper {
+  height: auto !important;
+}
+
 /* Firefox's tools row (expanded sidebar): one clipped row instead of
  * wrapping onto extra rows; the script scrolls it when you hover its first or
  * last visible button, like the spaces row. */
@@ -230,14 +241,19 @@
 }
 
 .fz-space-add {
-  width: 32px;
-  height: 32px;
-  font-size: 22px;
-  font-weight: 300;
-  opacity: 0.6 !important;
+  width: 30px;
+  height: 30px;
+  background-image: url("chrome://global/skin/icons/plus.svg");
+  background-position: center;
+  background-size: 18px;
+  background-repeat: no-repeat;
+  -moz-context-properties: fill, fill-opacity;
+  fill: currentColor;
+  opacity: 0.75 !important;
   filter: none !important;
 
-  &:hover {
+  &:hover,
+  &[open] {
     opacity: 1 !important;
   }
 }

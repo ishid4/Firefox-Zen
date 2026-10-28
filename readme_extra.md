@@ -41,7 +41,7 @@ Then open `about:support`, click **Clear startup cache…**, and restart.
 | `firefox-zen.compact-toolbar` | false | Hide the toolbar until hovered (with the address bar in the sidebar: the window controls hide too and the sidebar/page use the full window height) |
 | `firefox-zen.compact-sidebar` | false | Hide the vertical tabs sidebar until its edge is hovered |
 | `firefox-zen.spaces` | false | Zen-style Spaces (see below) |
-| `firefox-zen.tab-sections` | true | Folders above a line, New Tab and new tabs below it; hover the sidebar for **Clear** (see below) |
+| `firefox-zen.tab-sections` | true | Folders (and tabs you drag there) above a line, New Tab and new tabs below it; hover the sidebar for **Clear** (see below) |
 | `firefox-zen.show-customize-button` | true | Firefox's "Customize sidebar" gear in the sidebar tools (toggle it under Customize Sidebar → Tools) |
 | `firefox-zen.sidebar-urlbar` | false | Toolbar + address bar at the top of the sidebar. With "Expand sidebar on hover" it stays there and shows when the sidebar expands; otherwise it goes back to the top while the sidebar is collapsed. Also back on top while customizing the toolbar |
 | `firefox-zen.floating-urlbar` | true | Open the address bar centered, like a command bar |
@@ -86,7 +86,8 @@ Pinned tabs are global "Pins" and show in every space.
   give it a default container: new tabs in that space (Ctrl+T, +) open in it.
   Existing tabs keep theirs (Firefox can't move a tab into a container without
   reopening it). The space's icon gets a bar in the container's color.
-- Double-click a space's name or icon to rename it inline.
+- Double-click a space's name or icon to rename it inline. Hover the space's
+  name above its tabs for a **…** button with the space's menu.
 - Right-click a space → **Export…** saves it as a `.fzspace` file (plain
   JSON: its name, icon, container name and its tabs with their back/forward
   history; folders aren't kept). **+** → **Import…** (or the Library's
@@ -193,6 +194,8 @@ when it closes. Esc, the button again, or clicking a tab closes it.
   them in that folder. Ctrl+click / Shift+click picks several tabs to drag
   together.
 - Drag a folder to move it, with all its tabs, to another space.
+- With tab sections, each column has the sidebar's line: drop a tab above it
+  to keep it there without a folder, or below it to make it a loose tab again.
 - Drop tabs on Pins to pin them, or drag pinned tabs into a space.
 - Drop tabs on **New space**, or on a space button in the footer.
 - Click a space's icon for an icon picker, its name to rename it, its header
@@ -361,6 +364,9 @@ At most 12 pinned tabs by default (Settings → Library, `firefox-zen.pins.max`)
 Pin Tab / Unpin Tab (e.g. 3/12), and Pin Tab is disabled once they're full;
 dragging a tab into the pinned area or onto the Library's Pins does nothing
 then. Windows restored from a session keep all their pinned tabs.
+
+Dragging a tab over the pinned tabs opens an empty tile where it will go;
+dropping it there pins it in that spot.
 
 ### Downloads
 

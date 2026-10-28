@@ -1,13 +1,14 @@
 /* Tab sections (JS/firefox-zen-tab-sections.uc.js). On with firefox-zen.tab-sections
  * Zen/Arc layout of the vertical tab list:
- *   folders (tab groups)
+ *   folders (tab groups) and tabs dropped above the line ([fz-above])
  *   ───────────── ↓ Clear      (Clear shows while the sidebar is hovered)
  *   + New Tab
- *   ungrouped tabs, newest last */
+ *   loose tabs, newest last */
 
 @media -moz-pref("firefox-zen.tab-sections") {
   #tabbrowser-arrowscrollbox[orient="vertical"] {
-    /* Tab groups keep order 0; the script keeps them first in the DOM too */
+    /* Items above the line keep order 0; the script keeps them first in the
+     * DOM too */
     & > #tabbrowser-arrowscrollbox-periphery {
       order: 1;
       align-self: stretch !important;
@@ -15,8 +16,14 @@
       align-items: stretch !important;
     }
 
-    & > :not(tab-group, #tabbrowser-arrowscrollbox-periphery) {
+    & > :not(tab-group, #tabbrowser-arrowscrollbox-periphery, [fz-above], :has(> .tabbrowser-tab[fz-above])) {
       order: 2;
+    }
+
+    /* While a tab is dragged, the script slides the line out of its way like
+     * Firefox slides the tabs */
+    #tabbrowser-tabs[movingtab] & > #tabbrowser-arrowscrollbox-periphery {
+      transition: var(--tab-dragover-transition, transform 200ms ease);
     }
 
     /* Firefox moves New Tab out of the list (to #vertical-tabs-newtab-button)
@@ -107,7 +114,12 @@
   }
 
   /* Nothing to clear */
-  #tabbrowser-arrowscrollbox:not(:has(> .tabbrowser-tab:not([hidden], [pinned]), > tab-split-view-wrapper:not([hidden])))
+  #tabbrowser-arrowscrollbox:not(
+      :has(
+          > .tabbrowser-tab:not([hidden], [pinned], [fz-above]),
+          > tab-split-view-wrapper:not([hidden], :has(> .tabbrowser-tab[fz-above]))
+        )
+    )
     #fz-clear-tabs {
     display: none !important;
   }

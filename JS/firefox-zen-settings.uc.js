@@ -130,7 +130,10 @@
           label: "Tab sections",
           description: "Folders above a line, new tabs below it.",
           preview: "sections",
-          tips: ["Hover the sidebar for a Clear button that closes the tabs below the line."],
+          tips: [
+            "Drag a tab above the line to keep it there without a folder.",
+            "Hover the sidebar for a Clear button that closes the tabs below the line.",
+          ],
         },
         {
           pref: "show-folder-icons",

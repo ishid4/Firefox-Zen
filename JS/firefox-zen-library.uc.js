@@ -734,6 +734,11 @@
     const list = h("div", { class: "fz-lib-tabs", "data-scroll-key": `space:${space.id}` });
     const seenGroups = new Set();
     const seenSplits = new Set();
+    // The sidebar's line (tab sections): folders and tabs dragged above it
+    // first, then the loose tabs. Without tab sections, after the folders.
+    const sections = !!window.FirefoxZenTabSections?.active();
+    const separator = () => h("div", { class: "fz-lib-separator", "aria-hidden": "true" });
+    let lineDrawn = false;
     for (const tab of tabs) {
       if (tab.group) {
         if (seenGroups.has(tab.group)) {
@@ -749,15 +754,20 @@
         if (!row) {
           continue;
         }
-        // The sidebar's line between folders and loose tabs (tab sections).
-        if (list.lastElementChild?.classList.contains("fz-lib-group")) {
-          list.append(h("div", { class: "fz-lib-separator", "aria-hidden": "true" }));
+        const below = sections
+          ? !tab.hasAttribute("fz-above")
+          : list.lastElementChild?.classList.contains("fz-lib-group");
+        if (below && !lineDrawn) {
+          list.append(separator());
+          lineDrawn = true;
         }
         list.append(row);
       }
     }
     if (!list.children.length) {
       list.append(h("div", { class: "fz-lib-hint fz-lib-column-empty", text: filterText ? "No matches" : "No tabs" }));
+    } else if (sections && !lineDrawn) {
+      list.append(separator());
     }
 
     return h(
@@ -1550,6 +1560,48 @@
         return { space, group, intoGroup: true };
       }
     }
+    // Tab sections: between the last item above the line and the line itself,
+    // right after that item (above the line); elsewhere, above or below it by
+    // the pointer (unless joining a folder)
+    const separator = window.FirefoxZenTabSections?.active()
+      ? column.querySelector(".fz-lib-tabs > .fz-lib-separator")
+      : null;
+    if (!separator) {
+      return tabSpot(column);
+    }
+    const line = separator.getBoundingClientRect();
+    const lineMiddle = line.top + line.height / 2;
+    const aboveItem = separator.previousElementSibling;
+    const lastRow = aboveItem?.classList.contains("fz-lib-group")
+      ? (aboveItem.querySelector(".fz-lib-group-tabs > :last-child") ?? aboveItem.querySelector(".fz-lib-group-head"))
+      : aboveItem;
+    const lastRect = lastRow?.getBoundingClientRect();
+    if (d.y <= lineMiddle && (!lastRect || d.y > lastRect.top + lastRect.height / 2)) {
+      const list = column.querySelector(".fz-lib-tabs").getBoundingClientRect();
+      showIndicator({ left: list.left + 4, y: line.top - 1, width: list.width - 8 }, false);
+      const rowTab = row => row && tabByKey.get(Number(row.dataset.tab));
+      if (aboveItem?.classList.contains("fz-lib-group")) {
+        return { space, after: groupByKey.get(Number(aboveItem.dataset.group)), group: null, above: true };
+      }
+      if (aboveItem) {
+        // A tab row, or a split view's (its last tab)
+        const after = rowTab(aboveItem.classList.contains("fz-lib-tab") ? aboveItem : aboveItem.querySelector(".fz-lib-tab:last-child"));
+        return { space, after, group: null, above: true };
+      }
+      const next = separator.nextElementSibling;
+      const before = rowTab(next?.classList.contains("fz-lib-tab") ? next : next?.querySelector(".fz-lib-tab"));
+      return before ? { space, before, group: null, above: true } : { space, above: true };
+    }
+    const spot = tabSpot(column);
+    if (!spot.intoGroup) {
+      spot.above = d.y < lineMiddle;
+    }
+    return spot;
+  }
+
+  function tabSpot(column) {
+    const d = drag;
+    const space = column.dataset.space;
     const rows = [...column.querySelectorAll(".fz-lib-tab:not(.fz-lib-dragging)")];
     const index = rows.findIndex(row => {
       const r = row.getBoundingClientRect();
@@ -1702,6 +1754,9 @@
       if (tab.group && tab.group !== place.group) {
         gBrowser.ungroupTab(tab);
       }
+    }
+    if (place.above !== undefined) {
+      window.FirefoxZenTabSections?.setAbove(tabs, place.above);
     }
   }
 
@@ -2551,6 +2606,7 @@
       tc.addEventListener(type, onTabsChanged);
     }
     window.addEventListener("FzSpacesChanged", onTabsChanged);
+    window.addEventListener("FzTabSectionsChanged", onTabsChanged);
     // An open private space's tabs changed in its own window.
     window.addEventListener("FzPrivateTabsChanged", onTabsChanged);
     // A private space's history / downloads list changed.
