@@ -231,13 +231,53 @@ toolbar .toolbarbutton-1 {
     }
 
     #tabbrowser-tabbox {
+      /* Margin on the sidebar's side, plus --fz-launcher-gap below */
+      --fz-sidebar-edge: var(--fz-window-border);
+
       margin: var(--fz-window-border) !important;
       overflow: clip;
       box-shadow: 0 0 0 1px light-dark(rgb(0 0 0 / 0.08), rgb(255 255 255 / 0.06));
 
+      &:not([sidebar-positionend]) {
+        margin-inline-start: calc(var(--fz-sidebar-edge) + var(--fz-launcher-gap, 0px)) !important;
+      }
+
+      &[sidebar-positionend] {
+        margin-inline-end: calc(var(--fz-sidebar-edge) + var(--fz-launcher-gap, 0px)) !important;
+      }
+
       /* A toolbar row above the page already frames its top */
       @media not -moz-pref("firefox-zen.compact-toolbar") {
         margin-block-start: 0 !important;
+      }
+    }
+
+    /* A vertical tabs sidebar beside the page already frames that edge, so no
+     * border strip between the two. The compact sidebar overlays the page
+     * instead, so the page keeps its border there. */
+    @media -moz-pref("sidebar.verticalTabs") and (not -moz-pref("firefox-zen.compact-sidebar")) {
+      #browser:has(> #sidebar-container:not([hidden])) > #tabbrowser-tabbox {
+        --fz-sidebar-edge: 0px;
+      }
+    }
+
+    /* Expand-on-hover: the expanded launcher leaves the layout to overlay the
+     * page, and Firefox keeps the page in place with a margin the size of the
+     * collapsed strip. The margin above overrides it, so the page would slide
+     * under the sidebar; add it back (same states as Firefox's sidebar.css). */
+    &[sidebar-expand-on-hover] #tabbrowser-tabbox:not([sidebar-panel-open]) {
+      @media not -moz-pref("browser.nova.enabled") {
+        &[sidebar-launcher-expanded][sidebar-launcher-hovered],
+        &[sidebar-ongoing-animations]:not([sidebar-launcher-expanded]) {
+          --fz-launcher-gap: var(--sidebar-launcher-collapsed-width);
+        }
+      }
+
+      @media -moz-pref("browser.nova.enabled") {
+        &[sidebar-launcher-expanded],
+        &[sidebar-ongoing-animations] {
+          --fz-launcher-gap: var(--sidebar-launcher-collapsed-width);
+        }
       }
     }
   }
