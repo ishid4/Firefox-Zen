@@ -156,6 +156,47 @@
       ],
     },
     {
+      id: "sidebar",
+      label: "Sidebar",
+      settings: [
+        {
+          // Shown as the layout picker (buildLayoutSetting); the pref is what
+          // a settings file and Reset to defaults cover.
+          pref: "compact-sidebar",
+          default: false,
+          layout: true,
+          label: "Sidebar layout",
+          description: "How the tabs sidebar shows. Sets Firefox's own sidebar options too.",
+          keywords: "compact collapse collapsed expand expanded icons hover auto-hide autohide hide vertical tabs",
+          tips: [
+            "Firefox's sidebar button still switches between full and icons.",
+            "Auto-hide slides the sidebar out over the page when you hover the window edge.",
+          ],
+        },
+        {
+          pref: "sidebar-urlbar",
+          default: false,
+          label: "Address bar in sidebar",
+          description: "Move the toolbar and address bar to the top of the expanded sidebar.",
+          preview: "sidebarurl",
+          // Set while the switch can't be used (buildSetting).
+          unavailable: () =>
+            currentLayout()?.icons && "Not available with the Icons layouts. Pick Full or Expand on hover to use it.",
+          tips: [
+            "Goes back to the top while the sidebar is collapsed, and while customizing the toolbar.",
+          ],
+        },
+        {
+          pref: "show-customize-button",
+          default: true,
+          label: "Customize sidebar button",
+          description: "Firefox's gear in the sidebar tools.",
+          preview: "gear",
+          tips: ["Turned off, Customize sidebar is still in the sidebar's right-click menu."],
+        },
+      ],
+    },
+    {
       id: "urlbar",
       label: "Address bar",
       settings: [
@@ -177,14 +218,6 @@
             "Shift+click (new window) and middle-click paste still open a real tab.",
           ],
         },
-        {
-          pref: "sidebar-urlbar",
-          default: false,
-          label: "Address bar in sidebar",
-          description: "Move the toolbar and address bar to the top of the expanded sidebar.",
-          preview: "sidebarurl",
-          tips: ["Goes back to the top while the sidebar is collapsed, and while customizing the toolbar."],
-        },
       ],
     },
     {
@@ -200,17 +233,6 @@
           tips: ["With the address bar in the sidebar, the window controls hide too."],
         },
         {
-          pref: "compact-sidebar",
-          default: false,
-          label: "Compact sidebar",
-          description: "Hide the tabs sidebar until you hover the edge of the window.",
-          preview: "sidebar",
-          tips: [
-            "Replaces Firefox's “Expand sidebar on hover”; your choice comes back when this is off.",
-            "Turning “Expand sidebar on hover” back on turns this off.",
-          ],
-        },
-        {
           pref: "window-border",
           default: true,
           label: "Window border",
@@ -218,14 +240,6 @@
           preview: "border",
           tips: ["Hidden in fullscreen."],
           options: [BORDER_WIDTH],
-        },
-        {
-          pref: "show-customize-button",
-          default: true,
-          label: "Customize sidebar button",
-          description: "Firefox's gear in the sidebar tools.",
-          preview: "gear",
-          tips: ["Turned off, Customize sidebar is still in the sidebar's right-click menu."],
         },
       ],
     },
@@ -280,8 +294,9 @@
     { from: "compact-mode", to: "compact-toolbar", invert: false },
   ];
 
-  // Prefs that are no longer read (the Library is always on now).
-  const RETIRED = ["library"];
+  // Prefs that are no longer read (the Library is always on now; the layout
+  // picker sets sidebar.visibility itself instead of saving and restoring it).
+  const RETIRED = ["library", "saved-sidebar-visibility"];
 
   const isOn = s => s.core || Services.prefs.getBoolPref(PREF_BRANCH + s.pref, false);
 
@@ -511,17 +526,6 @@
         mock.append(
           h("div", { class: "fz-mock-toolbar" }, h("div", { class: "fz-mock-urlbar" })),
           h("div", { class: "fz-mock-page" })
-        );
-        break;
-      case "sidebar":
-        mock.append(
-          h("div", { class: "fz-mock-toolbar" }, h("div", { class: "fz-mock-urlbar" })),
-          h(
-            "div",
-            { class: "fz-mock-body" },
-            h("div", { class: "fz-mock-side" }, h("span"), h("span"), h("span")),
-            h("div", { class: "fz-mock-page" })
-          )
         );
         break;
       case "sidebarurl":
@@ -784,10 +788,136 @@
   // Lower-cased text a search matches against: everything the row shows.
   function searchText(s) {
     const options = (s.options ?? []).flatMap(o => [o.label, o.unit, o.hint, ...(o.keys ?? []).map(k => k.label)]);
-    return [s.label, s.description, ...(s.tips ?? []), ...options].filter(Boolean).join(" ").toLowerCase();
+    const layouts = s.layout ? LAYOUTS.flatMap(l => [l.group, l.label, l.hint]) : [];
+    return [s.label, s.description, s.keywords, ...(s.tips ?? []), ...options, ...layouts]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+  }
+
+  // Sidebar layout: one row of tiles, each setting compact sidebar,
+  // sidebar.visibility and the expanded state together (applyLayout).
+  function buildLayoutSetting(s) {
+    // Says so when a layout turned Address bar in sidebar off.
+    const notice = h("p", {
+      class: "fz-hint fz-layout-notice",
+      role: "status",
+      text: "Address bar in sidebar is off: the Icons layouts have no room for it.",
+      hidden: true,
+    });
+    const pick = l => (notice.hidden = !applyLayout(s, l));
+
+    const tiles = LAYOUTS.map(l =>
+      h(
+        "button",
+        {
+          type: "button",
+          role: "radio",
+          class: "fz-layout-tile",
+          "data-layout": l.id,
+          title: l.hint,
+          "aria-label": `${l.group}: ${l.label}`,
+          onclick: () => pick(l),
+        },
+        h(
+          "div",
+          { class: `fz-mock fz-layout-mock fz-layout-${l.id}`, "aria-hidden": "true" },
+          h(
+            "div",
+            { class: "fz-mock-body" },
+            h("div", { class: "fz-mock-side" }, h("span"), h("span"), h("span")),
+            h("div", { class: "fz-mock-page" })
+          )
+        ),
+        h("span", { class: "fz-layout-label", text: l.label })
+      )
+    );
+
+    // Arrow keys pick the next layout, like a radio group.
+    const group = h(
+      "div",
+      {
+        class: "fz-layout-tiles",
+        role: "radiogroup",
+        "aria-label": s.label,
+        onkeydown: e => {
+          const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
+          if (!step) {
+            return;
+          }
+          e.preventDefault();
+          const from = Math.max(0, tiles.indexOf(e.target));
+          const i = (from + step + tiles.length) % tiles.length;
+          tiles[i].focus();
+          pick(LAYOUTS[i]);
+        },
+      },
+      ...[ALWAYS_SHOWN, AUTO_HIDE].map(name =>
+        h(
+          "div",
+          { class: "fz-layout-group", "data-count": LAYOUTS.filter(l => l.group === name).length },
+          h("span", { class: "fz-layout-group-title", text: name }),
+          h("div", { class: "fz-layout-group-tiles" }, ...tiles.filter((_, i) => LAYOUTS[i].group === name))
+        )
+      )
+    );
+
+    // Shown when the current setup isn't one of the tiles.
+    const note = h("p", { class: "fz-hint fz-layout-note" });
+
+    const reset = h("button", {
+      type: "button",
+      class: "fz-row-reset",
+      text: "Reset",
+      title: `Reset ${s.label} to ${LAYOUTS[0].group}: ${LAYOUTS[0].label}`,
+      onclick: () => pick(LAYOUTS[0]),
+    });
+
+    const row = h(
+      "div",
+      { class: "fz-setting fz-layout-setting", "data-pref": s.pref },
+      h(
+        "div",
+        { class: "fz-setting-body" },
+        h(
+          "span",
+          { class: "fz-setting-head" },
+          h("span", { class: "fz-setting-title", text: s.label }),
+          h("span", { class: "fz-modified", title: "Changed from the default", "aria-label": "Changed" }),
+          reset
+        ),
+        h("p", { class: "fz-setting-desc", text: s.description })
+      ),
+      group,
+      note,
+      notice,
+      h("ul", { class: "fz-tips" }, ...s.tips.map(t => h("li", { text: t })))
+    );
+    row.fzSearch = searchText(s);
+
+    syncers.push(() => {
+      const current = currentLayout();
+      tiles.forEach((tile, i) => {
+        const on = LAYOUTS[i] === current;
+        tile.setAttribute("aria-checked", String(on));
+        // One tab stop: the picked tile, or the first when none is.
+        tile.tabIndex = on || (!current && i === 0) ? 0 : -1;
+      });
+      row.toggleAttribute("data-modified", current !== LAYOUTS[0]);
+      note.hidden = !!current;
+      if (!Services.prefs.getBoolPref(VERTICAL_TABS_PREF, false)) {
+        note.textContent = "Tabs are horizontal now. Picking a layout turns on vertical tabs.";
+      } else {
+        note.textContent = "Firefox's sidebar is set to hide. Pick a layout to switch back.";
+      }
+    });
+    return row;
   }
 
   function buildSetting(s) {
+    if (s.layout) {
+      return buildLayoutSetting(s);
+    }
     const control = s.core
       ? h("span", { class: "fz-badge", text: "Core" })
       : h("input", {
@@ -811,6 +941,8 @@
           options?.el
         )
       );
+
+    const unavailableNote = s.unavailable && h("p", { class: "fz-setting-unavailable", hidden: true });
 
     // Shown while the setting differs from its default.
     const reset = h("button", {
@@ -842,7 +974,8 @@
             h("span", { class: "fz-modified", title: "Changed from the default", "aria-label": "Changed" }),
             reset
           ),
-          h("p", { class: "fz-setting-desc", text: s.description })
+          h("p", { class: "fz-setting-desc", text: s.description }),
+          unavailableNote
         ),
         control
       ),
@@ -851,11 +984,19 @@
     row.fzSearch = searchText(s);
 
     syncers.push(() => {
-      const on = isOn(s);
+      // Unavailable: shown off and disabled; the pref is left as it is.
+      const why = s.unavailable?.() || "";
+      const on = isOn(s) && !why;
       row.toggleAttribute("data-on", on);
       row.toggleAttribute("data-modified", isModified(s));
+      row.toggleAttribute("data-unavailable", !!why);
+      if (unavailableNote) {
+        unavailableNote.textContent = why;
+        unavailableNote.hidden = !why;
+      }
       if (!s.core) {
         control.checked = on;
+        control.disabled = !!why;
       }
       // Collapsed options stay out of the tab order.
       more?.toggleAttribute("inert", !on);
@@ -1022,33 +1163,105 @@
 
   window.FirefoxZenSettings = { buildView };
 
-  // ---- compact sidebar vs. Firefox's "Expand sidebar on hover" ----
-  // Both reveal the sidebar on hover and fight at the window edge (the sidebar
-  // flickers open/closed). Compact sidebar takes over while it's on: the user's
-  // sidebar.visibility is saved and restored when compact sidebar is turned
-  // off. Every step is idempotent, so running it in each window is harmless.
+  // ---- sidebar layout ----
+  // A layout is compact sidebar (theme/general.css) + Firefox's
+  // sidebar.visibility + whether the launcher is expanded (Firefox's sidebar
+  // button, per window). The picker shows whichever tile matches, so changes
+  // made with Firefox's own controls show up in it.
   const COMPACT_SIDEBAR_PREF = PREF_BRANCH + "compact-sidebar";
-  const SAVED_VISIBILITY_PREF = PREF_BRANCH + "saved-sidebar-visibility";
   const VISIBILITY_PREF = "sidebar.visibility";
+  const VERTICAL_TABS_PREF = "sidebar.verticalTabs";
+  const ALWAYS_SHOW = "always-show";
   const EXPAND_ON_HOVER = "expand-on-hover";
 
+  // Tiles in two groups: compact sidebar off ("Always shown") and on
+  // ("Auto-hide"). The first one is the default (Firefox's own). `icons`:
+  // the sidebar stays collapsed, so there's no room for the address bar.
+  const ALWAYS_SHOWN = "Always shown";
+  const AUTO_HIDE = "Auto-hide";
+  const LAYOUTS = [
+    { id: "full", group: ALWAYS_SHOWN, label: "Full", compact: false, visibility: ALWAYS_SHOW, expanded: true, hint: "Tabs with titles, always shown." },
+    { id: "icons", group: ALWAYS_SHOWN, label: "Icons", icons: true, compact: false, visibility: ALWAYS_SHOW, expanded: false, hint: "A strip of tab icons, always shown." },
+    { id: "hover", group: ALWAYS_SHOWN, label: "Expand on hover", compact: false, visibility: EXPAND_ON_HOVER, expanded: false, hint: "Icons that expand to full tabs while hovered." },
+    { id: "autohide", group: AUTO_HIDE, label: "Full", compact: true, visibility: ALWAYS_SHOW, expanded: true, hint: "Hidden; full tabs slide out at the window edge." },
+    { id: "autohide-icons", group: AUTO_HIDE, label: "Icons", icons: true, compact: true, visibility: ALWAYS_SHOW, expanded: false, hint: "Hidden; tab icons slide out at the window edge." },
+  ];
+
+  // The tile matching this window, or null (horizontal tabs, "hide sidebar").
+  function currentLayout() {
+    if (!Services.prefs.getBoolPref(VERTICAL_TABS_PREF, false)) {
+      return null;
+    }
+    const compact = Services.prefs.getBoolPref(COMPACT_SIDEBAR_PREF, false);
+    const visibility = Services.prefs.getStringPref(VISIBILITY_PREF, ALWAYS_SHOW);
+    // Expand on hover expands while hovered: not part of the choice.
+    const expanded = sidebarExpanded(window);
+    return (
+      LAYOUTS.find(
+        l =>
+          l.compact === compact &&
+          l.visibility === visibility &&
+          (visibility === EXPAND_ON_HOVER || l.expanded === expanded)
+      ) ?? null
+    );
+  }
+
+  // Returns true when it turned Address bar in sidebar off.
+  function applyLayout(s, l) {
+    const urlbar = SETTINGS.find(x => x.pref === "sidebar-urlbar");
+    const urlbarOff = !!l.icons && isOn(urlbar);
+    if (urlbarOff) {
+      setOn(urlbar, false);
+    }
+    // Compact off before leaving always-show and on after reaching it, so
+    // syncSidebarVisibility never sees compact + expand-on-hover.
+    if (!l.compact) {
+      setOn(s, false);
+    }
+    if (!Services.prefs.getBoolPref(VERTICAL_TABS_PREF, false)) {
+      Services.prefs.setBoolPref(VERTICAL_TABS_PREF, true);
+    }
+    // Firefox expands the launcher when this switches to always-show.
+    Services.prefs.setStringPref(VISIBILITY_PREF, l.visibility);
+    if (l.compact) {
+      setOn(s, true);
+    }
+    if (l.visibility !== EXPAND_ON_HOVER) {
+      for (const win of Services.wm.getEnumerator("navigator:browser")) {
+        // An open Library holds the sidebar expanded: it applies this on close.
+        if (win.FirefoxZenLibrary?.setSidebarExpanded(l.expanded)) {
+          continue;
+        }
+        // Otherwise the same as clicking Firefox's sidebar button.
+        if (sidebarExpanded(win) !== l.expanded) {
+          win.SidebarController?.handleToolbarButtonClick();
+        }
+      }
+      // The picker reads the held state, which no attribute change announces.
+      sync();
+    }
+    return urlbarOff;
+  }
+
+  // Expanded or collapsed, apart from an open Library's hold on it.
+  const sidebarExpanded = win =>
+    win.FirefoxZenLibrary?.sidebarExpanded() ??
+    !!win.document.getElementById("tabbrowser-tabs")?.hasAttribute("expanded");
+
+  // Compact sidebar and Firefox's "Expand sidebar on hover" both reveal the
+  // sidebar on hover and fight at the window edge (it flickers open/closed),
+  // so they never stay on together; the newest choice wins. Idempotent, so
+  // running it in each window is harmless.
   function syncSidebarVisibility(changed) {
     const compact = Services.prefs.getBoolPref(COMPACT_SIDEBAR_PREF, false);
     const visibility = Services.prefs.getStringPref(VISIBILITY_PREF, "");
-
-    // User turned expand-on-hover back on while compact: their newest choice wins.
-    if (changed === VISIBILITY_PREF && compact && visibility === EXPAND_ON_HOVER) {
-      Services.prefs.clearUserPref(SAVED_VISIBILITY_PREF);
-      Services.prefs.clearUserPref(COMPACT_SIDEBAR_PREF);
+    if (!compact || visibility !== EXPAND_ON_HOVER) {
       return;
     }
-
-    if (compact && visibility === EXPAND_ON_HOVER) {
-      Services.prefs.setStringPref(SAVED_VISIBILITY_PREF, visibility);
-      Services.prefs.setStringPref(VISIBILITY_PREF, "always-show");
-    } else if (!compact && Services.prefs.prefHasUserValue(SAVED_VISIBILITY_PREF)) {
-      Services.prefs.setStringPref(VISIBILITY_PREF, Services.prefs.getStringPref(SAVED_VISIBILITY_PREF));
-      Services.prefs.clearUserPref(SAVED_VISIBILITY_PREF);
+    if (changed === VISIBILITY_PREF) {
+      Services.prefs.clearUserPref(COMPACT_SIDEBAR_PREF);
+    } else {
+      Services.prefs.setStringPref(VISIBILITY_PREF, ALWAYS_SHOW);
     }
   }
 
@@ -1077,11 +1290,20 @@
   };
   Services.prefs.addObserver(PREF_BRANCH, observer);
   Services.prefs.addObserver(VISIBILITY_PREF, observer);
+  Services.prefs.addObserver(VERTICAL_TABS_PREF, observer);
+  // Firefox's sidebar button expands/collapses: keep the layout picker current.
+  const expandedObserver = new MutationObserver(sync);
+  const tabs = document.getElementById("tabbrowser-tabs");
+  if (tabs) {
+    expandedObserver.observe(tabs, { attributes: true, attributeFilter: ["expanded"] });
+  }
   window.addEventListener(
     "unload",
     () => {
       Services.prefs.removeObserver(PREF_BRANCH, observer);
       Services.prefs.removeObserver(VISIBILITY_PREF, observer);
+      Services.prefs.removeObserver(VERTICAL_TABS_PREF, observer);
+      expandedObserver.disconnect();
     },
     { once: true }
   );

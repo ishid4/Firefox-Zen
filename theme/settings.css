@@ -473,10 +473,6 @@
   min-height: 0;
 }
 
-.fz-preview-sidebar .fz-mock-page {
-  margin-inline-start: 0;
-}
-
 .fz-mock-side {
   display: flex;
   flex-direction: column;
@@ -494,10 +490,181 @@
   }
 }
 
-.fz-setting[data-on] .fz-preview-sidebar .fz-mock-side {
-  width: 3px;
-  padding-inline: 0;
-  opacity: 0;
+/* ---- Sidebar layout: one row of tiles ---- */
+.fz-layout-setting {
+  gap: 10px;
+  padding-block: 12px;
+}
+
+/* Two groups side by side (Always shown: 3 tiles, Auto-hide: 2), every
+ * tile the same width; they stack when the Library is narrow. */
+.fz-layout-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.fz-layout-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 3 1 300px;
+  min-width: 0;
+
+  &[data-count="2"] {
+    flex: 2 1 196px;
+  }
+
+  & + & {
+    padding-inline-start: 16px;
+    border-inline-start: 1px solid var(--fz-line);
+  }
+}
+
+.fz-layout-group-title {
+  color: var(--fz-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.fz-layout-group-tiles {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+
+.fz-layout-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 !important;
+  padding: 6px !important;
+  border: 1px solid var(--fz-line) !important;
+  border-radius: 9px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+
+  &:hover {
+    background: var(--fz-surface-hover) !important;
+  }
+
+  &[aria-checked="true"] {
+    border-color: var(--fz-accent) !important;
+    background: color-mix(in srgb, var(--fz-accent) 10%, transparent) !important;
+    box-shadow: inset 0 0 0 1px var(--fz-accent);
+
+    & .fz-layout-label {
+      font-weight: 600;
+    }
+  }
+
+  &:focus-visible {
+    outline: var(--focus-outline, 2px solid var(--fz-accent));
+    outline-offset: 2px;
+  }
+}
+
+.fz-layout-label {
+  font-size: 12px;
+  text-align: center;
+}
+
+.fz-layout-note,
+.fz-layout-notice,
+.fz-layout-setting .fz-tips {
+  margin: 0;
+}
+
+.fz-layout-notice {
+  color: var(--fz-accent);
+}
+
+/* A switch that can't be used with the current setup (e.g. Address bar in
+ * sidebar with an Icons layout) */
+.fz-setting-unavailable {
+  margin: 0;
+  color: var(--fz-accent);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.fz-setting[data-unavailable] {
+  & .fz-switch {
+    opacity: 0.4;
+  }
+
+  & .fz-mock {
+    opacity: 0.5;
+  }
+}
+
+.fz-layout-mock {
+  height: 52px;
+
+  & .fz-mock-body {
+    position: relative;
+    padding-top: 4px;
+  }
+
+  & .fz-mock-page {
+    margin-inline-start: 0;
+  }
+}
+
+/* Icons: a narrow strip of square icons */
+.fz-layout-icons,
+.fz-layout-hover,
+.fz-layout-autohide-icons {
+  & .fz-mock-side {
+    width: 8px;
+    padding-inline: 3px;
+
+    & > span {
+      width: 8px;
+      height: 8px;
+      border-radius: 2px;
+    }
+  }
+}
+
+/* Expand on hover: the icon strip, with the full width it expands to dashed over the page */
+.fz-layout-hover .fz-mock-body::after {
+  content: "";
+  position: absolute;
+  inset-block: 4px 4px;
+  inset-inline-start: 0;
+  width: 34px;
+  border: 1px dashed var(--fz-accent);
+  border-inline-start: none;
+  border-radius: 0 4px 4px 0;
+  background: color-mix(in srgb, var(--fz-accent) 10%, transparent);
+}
+
+/* Auto-hide: the page takes the whole width; the sidebar is a dashed
+ * overlay that slides out from a sliver at the edge */
+.fz-layout-autohide,
+.fz-layout-autohide-icons {
+  & .fz-mock-page {
+    margin-inline-start: 4px;
+  }
+
+  & .fz-mock-side {
+    position: absolute;
+    inset-block: 4px 4px;
+    inset-inline-start: 0;
+    z-index: 1;
+    border: 1px dashed var(--fz-accent);
+    border-inline-start: none;
+    border-radius: 0 4px 4px 0;
+    background: color-mix(in srgb, var(--arrowpanel-background, Canvas) 80%, var(--fz-accent));
+  }
+}
+
+.fz-layout-autohide .fz-mock-side {
+  width: 26px;
 }
 
 /* Spaces: sidebar with a space switcher at the bottom */

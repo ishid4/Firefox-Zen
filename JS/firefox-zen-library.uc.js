@@ -120,9 +120,11 @@
     let left = area.left;
     let right = area.right;
     // An expanded sidebar that floats over the page (expand on hover, compact
-    // sidebar): start next to it instead of under it.
+    // sidebar): start next to it instead of under it. Not for a hover-expanded
+    // sidebar on Settings (not held): the Library would jump on every hover.
     const side = document.getElementById("sidebar-container")?.getBoundingClientRect();
-    if (sidebarHeld && side?.width && side.right > left && side.left < right) {
+    const beside = sidebarHeld || Services.prefs.getBoolPref("firefox-zen.compact-sidebar", false);
+    if (beside && side?.width && side.right > left && side.left < right) {
       if (side.left <= left + 1) {
         left = side.right;
       } else {
@@ -162,8 +164,14 @@
   }
 
   // ---- sidebar held expanded while open ----
+  // Held on every view but Settings, where the sidebar shows its real layout
+  // as a live preview of the layout picker (and Firefox's sidebar button works
+  // as usual). A compact sidebar stays slid in on every view
+  // ([fz-library-hold], theme/general.css; set in open/close).
   // { wasExpanded, isMenuPopupOpen } while held.
   let sidebarHeld = null;
+
+  const holdsSidebar = name => name !== "settings";
 
   function holdSidebar() {
     if (sidebarHeld) {
@@ -171,8 +179,6 @@
     }
     const sc = window.SidebarController;
     sidebarHeld = { wasExpanded: false, isMenuPopupOpen: null };
-    // Compact sidebar: stay slid in (theme/general.css).
-    document.getElementById("sidebar-container")?.setAttribute("fz-library-hold", "");
     if (!sc?._state || !Services.prefs.getBoolPref("sidebar.verticalTabs", false)) {
       return;
     }
@@ -197,17 +203,38 @@
     }
     sidebarHeld = null;
     const sc = window.SidebarController;
-    document.getElementById("sidebar-container")?.removeAttribute("fz-library-hold");
     if (!sc?._state) {
       return;
     }
     if (held.isMenuPopupOpen) {
       sc._isMenuPopupOpen = held.isMenuPopupOpen;
+    }
+    // By the mode now: Settings may have changed it while the Library was open.
+    if (sc.sidebarRevampVisibility === "expand-on-hover") {
       // Collapses unless the pointer is on the sidebar.
       sc._reconcileHoverState?.();
-    } else if (!held.wasExpanded && sc._state.launcherExpanded) {
-      sc._state.launcherExpanded = false;
+    } else if (sc._state.launcherExpanded !== held.wasExpanded) {
+      sc._state.launcherExpanded = held.wasExpanded;
+      sc.updateToolbarButton?.();
     }
+  }
+
+  // Whether the sidebar is expanded apart from the Library's hold: what it
+  // goes back to on close. Settings' layout picker reads and sets it.
+  function sidebarExpanded() {
+    if (sidebarHeld) {
+      return sidebarHeld.wasExpanded;
+    }
+    return !!document.getElementById("tabbrowser-tabs")?.hasAttribute("expanded");
+  }
+
+  // Returns false when not held: the caller expands/collapses it itself.
+  function setSidebarExpanded(expanded) {
+    if (!sidebarHeld) {
+      return false;
+    }
+    sidebarHeld.wasExpanded = expanded;
+    return true;
   }
 
   function syncFooterButton() {
@@ -221,7 +248,10 @@
     }
     if (!root) {
       picked.clear();
-      holdSidebar();
+      document.getElementById("sidebar-container")?.setAttribute("fz-library-hold", "");
+      if (holdsSidebar(view)) {
+        holdSidebar();
+      }
       root = buildRoot();
       gBrowser.tabbox.append(root);
       origin = null;
@@ -258,6 +288,7 @@
     const old = root;
     root = null;
     main = null;
+    document.getElementById("sidebar-container")?.removeAttribute("fz-library-hold");
     releaseSidebar();
     syncFooterButton();
     if (reducedMotion.matches) {
@@ -294,6 +325,14 @@
     // Mods and Settings are detours: the footer button opens the last content view.
     if (view !== "mods" && view !== "settings") {
       Services.prefs.setStringPref(VIEW_PREF, view);
+    }
+    if (root) {
+      if (holdsSidebar(view)) {
+        holdSidebar();
+      } else {
+        releaseSidebar();
+      }
+      followSidebar();
     }
     if (render && root) {
       renderView();
@@ -2580,7 +2619,7 @@
     },
   };
 
-  window.FirefoxZenLibrary = { isOpen, open, close, toggle, view: () => view };
+  window.FirefoxZenLibrary = { isOpen, open, close, toggle, view: () => view, sidebarExpanded, setSidebarExpanded };
 
   async function start() {
     await window.delayedStartupPromise;

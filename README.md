@@ -113,8 +113,8 @@ Then start Firefox and click **Restart now** when Firefox-Zen asks (first start 
 ## Usage
 
 - Click the **Firefox-Zen** toolbar button to open **Settings**. Each feature
-  has a switch and a preview; turn on what you want (Spaces, compact sidebar,
-  address bar in sidebar, …).
+  has a switch and a preview; turn on what you want (Spaces, address bar in
+  sidebar, …), and pick a sidebar layout (Full, Icons, Auto-hide, …) in one click.
 - Once Spaces is on, use the bar under the tabs to switch spaces and **+** to
   create spaces, folders or private spaces. Right-click a space for more.
 - Its first button opens the **Library** (spaces, history, downloads, mods, settings).

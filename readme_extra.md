@@ -39,7 +39,7 @@ Then open `about:support`, click **Clear startup cache…**, and restart.
 | Pref | Default | Effect |
 | --- | --- | --- |
 | `firefox-zen.compact-toolbar` | false | Hide the toolbar until hovered (with the address bar in the sidebar: the window controls hide too and the sidebar/page use the full window height) |
-| `firefox-zen.compact-sidebar` | false | Hide the vertical tabs sidebar until its edge is hovered |
+| `firefox-zen.compact-sidebar` | false | Hide the vertical tabs sidebar until its edge is hovered (the Auto-hide layouts in Settings → Sidebar) |
 | `firefox-zen.window-border` | true | A thin frame in the toolbar's color around the page, with rounded corners (not in fullscreen) |
 | `firefox-zen.window-border.width` | 6 | The window border's width in pixels (1-24) |
 | `firefox-zen.spaces` | false | Zen-style Spaces (see below) |
@@ -62,10 +62,17 @@ Then open `about:support`, click **Clear startup cache…**, and restart.
 | `firefox-zen.mods.safe-mode` | false | Load no mods on the next start (then clears itself) |
 | `firefox-zen.mods.auto-update-check` | true | Check mods for updates at startup, at most once a day |
 
-Compact sidebar replaces Firefox's own "Expand sidebar on hover" (the two fight
-at the window edge): turning it on saves your `sidebar.visibility` and switches
-it to "always show"; turning it off restores it. Re-enabling "Expand sidebar on
-hover" while compact sidebar is on turns compact sidebar off.
+Settings → Sidebar → **Sidebar layout** sets the sidebar in one click:
+**Always shown** (Full, Icons, Expand on hover) or **Auto-hide** (compact
+sidebar: Full, Icons). The Icons layouts have no room for the address bar, so
+picking one turns Address bar in sidebar off. While Settings is open the
+sidebar shows the real layout, as a live preview (other Library views keep it
+expanded for dragging). Each layout sets compact
+sidebar, Firefox's `sidebar.visibility` and the expanded/collapsed state (as
+Firefox's sidebar button does) together, and turns on vertical tabs if needed.
+Compact sidebar and Firefox's own "Expand sidebar on hover" fight at the window
+edge, so they never stay on together: turning on "Expand sidebar on hover"
+while compact sidebar is on turns compact sidebar off.
 
 Prefs that default to `true` are written by the settings script on first run.
 Without the loader they stay unset and read as `false`.
