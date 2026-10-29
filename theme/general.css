@@ -49,6 +49,16 @@
 #PanelUI-button {
   order: -1 !important;
 }
+
+/* macOS: Firefox also gives the traffic lights order -1; keep them before
+ * the moved menu button, with room before the first toolbar button (the
+ * first button's start padding is removed below) */
+@media (-moz-platform: macos) {
+  #nav-bar > .titlebar-buttonbox-container:-moz-locale-dir(ltr) {
+    order: -2 !important;
+    margin-inline-end: 8px;
+  }
+}
 #PanelUI-menu-button {
   padding: 0 var(--toolbarbutton-outer-padding) 0
     var(--toolbar-start-end-padding) !important;

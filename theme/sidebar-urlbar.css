@@ -209,6 +209,12 @@
     & > .titlebar-buttonbox-container {
       -moz-window-dragging: no-drag;
     }
+
+    /* macOS traffic lights sit at the start of the window (Firefox's own
+     * order rule doesn't apply here: the row isn't a toolbar) */
+    @media (-moz-platform: macos) {
+      justify-content: flex-start;
+    }
   }
 }
 
