@@ -2634,7 +2634,8 @@
 
   const prefObserver = {
     observe(_subject, _topic, name) {
-      if (name === SPACES_PREF) {
+      // Spaces on/off, or a color scheme changed (columns show theirs)
+      if (name === SPACES_PREF || name.startsWith(FzColors.PREF_BRANCH)) {
         onTabsChanged();
       }
     },
@@ -2698,10 +2699,12 @@
     });
 
     Services.prefs.addObserver(SPACES_PREF, prefObserver);
+    Services.prefs.addObserver(FzColors.PREF_BRANCH, prefObserver);
     window.addEventListener(
       "unload",
       () => {
         Services.prefs.removeObserver(SPACES_PREF, prefObserver);
+        Services.prefs.removeObserver(FzColors.PREF_BRANCH, prefObserver);
       },
       { once: true }
     );

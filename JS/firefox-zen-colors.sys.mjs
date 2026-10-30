@@ -8,9 +8,14 @@
 // JS/firefox-zen-colors.uc.js; theme/colors.css maps the palette onto
 // Firefox's own variables.
 //
-// A scheme is { id, name, seeds, mode?, light?, dark? }:
-// - seeds: 1-4 "#rrggbb" colors. 1 paints a flat window, 2-3 a gradient,
-//   4 a blend with one color per corner.
+// A scheme is { id, name, seeds, gradient?, grain?, mode?, light?, dark? }:
+// - seeds: 1-4 "#rrggbb" colors. 1 paints a flat window, more a gradient.
+//   Only their hue and colorfulness count (the editor's wheel): how light
+//   each surface is comes from the mode.
+// - gradient: { type, angle }. type "linear" (along angle), "radial" (from
+//   the window edge at angle) or "corners" (each color from its own corner);
+//   missing: corners for 4 colors, else linear at 135deg.
+// - grain: 0-1, film grain over the window.
 // - mode: "light" / "dark" forces that mode while the scheme is shown
 //   (missing: the mode setting decides).
 // - light / dark: tweaks for that half only, { tint, shift }: tint scales how
@@ -43,6 +48,14 @@ const MODES = ["system", "light", "dark"];
 export const FIREFOX_ID = "firefox";
 const HEX_RE = /^#[0-9a-f]{6}$/i;
 const MAX_SEEDS = 4;
+const GRADIENTS = ["linear", "radial", "corners"];
+// Chroma at the color wheel's rim; seeds beyond it look the same anyway
+// (accents stop at 0.2, backgrounds well before)
+export const WHEEL_CHROMA = 0.2;
+// Lightness the wheel and its seeds are shown at
+const WHEEL_LIGHTNESS = 0.7;
+// Grain at 100%: opacity of the noise
+const GRAIN_OPACITY = 0.22;
 
 // Contrast targets (WCAG ratio)
 const TEXT_CONTRAST = 7;
@@ -197,18 +210,59 @@ function surface(seed, L, mode, tweaks) {
 
 // The window background: flat (1 seed), a linear gradient (2-3) or one color
 // per corner (4). Its colors are also what text has to be readable on.
-function frameOf(seeds, mode, tweaks) {
-  const L = SURFACES[mode].frame;
-  const stops = seeds.map(seed => oklchHex(surface(seed, L, mode, tweaks)));
-  let gradient = "none";
-  if (stops.length == 2 || stops.length == 3) {
-    gradient = `linear-gradient(135deg, ${stops.join(", ")})`;
-  } else if (stops.length == 4) {
-    const corners = ["0% 0%", "100% 0%", "100% 100%", "0% 100%"];
-    gradient = stops
-      .map((c, i) => `radial-gradient(circle at ${corners[i]}, ${c}, ${withAlpha(c, 0)} 70%)`)
+export function gradientOf(scheme) {
+  const g = scheme?.gradient || {};
+  const count = seedsOf(scheme).length;
+  return {
+    type: GRADIENTS.includes(g.type) ? g.type : count == 4 ? "corners" : "linear",
+    angle: Number.isFinite(g.angle) ? ((Math.round(g.angle) % 360) + 360) % 360 : 135,
+  };
+}
+
+// Where each color sits for "corners", by count; turned by the angle
+const CORNERS = {
+  2: [[0, 0], [100, 100]],
+  3: [[0, 0], [100, 0], [50, 100]],
+  4: [[0, 0], [100, 0], [100, 100], [0, 100]],
+};
+
+// The gradient as CSS images (a comma list for corners). `color` writes a
+// stop: a hex, or (for the fade) one whose alpha follows --fz-fade.
+function gradientCss(stops, style, color) {
+  if (stops.length < 2) {
+    return "none";
+  }
+  const { type, angle } = style;
+  const rad = (angle * Math.PI) / 180;
+  if (type == "radial") {
+    // The center on the window edge, in the angle's direction
+    const x = Math.round(50 + 50 * Math.sin(rad));
+    const y = Math.round(50 - 50 * Math.cos(rad));
+    return `radial-gradient(farthest-corner at ${x}% ${y}%, ${stops.map(c => color(c, 1)).join(", ")})`;
+  }
+  if (type == "corners") {
+    // Rotated about the middle by the angle (135deg: unturned)
+    const turn = rad - (135 * Math.PI) / 180;
+    return stops
+      .map((c, i) => {
+        const [px, py] = CORNERS[stops.length][i];
+        const dx = px - 50;
+        const dy = py - 50;
+        const x = Math.round(50 + dx * Math.cos(turn) - dy * Math.sin(turn));
+        const y = Math.round(50 + dx * Math.sin(turn) + dy * Math.cos(turn));
+        return `radial-gradient(circle at ${x}% ${y}%, ${color(c, 1)}, ${color(c, 0)} 70%)`;
+      })
       .join(", ");
   }
+  return `linear-gradient(${angle}deg, ${stops.map(c => color(c, 1)).join(", ")})`;
+}
+
+const plainColor = (hex, alpha) => (alpha == 1 ? hex : withAlpha(hex, alpha));
+
+function frameOf(seeds, mode, tweaks, style, color = plainColor) {
+  const L = SURFACES[mode].frame;
+  const stops = seeds.map(seed => oklchHex(surface(seed, L, mode, tweaks)));
+  const gradient = gradientCss(stops, style, color);
   // Base under the gradient: the average of the stops
   const avg = { L: surface(seeds[0], L, mode, tweaks).L, C: 0, H: 0 };
   const a = seeds.reduce((acc, seed) => {
@@ -219,6 +273,60 @@ function frameOf(seeds, mode, tweaks) {
   avg.C = Math.hypot(a[0], a[1]) / seeds.length;
   avg.H = ((Math.atan2(a[1], a[0]) * 180) / Math.PI + 360) % 360;
   return { base: oklchHex(avg), stops, gradient };
+}
+
+// Film grain: gray noise drawn once at window size (fixed, never tiled)
+function grainCss(scheme) {
+  const grain = clamp(Number(scheme?.grain) || 0, 0, 1);
+  if (!grain) {
+    return "none";
+  }
+  const svg =
+    `<svg xmlns='http://www.w3.org/2000/svg' width='1600' height='1000'>` +
+    `<filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/>` +
+    `<feColorMatrix type='saturate' values='0'/></filter>` +
+    `<rect width='100%' height='100%' filter='url(%23n)' opacity='${(grain * GRAIN_OPACITY).toFixed(3)}'/></svg>`;
+  return `url("data:image/svg+xml,${svg}")`;
+}
+
+/**
+ * The window paint of a scheme for one mode with every color's alpha scaled
+ * by var(--fz-fade), as one image list: the gradient, then the base color
+ * (as an image). Laid over the new paint while it fades in. "none" for no
+ * scheme.
+ */
+export function fadeImage(scheme, mode) {
+  const seeds = seedsOf(scheme);
+  if (!seeds.length) {
+    return "none";
+  }
+  const fading = (hex, alpha) => {
+    const [r, g, b] = hexToRgb(hex).map(v => Math.round(v * 255));
+    return `rgb(${r} ${g} ${b} / calc(var(--fz-fade) * ${alpha}))`;
+  };
+  const frame = frameOf(seeds, mode, tweaksOf(scheme, mode), gradientOf(scheme), fading);
+  const base = fading(frame.base, 1);
+  const flat = `linear-gradient(${base}, ${base})`;
+  return frame.gradient == "none" ? flat : `${frame.gradient}, ${flat}`;
+}
+
+// ---- color wheel ----
+// Angle = hue, distance from the middle = colorfulness (OKLCH chroma)
+
+/** { hue (deg), chroma (0..WHEEL_CHROMA) } of a seed */
+export function wheelOf(hex) {
+  const { C, H } = rgbToOklch(hexToRgb(hex));
+  return { hue: H, chroma: Math.min(C, WHEEL_CHROMA) };
+}
+
+/** The seed at a wheel position */
+export function fromWheel(hue, chroma) {
+  return oklchHex({ L: WHEEL_LIGHTNESS, C: clamp(chroma, 0, WHEEL_CHROMA), H: ((hue % 360) + 360) % 360 });
+}
+
+/** [r, g, b] (0-255) shown at a wheel position, for drawing it */
+export function wheelRgb(hue, chroma) {
+  return oklchToRgb({ L: WHEEL_LIGHTNESS, C: chroma, H: hue }).map(v => Math.round(v * 255));
 }
 
 /**
@@ -236,7 +344,7 @@ export function palette(scheme, mode) {
   const dark = mode == "dark";
   const tweaks = tweaksOf(scheme, mode);
   const lead = seeds[0];
-  const frame = frameOf(seeds, mode, tweaks);
+  const frame = frameOf(seeds, mode, tweaks, gradientOf(scheme));
   const field = oklchHex(surface(lead, s.field, mode, tweaks));
   const popup = oklchHex(surface(lead, s.popup, mode, tweaks));
   const selected = oklchHex(surface(lead, s.selected, mode, tweaks));
@@ -266,6 +374,7 @@ export function palette(scheme, mode) {
   return {
     "frame-bg": frame.base,
     "frame-gradient": frame.gradient,
+    "frame-grain": grainCss(scheme),
     "frame-edge": withAlpha(ink, dark ? 0.08 : 0.1),
     "field-bg": field,
     "popup-bg": popup,
@@ -298,6 +407,8 @@ export function tokens(scheme) {
     if (name == "frame-gradient") {
       out["frame-gradient-light"] = light[name];
       out["frame-gradient-dark"] = dark[name];
+    } else if (name == "frame-grain") {
+      out[name] = light[name];
     } else {
       out[name] = light[name] == dark[name] ? light[name] : `light-dark(${light[name]}, ${dark[name]})`;
     }
@@ -316,7 +427,10 @@ export function validScheme(s) {
     Array.isArray(s.seeds) &&
     s.seeds.length >= 1 &&
     s.seeds.length <= MAX_SEEDS &&
-    s.seeds.every(c => HEX_RE.test(c))
+    s.seeds.every(c => HEX_RE.test(c)) &&
+    (s.gradient == null || (typeof s.gradient == "object" && (s.gradient.type == null || GRADIENTS.includes(s.gradient.type)))) &&
+    (s.grain == null || Number.isFinite(s.grain)) &&
+    (s.mode == null || ["light", "dark"].includes(s.mode))
   );
 }
 
@@ -404,6 +518,12 @@ export const FzColors = {
   tokens,
   contrast,
   MAX_SEEDS,
+  WHEEL_CHROMA,
+  gradientOf,
+  fadeImage,
+  wheelOf,
+  fromWheel,
+  wheelRgb,
   validScheme,
   savedSchemes,
   saveSchemes,

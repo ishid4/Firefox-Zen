@@ -12,8 +12,8 @@
 //   firefox-zen.colors.active. Its tokens go inline on <html> as --fz-<name>
 //   (both halves as light-dark()), then [fz-colors] turns the mapping on.
 //   "Firefox theme" removes both. Going from one scheme to another (switching
-//   spaces, say) fades the window from the old paint: --fz-prev-* hold it
-//   for theme/colors.css while [fz-colors-fade] is set.
+//   spaces, say) fades the window from the old paint: --fz-fade-image-* hold
+//   it, with alphas scaled by --fz-fade, which animates from 1 to 0.
 // - Mode: firefox-zen.colors.mode (system / light / dark), or the scheme's
 //   own mode when it forces one. Light/dark sets this window's
 //   prefers-color-scheme override, the same switch Firefox's theme code uses;
@@ -36,11 +36,10 @@
   // The scheme painted now, as JSON, so unchanged updates (FzSpacesChanged
   // comes with every tab switch) cost nothing
   let paintedKey = null;
-  let paintedTokens = null;
-  let fadeTimer = null;
+  let paintedScheme = null;
+  let fade = null;
 
-  const FADE_MS = 400;
-  const PREV = ["frame-bg", "frame-gradient-light", "frame-gradient-dark"];
+  const FADE_MS = 350;
 
   // The active space's scheme, else the Settings one
   function windowScheme() {
@@ -55,22 +54,24 @@
     return FzColors.activeScheme();
   }
 
-  // Keeps the old paint on top and fades it out
-  function fadeFrom(tokens) {
-    clearTimeout(fadeTimer);
-    for (const name of PREV) {
-      root.style.setProperty(`--fz-prev-${name}`, tokens[name]);
+  // Lays the old paint on top and fades it out
+  function fadeFrom(scheme) {
+    fade?.cancel();
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      return;
     }
-    root.setAttribute("fz-colors-fade", "start");
-    // Flush, so the fade starts from the old paint
-    getComputedStyle(document.body, "::before").opacity;
-    root.setAttribute("fz-colors-fade", "run");
-    fadeTimer = setTimeout(() => {
-      root.removeAttribute("fz-colors-fade");
-      for (const name of PREV) {
-        root.style.removeProperty(`--fz-prev-${name}`);
+    root.style.setProperty("--fz-fade-image-light", FzColors.fadeImage(scheme, "light"));
+    root.style.setProperty("--fz-fade-image-dark", FzColors.fadeImage(scheme, "dark"));
+    fade = root.animate([{ "--fz-fade": 1 }, { "--fz-fade": 0 }], { duration: FADE_MS, easing: "ease" });
+    const done = fade;
+    const clear = () => {
+      if (fade === done) {
+        fade = null;
+        root.style.removeProperty("--fz-fade-image-light");
+        root.style.removeProperty("--fz-fade-image-dark");
       }
-    }, FADE_MS);
+    };
+    fade.finished.then(clear, clear);
   }
 
   function paint(scheme) {
@@ -80,8 +81,8 @@
     }
     paintedKey = key;
     const tokens = FzColors.tokens(scheme);
-    const previous = paintedTokens;
-    paintedTokens = tokens;
+    const previous = paintedScheme;
+    paintedScheme = tokens ? scheme : null;
     if (!tokens) {
       root.removeAttribute(ATTR);
       for (const name of applied) {
@@ -103,7 +104,8 @@
     }
     applied = names;
     root.setAttribute(ATTR, scheme.id);
-    if (previous) {
+    // Another scheme, not an edit of this one (the editor writes as you drag)
+    if (previous && previous.id !== scheme.id) {
       fadeFrom(previous);
     }
   }

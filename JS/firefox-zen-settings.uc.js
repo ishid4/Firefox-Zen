@@ -1155,31 +1155,241 @@
     FzColors.saveSchemes(FzColors.savedSchemes().filter(x => x.id !== scheme.id));
   }
 
-  // Name and colors of the picked scheme, when it's one of yours
+  // ---- scheme editor ----
+
+  // The color wheel: angle = hue, distance from the middle = how colorful
+  // (lightness is the mode's business). Drawn once per window.
+  const WHEEL_SIZE = 168;
+  let wheelImage = null;
+
+  function drawWheel(canvas) {
+    const ctx = canvas.getContext("2d");
+    const n = canvas.width;
+    if (!wheelImage) {
+      wheelImage = ctx.createImageData(n, n);
+      const r = n / 2;
+      for (let y = 0; y < n; y++) {
+        for (let x = 0; x < n; x++) {
+          const dx = x + 0.5 - r;
+          const dy = r - (y + 0.5);
+          const d = Math.hypot(dx, dy) / r;
+          if (d > 1) {
+            continue;
+          }
+          const hue = (Math.atan2(dy, dx) * 180) / Math.PI;
+          const [R, G, B] = FzColors.wheelRgb((hue + 360) % 360, d * FzColors.WHEEL_CHROMA);
+          const i = (y * n + x) * 4;
+          wheelImage.data.set([R, G, B, d > 0.985 ? Math.round(((1 - d) / 0.015) * 255) : 255], i);
+        }
+      }
+    }
+    ctx.putImageData(wheelImage, 0, 0);
+  }
+
+  // Wheel position (px from the wheel's top left) of a seed, and back
+  function wheelPoint(hex) {
+    const { hue, chroma } = FzColors.wheelOf(hex);
+    const R = WHEEL_SIZE / 2;
+    const r = (chroma / FzColors.WHEEL_CHROMA) * R;
+    const a = (hue * Math.PI) / 180;
+    return { x: R + r * Math.cos(a), y: R - r * Math.sin(a) };
+  }
+
+  function wheelSeed(x, y) {
+    const R = WHEEL_SIZE / 2;
+    const dx = x - R;
+    const dy = R - y;
+    const hue = (Math.atan2(dy, dx) * 180) / Math.PI;
+    return FzColors.fromWheel(hue, (Math.min(1, Math.hypot(dx, dy) / R)) * FzColors.WHEEL_CHROMA);
+  }
+
+  // A slider row; `get`/`set` work in the slider's own units
+  function buildSlider({ label, min, max, step = 1, get, set, format }) {
+    const input = h("input", { type: "range", class: "fz-range", min, max, step, "aria-label": label });
+    const value = h("output", { class: "fz-option-value" });
+    input.addEventListener("input", () => {
+      value.textContent = format(Number(input.value));
+      set(Number(input.value), false);
+    });
+    input.addEventListener("change", () => set(Number(input.value), true));
+    const el = h("label", { class: "fz-option fz-option-range" }, h("span", { class: "fz-option-label", text: label }), input, value);
+    const sync = view => {
+      const v = get(view);
+      if (document.activeElement !== input) {
+        input.value = v;
+      }
+      value.textContent = format(Number(input.value));
+    };
+    return { el, input, sync };
+  }
+
+  // Segmented chips; `get`/`set` take the chip keys
+  function buildChips(label, choices, get, set) {
+    const chips = choices.map(c =>
+      h("button", { type: "button", role: "radio", class: "fz-chip", "data-key": c.key, text: c.label, onclick: () => set(c.key) })
+    );
+    const el = h(
+      "div",
+      { class: "fz-option" },
+      h("span", { class: "fz-option-label", text: label }),
+      h("span", { class: "fz-chips", role: "radiogroup", "aria-label": label }, ...chips)
+    );
+    const sync = view => {
+      const value = get(view);
+      for (const chip of chips) {
+        chip.setAttribute("aria-checked", String(chip.dataset.key === value));
+      }
+    };
+    return { el, sync };
+  }
+
+  const GRADIENT_STYLES = [
+    { key: "linear", label: "Linear" },
+    { key: "radial", label: "Radial" },
+    { key: "corners", label: "Corners" },
+  ];
+  const SCHEME_LOOKS = [
+    { key: "", label: "Follow mode" },
+    { key: "light", label: "Light" },
+    { key: "dark", label: "Dark" },
+  ];
+
+  // Everything about the picked scheme, when it's one of yours. Edits show
+  // right away and are saved at most every 120 ms (dragging writes a lot).
   function buildSchemeEditor(s) {
     const el = h("div", { class: "fz-options fz-scheme-editor", hidden: true });
-    // Scheme id + color count the inputs were built for
+    // Scheme id + color count the controls were built for
     let shape = "";
-    let inputs = null;
-    // The color panel reports every move: save at most every 120 ms
-    let pending = null;
+    let parts = null;
+    let editing = null;
+    let pending = [];
     let timer = null;
+
     const flush = () => {
       clearTimeout(timer);
       timer = null;
-      if (pending) {
-        const { id, seeds } = pending;
-        pending = null;
-        updateSaved(id, x => ({ ...x, seeds }));
+      if (pending.length) {
+        const changes = pending;
+        pending = [];
+        updateSaved(editing, x => changes.reduce((acc, change) => change(acc), x));
       }
     };
-    const queue = (id, seeds) => {
-      pending = { id, seeds };
-      timer ??= setTimeout(flush, 120);
+    // `change` maps a scheme copy to the edited one
+    const edit = (change, now = false) => {
+      pending.push(change);
+      if (now) {
+        flush();
+      } else {
+        timer ??= setTimeout(flush, 120);
+      }
+    };
+    // The saved scheme with the edits not saved yet
+    const view = () => {
+      const saved = FzColors.savedSchemes().find(x => x.id === editing);
+      return saved && pending.reduce((acc, change) => change(structuredClone(acc)), saved);
     };
 
+    const setSeed = (i, hex, now) =>
+      edit(x => ({ ...x, seeds: x.seeds.map((c, j) => (j === i ? hex : c)) }), now);
+    const addSeed = hex => edit(x => ({ ...x, seeds: [...x.seeds, hex].slice(0, FzColors.MAX_SEEDS) }), true);
+    const removeSeed = i => edit(x => ({ ...x, seeds: x.seeds.filter((_, j) => j !== i) }), true);
+
+    // One half's tweak; a half back at its defaults is dropped
+    const setTweak = (half, key, value, now) =>
+      edit(x => {
+        const t = { tint: 1, shift: 0, ...x[half], [key]: value };
+        const out = { ...x, [half]: t };
+        if (t.tint === 1 && t.shift === 0) {
+          delete out[half];
+        }
+        return out;
+      }, now);
+
+    function buildWheel(scheme) {
+      const canvas = h("canvas", { class: "fz-wheel-canvas", width: WHEEL_SIZE * 2, height: WHEEL_SIZE * 2 });
+      drawWheel(canvas);
+      const wheel = h("div", { class: "fz-wheel", role: "group", "aria-label": "Color wheel" }, canvas);
+      let dragging = -1;
+      const dots = scheme.seeds.map((seed, i) => {
+        const dot = h("button", {
+          type: "button",
+          class: "fz-wheel-dot",
+          title: "Drag to change; arrow keys move it",
+          "aria-label": `Color ${i + 1}`,
+        });
+        dot.addEventListener("pointerdown", e => {
+          e.preventDefault();
+          e.stopPropagation();
+          dot.focus();
+          dot.setPointerCapture(e.pointerId);
+          dragging = i;
+          dot.toggleAttribute("dragging", true);
+        });
+        dot.addEventListener("pointermove", e => {
+          if (dragging !== i) {
+            return;
+          }
+          const box = wheel.getBoundingClientRect();
+          const hex = wheelSeed(e.clientX - box.left, e.clientY - box.top);
+          place(dot, hex);
+          setSeed(i, hex, false);
+        });
+        const drop = () => {
+          if (dragging === i) {
+            dragging = -1;
+            dot.removeAttribute("dragging");
+            flush();
+          }
+        };
+        dot.addEventListener("pointerup", drop);
+        dot.addEventListener("lostpointercapture", drop);
+        // Arrows: left/right turn the hue, up/down change how colorful
+        dot.addEventListener("keydown", e => {
+          const step = { ArrowLeft: [5, 0], ArrowRight: [-5, 0], ArrowUp: [0, 0.01], ArrowDown: [0, -0.01] }[e.key];
+          if (!step) {
+            return;
+          }
+          e.preventDefault();
+          const { hue, chroma } = FzColors.wheelOf(view().seeds[i]);
+          const hex = FzColors.fromWheel(hue + step[0], chroma + step[1]);
+          place(dot, hex);
+          setSeed(i, hex, false);
+        });
+        return dot;
+      });
+      const place = (dot, hex) => {
+        const { x, y } = wheelPoint(hex);
+        dot.style.left = `${x}px`;
+        dot.style.top = `${y}px`;
+        dot.style.backgroundColor = hex;
+      };
+      // A click on the wheel adds a color there, or moves the nearest one
+      // when there are 4
+      canvas.addEventListener("pointerdown", e => {
+        const box = wheel.getBoundingClientRect();
+        const x = e.clientX - box.left;
+        const y = e.clientY - box.top;
+        if (Math.hypot(x - WHEEL_SIZE / 2, y - WHEEL_SIZE / 2) > WHEEL_SIZE / 2) {
+          return;
+        }
+        const hex = wheelSeed(x, y);
+        const seeds = view().seeds;
+        if (seeds.length < FzColors.MAX_SEEDS) {
+          addSeed(hex);
+          return;
+        }
+        const near = seeds
+          .map((c, i) => ({ i, d: Math.hypot(wheelPoint(c).x - x, wheelPoint(c).y - y) }))
+          .reduce((a, b) => (b.d < a.d ? b : a));
+        place(dots[near.i], hex);
+        setSeed(near.i, hex, true);
+      });
+      wheel.append(...dots);
+      const sync = v => v.seeds.forEach((c, i) => i !== dragging && place(dots[i], c));
+      return { el: wheel, sync };
+    }
+
     function build(scheme) {
-      const seeds = [...scheme.seeds];
       const name = h("input", {
         type: "text",
         class: "fz-number fz-scheme-name",
@@ -1189,9 +1399,9 @@
         onchange: () => {
           const value = name.value.trim();
           if (value) {
-            updateSaved(scheme.id, x => ({ ...x, name: value }));
+            edit(x => ({ ...x, name: value }), true);
           } else {
-            name.value = scheme.name;
+            name.value = view().name;
           }
         },
         onkeydown: e => {
@@ -1200,88 +1410,185 @@
           }
         },
       });
-      const colors = seeds.map((seed, i) => {
+
+      const wheel = buildWheel(scheme);
+
+      // Swatches: the native picker for exact colors, × to remove
+      const swatches = scheme.seeds.map((seed, i) => {
         const input = h("input", {
           type: "color",
           class: "fz-seed-input",
           value: seed,
           "aria-label": `Color ${i + 1}`,
-          oninput: () => {
-            seeds[i] = input.value;
-            queue(scheme.id, [...seeds]);
-          },
-          onchange: () => {
-            seeds[i] = input.value;
-            queue(scheme.id, [...seeds]);
-            flush();
-          },
+          oninput: () => setSeed(i, input.value, false),
+          onchange: () => setSeed(i, input.value, true),
         });
         const remove =
-          seeds.length > 1 &&
+          scheme.seeds.length > 1 &&
           h("button", {
             type: "button",
             class: "fz-seed-remove",
             title: "Remove this color",
             "aria-label": `Remove color ${i + 1}`,
-            onclick: () => updateSaved(scheme.id, x => ({ ...x, seeds: x.seeds.filter((_, j) => j !== i) })),
+            onclick: () => removeSeed(i),
           });
         return { input, el: h("span", { class: "fz-seed" }, input, remove) };
       });
       const add =
-        seeds.length < FzColors.MAX_SEEDS &&
+        scheme.seeds.length < FzColors.MAX_SEEDS &&
         h("button", {
           type: "button",
           class: "fz-seed-add",
-          title: "Add a color",
+          title: "Add a color (or click the wheel)",
           "aria-label": "Add a color",
-          onclick: () =>
-            updateSaved(scheme.id, x => ({
-              ...x,
-              seeds: [...x.seeds, NEW_SEEDS.find(c => !x.seeds.includes(c)) ?? NEW_SEEDS[0]],
-            })),
+          onclick: () => addSeed(NEW_SEEDS.find(c => !view().seeds.includes(c)) ?? NEW_SEEDS[0]),
         });
+
+      const style = buildChips(
+        "Style",
+        GRADIENT_STYLES,
+        v => FzColors.gradientOf(v).type,
+        type => edit(x => ({ ...x, gradient: { ...FzColors.gradientOf(x), type } }), true)
+      );
+      const angle = buildSlider({
+        label: "Angle",
+        min: 0,
+        max: 359,
+        get: v => FzColors.gradientOf(v).angle,
+        set: (value, now) => edit(x => ({ ...x, gradient: { ...FzColors.gradientOf(x), angle: value } }), now),
+        format: v => `${v}\u00b0`,
+      });
+      const grain = buildSlider({
+        label: "Grain",
+        min: 0,
+        max: 100,
+        get: v => Math.round((v.grain || 0) * 100),
+        set: (value, now) =>
+          edit(x => {
+            const out = { ...x, grain: value / 100 };
+            if (!value) {
+              delete out.grain;
+            }
+            return out;
+          }, now),
+        format: v => `${v}%`,
+      });
+      const look = buildChips(
+        "Look",
+        SCHEME_LOOKS,
+        v => v.mode || "",
+        mode =>
+          edit(x => {
+            const out = { ...x, mode };
+            if (!mode) {
+              delete out.mode;
+            }
+            return out;
+          }, true)
+      );
+
+      // Light and dark are tuned apart
+      const halves = ["light", "dark"].map(half => {
+        const color = buildSlider({
+          label: "Color",
+          min: 0,
+          max: 200,
+          step: 5,
+          get: v => Math.round((v[half]?.tint ?? 1) * 100),
+          set: (value, now) => setTweak(half, "tint", value / 100, now),
+          format: v => `${v}%`,
+        });
+        const brightness = buildSlider({
+          label: "Brightness",
+          min: -10,
+          max: 10,
+          get: v => Math.round((v[half]?.shift ?? 0) * 100),
+          set: (value, now) => setTweak(half, "shift", value / 100, now),
+          format: v => (v > 0 ? `+${v}` : `${v}`),
+        });
+        const el = h(
+          "div",
+          { class: "fz-scheme-half-tweaks", "data-half": half },
+          h("span", { class: "fz-layout-group-title", text: half === "light" ? "Light look" : "Dark look" }),
+          color.el,
+          brightness.el
+        );
+        return { el, sync: v => [color, brightness].forEach(c => c.sync(v)) };
+      });
+
       el.replaceChildren(
         h(
           "div",
           { class: "fz-option" },
           h("label", { class: "fz-option-label", text: "Name", onclick: () => name.focus() }),
           name,
-          h("button", { type: "button", class: "fz-reset", text: "Delete", onclick: () => deleteScheme(s, scheme) })
+          h("button", { type: "button", class: "fz-reset", text: "Delete", onclick: () => deleteScheme(s, view()) })
         ),
         h(
           "div",
-          { class: "fz-option" },
-          h("span", { class: "fz-option-label", text: "Colors" }),
-          h("span", { class: "fz-seeds" }, ...colors.map(c => c.el), add),
-          h("p", {
-            class: "fz-option-hint",
-            text: "1 color is flat, 2 or 3 make a gradient, 4 put one in each corner.",
-          })
-        )
+          { class: "fz-scheme-studio" },
+          wheel.el,
+          h(
+            "div",
+            { class: "fz-options" },
+            h(
+              "div",
+              { class: "fz-option" },
+              h("span", { class: "fz-option-label", text: "Colors" }),
+              h("span", { class: "fz-seeds" }, ...swatches.map(c => c.el), add)
+            ),
+            style.el,
+            angle.el,
+            grain.el,
+            look.el
+          )
+        ),
+        h("div", { class: "fz-scheme-halves" }, ...halves.map(x => x.el)),
+        h("p", {
+          class: "fz-option-hint",
+          text: "Drag the dots, or click the wheel to add a color. The middle is gray, the rim most colorful.",
+        })
       );
-      inputs = { name, colors: colors.map(c => c.input) };
+
+      const gradientParts = [style.el, angle.el];
+      parts = {
+        name,
+        sync: v => {
+          wheel.sync(v);
+          if (!pending.length) {
+            swatches.forEach((c, i) => (c.input.value = v.seeds[i]));
+          }
+          // A gradient needs 2 colors
+          for (const part of gradientParts) {
+            part.toggleAttribute("data-disabled", v.seeds.length < 2);
+          }
+          [style, angle, grain, look, ...halves].forEach(c => c.sync(v));
+        },
+      };
     }
 
     const sync = () => {
-      const scheme = FzColors.savedSchemes().find(x => x.id === shownScheme(s));
-      el.hidden = !scheme;
-      if (!scheme) {
+      const id = FzColors.savedSchemes().find(x => x.id === shownScheme(s))?.id ?? null;
+      if (id !== editing) {
+        flush();
+        editing = id;
+      }
+      const v = id && view();
+      el.hidden = !v;
+      if (!v) {
         shape = "";
         return;
       }
-      const next = `${scheme.id}/${scheme.seeds.length}`;
+      const next = `${v.id}/${v.seeds.length}`;
       if (next !== shape) {
         shape = next;
-        build(scheme);
-        return;
+        build(v);
       }
-      // Same inputs: take changes made elsewhere, but not over one being edited
-      if (document.activeElement !== inputs.name) {
-        inputs.name.value = scheme.name;
+      // Take changes made elsewhere, but not over a field being typed in
+      if (document.activeElement !== parts.name) {
+        parts.name.value = v.name;
       }
-      if (!pending) {
-        inputs.colors.forEach((input, i) => (input.value = scheme.seeds[i]));
-      }
+      parts.sync(v);
     };
     return { el, sync };
   }

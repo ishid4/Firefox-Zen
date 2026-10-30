@@ -450,9 +450,9 @@ toolbar .toolbarbutton-1 {
   @media -moz-pref("sidebar.revamp") {
     border-radius: var(--border-radius-medium) !important;
     border: 0px solid var(--chrome-content-separator-color) !important;
-    outline: 0.01px solid var(--toolbar-bgcolor);
+    outline: 0.01px solid var(--toolbar-background-color);
     box-shadow: var(--content-area-shadow) !important;
-    background-color: var(--toolbar-bgcolor) !important;
+    background-color: var(--toolbar-background-color) !important;
     color: transparent !important;
   }
 }
@@ -713,13 +713,13 @@ toolbar .toolbarbutton-1 {
   }
 }
 
-/* Change focus outline colors from blue to --toolbar-bgcolor for more cohesive look */
+/* Change focus outline colors from blue to the toolbar's color for more cohesive look */
 #urlbar[focused]:not([suppress-focus-border]) > .urlbar-background,
 #searchbar:focus-within {
   outline-color: color-mix(
     in srgb,
-    var(--toolbar-bgcolor) 85%,
-    var(--lwt-text-color)
+    var(--toolbar-background-color) 85%,
+    var(--lwt-text-color, var(--toolbar-text-color, currentColor))
   ) !important;
 }
 .urlbarView-action-btn {
@@ -727,8 +727,8 @@ toolbar .toolbarbutton-1 {
   &:hover:active {
     outline-color: color-mix(
       in srgb,
-      var(--toolbar-bgcolor) 50%,
-      var(--lwt-text-color)
+      var(--toolbar-background-color) 50%,
+      var(--lwt-text-color, var(--toolbar-text-color, currentColor))
     ) !important;
   }
 }
