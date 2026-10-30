@@ -143,6 +143,17 @@ toolbar .toolbarbutton-1 {
       overflow: clip !important;
       opacity: 0 !important;
       transition: max-height 0s linear 0.35s, opacity 0.15s ease 0.2s !important;
+
+      /* macOS draws the traffic lights natively (opacity doesn't hide them),
+       * bottom-aligned to the button box's painted area, so in the collapsed
+       * strip they'd stick out above the window. Unpainted, the box reports
+       * an empty area and Firefox hides the buttons until the toolbar
+       * expands (widget/cocoa/nsCocoaWindow.mm). */
+      @media (-moz-platform: macos) {
+        & > .titlebar-buttonbox-container {
+          visibility: hidden;
+        }
+      }
     }
   }
 }
@@ -250,6 +261,12 @@ toolbar .toolbarbutton-1 {
       @media not -moz-pref("firefox-zen.compact-toolbar") {
         margin-block-start: 0 !important;
       }
+    }
+
+    /* So does the compact toolbar's collapsed hover strip. Only the address
+     * bar in the sidebar overlays its window-controls row on the page. */
+    &:not([fz-sidebar-urlbar]) #tabbrowser-tabbox {
+      margin-block-start: 0 !important;
     }
 
     /* A vertical tabs sidebar beside the page already frames that edge, so no
