@@ -21,6 +21,9 @@
 //   theme update, so it's put back after each one (windowlwthemeupdate).
 //   Websites follow through a pref the module sets (the Settings mode and
 //   scheme only: it's one pref for every window).
+// - Drafts: the Settings editor's unsaved edits of a scheme, by scheme id.
+//   This window shows a scheme's draft in its place until it's saved or
+//   reverted; other windows only see saved schemes. Gone at restart.
 
 (function () {
   "use strict";
@@ -42,16 +45,35 @@
   const FADE_MS = 350;
 
   // The active space's scheme, else the Settings one
+  /** @type {Map<string, object>} scheme id -> unsaved edit */
+  const drafts = new Map();
+
+  // A scheme as this window shows it: its draft, if it has one
+  function withDraft(scheme) {
+    return drafts.get(scheme?.id) ?? scheme;
+  }
+
+  // The active space's scheme, else the Settings one
   function windowScheme() {
     const spaces = window.FirefoxZenSpaces;
     if (spaces?.enabled()) {
       const space = spaces.list().find(s => s.id === spaces.activeId());
       const scheme = space?.scheme && FzColors.schemeById(space.scheme);
       if (scheme) {
-        return scheme;
+        return withDraft(scheme);
       }
     }
-    return FzColors.activeScheme();
+    return withDraft(FzColors.activeScheme());
+  }
+
+  // null drops it (saved, reverted). A draft of a deleted scheme is dropped.
+  function setDraft(id, scheme) {
+    if (scheme) {
+      drafts.set(id, scheme);
+    } else {
+      drafts.delete(id);
+    }
+    update();
   }
 
   // Lays the old paint on top and fades it out
@@ -129,7 +151,16 @@
     setMode(windowScheme());
   }
 
-  const prefObserver = { observe: update };
+  const prefObserver = {
+    observe() {
+      for (const id of drafts.keys()) {
+        if (!FzColors.savedSchemes().some(x => x.id === id)) {
+          drafts.delete(id);
+        }
+      }
+      update();
+    },
+  };
   Services.prefs.addObserver(FzColors.PREF_BRANCH, prefObserver);
   window.addEventListener("windowlwthemeupdate", onThemeUpdate);
   // Switched spaces, or a space's scheme changed
@@ -145,7 +176,12 @@
     { once: true }
   );
 
-  window.FirefoxZenColors = { update };
+  window.FirefoxZenColors = {
+    update,
+    draft: id => drafts.get(id) ?? null,
+    setDraft,
+    withDraft,
+  };
 
   update();
 })();

@@ -579,6 +579,30 @@
   padding-block: 12px;
 }
 
+/* Unsaved draft: a dot after the name */
+.fz-scheme-tile[data-unsaved] .fz-scheme-label::after {
+  content: " \2022";
+  color: var(--fz-accent);
+}
+
+/* Revert / Save changes, while there's a draft */
+.fz-scheme-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--fz-line);
+
+  &[hidden] {
+    display: none;
+  }
+
+  & > .fz-hint {
+    margin-inline-end: auto;
+  }
+}
+
 .fz-scheme-scope {
   display: flex;
   flex-wrap: wrap;
@@ -763,17 +787,29 @@
   pointer-events: none;
 }
 
+/* Light look on the left, dark on the right, even when one is hidden */
 .fz-scheme-halves {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px 24px;
 
   & > .fz-scheme-half-tweaks {
     display: flex;
     flex-direction: column;
     gap: 6px;
-    flex: 1 1 240px;
     min-width: 0;
+
+    &[hidden] {
+      display: none;
+    }
+  }
+
+  & > [data-half="light"] {
+    grid-column: 1;
+  }
+
+  & > [data-half="dark"] {
+    grid-column: 2;
   }
 }
 

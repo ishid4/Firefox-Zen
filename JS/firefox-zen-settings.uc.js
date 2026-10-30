@@ -110,10 +110,10 @@
     ],
     label: "Mode",
     hint: "Auto follows your system's light or dark setting.",
-    // A scheme that forces a mode wins over this
+    // A scheme that uses one look only wins over this (the space's, if any)
     note: () => {
-      const scheme = FzColors.activeScheme();
-      return scheme.mode ? `${scheme.name} is always ${scheme.mode}.` : "";
+      const scheme = FzColors.schemeById(schemeSpace()?.scheme) ?? FzColors.activeScheme();
+      return scheme.mode ? `${scheme.name} uses only its ${scheme.mode} look.` : "";
     },
   };
 
@@ -1124,7 +1124,8 @@
   // A copy of the shown scheme's colors and tweaks (not a forced mode, which
   // the editor can't take off again), picked right away
   function newScheme(s) {
-    const from = FzColors.schemeById(shownScheme(s));
+    const shown = FzColors.schemeById(shownScheme(s));
+    const from = window.FirefoxZenColors?.withDraft(shown) ?? shown;
     const saved = FzColors.savedSchemes();
     let n = saved.length + 1;
     while (saved.some(x => x.name === `Custom ${n}`)) {
@@ -1203,8 +1204,9 @@
     return FzColors.fromWheel(hue, (Math.min(1, Math.hypot(dx, dy) / R)) * FzColors.WHEEL_CHROMA);
   }
 
-  // A slider row; `get`/`set` work in the slider's own units
-  function buildSlider({ label, min, max, step = 1, get, set, format }) {
+  // A slider row; `get`/`set` work in the slider's own units. `title`: its
+  // explanation, on hover.
+  function buildSlider({ label, title, min, max, step = 1, get, set, format }) {
     const input = h("input", { type: "range", class: "fz-range", min, max, step, "aria-label": label });
     const value = h("output", { class: "fz-option-value" });
     input.addEventListener("input", () => {
@@ -1212,7 +1214,7 @@
       set(Number(input.value), false);
     });
     input.addEventListener("change", () => set(Number(input.value), true));
-    const el = h("label", { class: "fz-option fz-option-range" }, h("span", { class: "fz-option-label", text: label }), input, value);
+    const el = h("label", { class: "fz-option fz-option-range", title }, h("span", { class: "fz-option-label", text: label }), input, value);
     const sync = view => {
       const v = get(view);
       if (document.activeElement !== input) {
@@ -1223,15 +1225,24 @@
     return { el, input, sync };
   }
 
-  // Segmented chips; `get`/`set` take the chip keys
-  function buildChips(label, choices, get, set) {
+  // Segmented chips; `get`/`set` take the chip keys. A choice's `title` and
+  // the row's `title` explain them on hover.
+  function buildChips(label, choices, get, set, title = null) {
     const chips = choices.map(c =>
-      h("button", { type: "button", role: "radio", class: "fz-chip", "data-key": c.key, text: c.label, onclick: () => set(c.key) })
+      h("button", {
+        type: "button",
+        role: "radio",
+        class: "fz-chip",
+        "data-key": c.key,
+        text: c.label,
+        title: c.title,
+        onclick: () => set(c.key),
+      })
     );
     const el = h(
       "div",
       { class: "fz-option" },
-      h("span", { class: "fz-option-label", text: label }),
+      h("span", { class: "fz-option-label", text: label, title }),
       h("span", { class: "fz-chips", role: "radiogroup", "aria-label": label }, ...chips)
     );
     const sync = view => {
@@ -1244,50 +1255,83 @@
   }
 
   const GRADIENT_STYLES = [
-    { key: "linear", label: "Linear" },
-    { key: "radial", label: "Radial" },
-    { key: "corners", label: "Corners" },
+    { key: "linear", label: "Linear", title: "The colors run in a straight line across the window, in the angle's direction." },
+    { key: "radial", label: "Radial", title: "The colors spread in rings from a point on the window's edge, set by the angle." },
+    { key: "corners", label: "Corners", title: "Each color glows from its own corner; the angle turns them around the window." },
   ];
+  // Which of a scheme's looks it uses: both (Mode picks), or always one
   const SCHEME_LOOKS = [
-    { key: "", label: "Follow mode" },
-    { key: "light", label: "Light" },
-    { key: "dark", label: "Dark" },
+    { key: "", label: "Both", title: "Uses the light or dark look, whichever the Mode setting picks." },
+    { key: "light", label: "Light only", title: "Always uses the light look, whatever Mode says." },
+    { key: "dark", label: "Dark only", title: "Always uses the dark look, whatever Mode says." },
   ];
 
-  // Everything about the picked scheme, when it's one of yours. Edits show
-  // right away and are saved at most every 120 ms (dragging writes a lot).
+  // Everything about the picked scheme, when it's one of yours. Edits go to
+  // a draft this window shows right away (JS/firefox-zen-colors.uc.js):
+  // Save changes stores it, Revert drops it. A draft outlives the Library
+  // being closed, not a restart.
   function buildSchemeEditor(s) {
     const el = h("div", { class: "fz-options fz-scheme-editor", hidden: true });
     // Scheme id + color count the controls were built for
     let shape = "";
     let parts = null;
     let editing = null;
-    let pending = [];
-    let timer = null;
+    let queued = [];
+    let frame = 0;
 
-    const flush = () => {
-      clearTimeout(timer);
-      timer = null;
-      if (pending.length) {
-        const changes = pending;
-        pending = [];
-        updateSaved(editing, x => changes.reduce((acc, change) => change(acc), x));
+    const colors = () => window.FirefoxZenColors;
+    const savedOf = id => FzColors.savedSchemes().find(x => x.id === id);
+    // The draft, else the saved scheme
+    const view = () => colors()?.draft(editing) ?? savedOf(editing);
+
+    // Edits queued this frame go into the draft together (dragging makes a lot)
+    function applyEdits() {
+      cancelAnimationFrame(frame);
+      frame = 0;
+      const changes = queued;
+      queued = [];
+      const saved = savedOf(editing);
+      if (!saved || !changes.length) {
+        return;
       }
-    };
+      const next = changes.reduce((acc, change) => change(structuredClone(acc)), view());
+      if (!FzColors.validScheme(next)) {
+        return;
+      }
+      // Edited back to what's saved: no draft
+      colors()?.setDraft(editing, JSON.stringify(next) === JSON.stringify(saved) ? null : next);
+      sync();
+    }
+
     // `change` maps a scheme copy to the edited one
-    const edit = (change, now = false) => {
-      pending.push(change);
-      if (now) {
-        flush();
-      } else {
-        timer ??= setTimeout(flush, 120);
+    const edit = change => {
+      queued.push(change);
+      frame ||= requestAnimationFrame(applyEdits);
+    };
+
+    const save = () => {
+      applyEdits();
+      const draft = colors()?.draft(editing);
+      if (draft) {
+        updateSaved(editing, () => draft);
+        colors().setDraft(editing, null);
       }
+      sync();
     };
-    // The saved scheme with the edits not saved yet
-    const view = () => {
-      const saved = FzColors.savedSchemes().find(x => x.id === editing);
-      return saved && pending.reduce((acc, change) => change(structuredClone(acc)), saved);
+
+    const revert = () => {
+      queued = [];
+      colors()?.setDraft(editing, null);
+      sync();
     };
+
+    const actions = h(
+      "div",
+      { class: "fz-scheme-actions", hidden: true },
+      h("span", { class: "fz-hint", text: "Unsaved changes, shown in this window only" }),
+      h("button", { type: "button", class: "fz-reset", text: "Revert", title: "Back to the saved scheme", onclick: revert }),
+      h("button", { type: "button", class: "fz-reset fz-primary", text: "Save changes", onclick: save })
+    );
 
     const setSeed = (i, hex, now) =>
       edit(x => ({ ...x, seeds: x.seeds.map((c, j) => (j === i ? hex : c)) }), now);
@@ -1338,7 +1382,6 @@
           if (dragging === i) {
             dragging = -1;
             dot.removeAttribute("dragging");
-            flush();
           }
         };
         dot.addEventListener("pointerup", drop);
@@ -1448,10 +1491,12 @@
         "Style",
         GRADIENT_STYLES,
         v => FzColors.gradientOf(v).type,
-        type => edit(x => ({ ...x, gradient: { ...FzColors.gradientOf(x), type } }), true)
+        type => edit(x => ({ ...x, gradient: { ...FzColors.gradientOf(x), type } }), true),
+        "How the colors blend across the window. Needs 2 or more colors."
       );
       const angle = buildSlider({
         label: "Angle",
+        title: "Which way the gradient goes: the line's direction, where the rings start, or how far the corners turn.",
         min: 0,
         max: 359,
         get: v => FzColors.gradientOf(v).angle,
@@ -1460,6 +1505,7 @@
       });
       const grain = buildSlider({
         label: "Grain",
+        title: "Film-like noise over the window, for a softer, textured look. 0% turns it off.",
         min: 0,
         max: 100,
         get: v => Math.round((v.grain || 0) * 100),
@@ -1474,7 +1520,7 @@
         format: v => `${v}%`,
       });
       const look = buildChips(
-        "Look",
+        "Uses",
         SCHEME_LOOKS,
         v => v.mode || "",
         mode =>
@@ -1484,7 +1530,8 @@
               delete out.mode;
             }
             return out;
-          }, true)
+          }, true),
+        "Which of this scheme's two looks it uses."
       );
 
       // Light and dark are tuned apart
@@ -1513,7 +1560,14 @@
           color.el,
           brightness.el
         );
-        return { el, sync: v => [color, brightness].forEach(c => c.sync(v)) };
+        return {
+          el,
+          sync: v => {
+            [color, brightness].forEach(c => c.sync(v));
+            // The other look is never shown: hide its sliders
+            el.hidden = !!v.mode && v.mode !== half;
+          },
+        };
       });
 
       el.replaceChildren(
@@ -1539,15 +1593,16 @@
             ),
             style.el,
             angle.el,
-            grain.el,
-            look.el
+            grain.el
           )
         ),
+        look.el,
         h("div", { class: "fz-scheme-halves" }, ...halves.map(x => x.el)),
         h("p", {
           class: "fz-option-hint",
           text: "Drag the dots, or click the wheel to add a color. The middle is gray, the rim most colorful.",
-        })
+        }),
+        actions
       );
 
       const gradientParts = [style.el, angle.el];
@@ -1555,9 +1610,7 @@
         name,
         sync: v => {
           wheel.sync(v);
-          if (!pending.length) {
-            swatches.forEach((c, i) => (c.input.value = v.seeds[i]));
-          }
+          swatches.forEach((c, i) => (c.input.value = v.seeds[i]));
           // A gradient needs 2 colors
           for (const part of gradientParts) {
             part.toggleAttribute("data-disabled", v.seeds.length < 2);
@@ -1567,10 +1620,11 @@
       };
     }
 
-    const sync = () => {
-      const id = FzColors.savedSchemes().find(x => x.id === shownScheme(s))?.id ?? null;
+    const syncEditor = () => {
+      const id = savedOf(shownScheme(s))?.id ?? null;
       if (id !== editing) {
-        flush();
+        // Edits still queued belong to the scheme they were made on
+        applyEdits();
         editing = id;
       }
       const v = id && view();
@@ -1589,8 +1643,9 @@
         parts.name.value = v.name;
       }
       parts.sync(v);
+      actions.hidden = !colors()?.draft(editing);
     };
-    return { el, sync };
+    return { el, sync: syncEditor };
   }
 
   function buildColorsSetting(s) {
@@ -1684,11 +1739,21 @@
     // Tiles are rebuilt only when a scheme changes
     let listKey = "";
     syncers.push(() => {
-      const list = FzColors.allSchemes();
-      const key = JSON.stringify(list);
+      // As this window shows them: unsaved drafts in place, marked
+      const drafts = window.FirefoxZenColors;
+      const list = FzColors.allSchemes().map(x => drafts?.withDraft(x) ?? x);
+      // Which ones are drafts counts too: saving one changes no color
+      const key = JSON.stringify([list, list.map(x => !!drafts?.draft(x.id))]);
       if (key !== listKey) {
         listKey = key;
-        radios = list.map(scheme => buildSchemeTile(scheme, pick));
+        radios = list.map(scheme => {
+          const tile = buildSchemeTile(scheme, pick);
+          if (drafts?.draft(scheme.id)) {
+            tile.setAttribute("data-unsaved", "");
+            tile.title = `${scheme.name} (unsaved changes)`;
+          }
+          return tile;
+        });
         tiles.replaceChildren(...radios, add);
         row.fzSearch = searchText(s);
       }
