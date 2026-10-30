@@ -88,7 +88,7 @@
   height: 7px;
   margin-inline-start: auto;
   border-radius: 50%;
-  background: var(--fz-lib-accent, var(--color-accent-primary, AccentColor));
+  background: var(--fz-accent);
 }
 
 .fz-mod-update {

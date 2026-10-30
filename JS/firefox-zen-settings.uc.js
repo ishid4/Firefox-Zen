@@ -16,6 +16,7 @@
   const WIDGET_ID = "firefox-zen-settings-button";
   const HTML_NS = "http://www.w3.org/1999/xhtml";
   const { FzMods } = ChromeUtils.importESModule("chrome://userscripts/content/firefox-zen-mods.sys.mjs");
+  const { FzColors } = ChromeUtils.importESModule("chrome://userscripts/content/firefox-zen-colors.sys.mjs");
 
   // Options shown under a feature while it's on. Each reads and writes its own
   // pref; `default` is what an unset pref means to the feature's script.
@@ -97,6 +98,29 @@
     { type: "range", pref: "glance.height", default: 940, min: 400, max: 1000, step: 10, label: "Height" },
   ];
 
+  // Light/dark for the color scheme (JS/firefox-zen-colors.uc.js)
+  const COLOR_MODE = {
+    type: "choice",
+    pref: "colors.mode",
+    default: "system",
+    choices: [
+      { key: "system", label: "Auto" },
+      { key: "light", label: "Light" },
+      { key: "dark", label: "Dark" },
+    ],
+    label: "Mode",
+    hint: "Auto follows your system's light or dark setting.",
+    // A scheme that forces a mode wins over this
+    note: () => {
+      const scheme = FzColors.activeScheme();
+      return scheme.mode ? `${scheme.name} is always ${scheme.mode}.` : "";
+    },
+  };
+
+  // Schemes you made (JS/firefox-zen-colors.sys.mjs). In settings files and
+  // Undo, but Reset to defaults keeps them: only which one is picked resets.
+  const SAVED_SCHEMES = { type: "schemes", pref: "colors.schemes", default: [], keepOnReset: true };
+
   // CSS reads these with -moz-pref(), which treats an unset pref as false.
   // Settings that default to true get written once on first run (see applyDefaults).
   const CATEGORIES = [
@@ -116,6 +140,37 @@
             "Esc, the button again, or clicking a tab in the sidebar closes it.",
           ],
           options: [PIN_LIMIT],
+        },
+      ],
+    },
+    {
+      id: "appearance",
+      label: "Appearance",
+      settings: [
+        {
+          // Shown as the scheme picker (buildColorsSetting)
+          type: "scheme",
+          pref: "colors.active",
+          default: FzColors.FIREFOX_ID,
+          colors: true,
+          label: "Color scheme",
+          description: "Colors for the whole window, each tuned for light and dark. With Spaces, each space has its own.",
+          keywords: "theme color colour gradient accent palette dark light mode",
+          tips: [
+            "The left half of each preview is its light look, the right half its dark one.",
+            "+ makes a scheme from the one you have now; pick up to 4 colors for a gradient.",
+            "A space's right-click menu sets its scheme too, without opening Settings.",
+            "Text and the accent are adjusted so they stay readable on any colors.",
+          ],
+          options: [COLOR_MODE],
+        },
+        {
+          pref: "colors.websites",
+          default: true,
+          label: "Websites follow the mode",
+          description: "Light or Dark also switches websites and Firefox's own pages.",
+          preview: "websites",
+          tips: ["With Auto, Firefox's Website appearance setting decides."],
         },
       ],
     },
@@ -284,7 +339,8 @@
   const SETTINGS = CATEGORIES.flatMap(c => c.settings).filter(s => !s.core);
   const OPTIONS = CATEGORIES.flatMap(c => c.settings).flatMap(s => s.options ?? []);
   // Everything a settings file, Reset and Undo cover.
-  const ALL = [...SETTINGS, ...OPTIONS];
+  // Saved schemes first, so a file's picked scheme exists when it's applied.
+  const ALL = [SAVED_SCHEMES, ...SETTINGS, ...OPTIONS];
 
   // Renamed prefs: old name -> new name, and whether the meaning flipped.
   const MIGRATIONS = [
@@ -298,7 +354,7 @@
   // picker sets sidebar.visibility itself instead of saving and restoring it).
   const RETIRED = ["library", "saved-sidebar-visibility"];
 
-  const isOn = s => s.core || Services.prefs.getBoolPref(PREF_BRANCH + s.pref, false);
+  const isOn = s => s.core || (!s.type && Services.prefs.getBoolPref(PREF_BRANCH + s.pref, false));
 
   function setOn(s, on) {
     const name = PREF_BRANCH + s.pref;
@@ -349,11 +405,25 @@
   const FILE_FORMAT = "firefox-zen-settings";
   const FILE_VERSION = 1;
 
+  const getString = o => Services.prefs.getStringPref(PREF_BRANCH + o.pref, o.default);
+
   function readValue(o) {
-    if (!o.type) {
-      return isOn(o);
+    switch (o.type) {
+      case undefined:
+        return isOn(o);
+      case "modifiers":
+        return getModifiers(o);
+      case "choice": {
+        const value = getString(o);
+        return o.choices.some(c => c.key === value) ? value : o.default;
+      }
+      case "scheme":
+        return FzColors.schemeById(getString(o)) ? getString(o) : o.default;
+      case "schemes":
+        return FzColors.savedSchemes();
+      default:
+        return getInt(o);
     }
-    return o.type === "modifiers" ? getModifiers(o) : getInt(o);
   }
 
   // Returns false when the value doesn't fit the pref.
@@ -369,6 +439,21 @@
         return false;
       }
       setString(o, keys);
+    } else if (o.type === "choice") {
+      if (!o.choices.some(c => c.key === value)) {
+        return false;
+      }
+      setString(o, value);
+    } else if (o.type === "scheme") {
+      if (typeof value !== "string" || !FzColors.schemeById(value)) {
+        return false;
+      }
+      setString(o, value);
+    } else if (o.type === "schemes") {
+      if (!Array.isArray(value)) {
+        return false;
+      }
+      FzColors.saveSchemes(value);
     } else {
       if (!Number.isFinite(value)) {
         return false;
@@ -378,7 +463,7 @@
     return true;
   }
 
-  const isDefault = o => readValue(o) === o.default;
+  const isDefault = o => JSON.stringify(readValue(o)) === JSON.stringify(o.default);
 
   // A setting differs from its default, the feature or any of its options.
   const isModified = s => (!s.core && !isDefault(s)) || (s.options ?? []).some(o => !isDefault(o));
@@ -388,6 +473,9 @@
       writeValue(o, o.default);
     }
   }
+
+  // What Reset to defaults puts back
+  const RESETTABLE = ALL.filter(o => !o.keepOnReset);
 
   // For Undo after Import and Reset to defaults.
   const snapshot = () => ({ prefs: new Map(ALL.map(o => [o, readValue(o)])), mods: FzMods.exportState() });
@@ -494,7 +582,7 @@
       Services.prefs.clearUserPref(PREF_BRANCH + name);
     }
     for (const s of SETTINGS) {
-      if (s.default && !Services.prefs.prefHasUserValue(PREF_BRANCH + s.pref)) {
+      if (!s.type && s.default && !Services.prefs.prefHasUserValue(PREF_BRANCH + s.pref)) {
         Services.prefs.setBoolPref(PREF_BRANCH + s.pref, true);
       }
     }
@@ -627,6 +715,12 @@
             h("div", { class: "fz-mock-page" })
           ),
           h("i", { class: "fz-mock-download" })
+        );
+        break;
+      case "websites":
+        mock.append(
+          h("div", { class: "fz-mock-toolbar" }, h("div", { class: "fz-mock-urlbar" })),
+          h("div", { class: "fz-mock-page" }, h("i"), h("i"), h("i"))
         );
         break;
       case "folders":
@@ -762,7 +856,38 @@
     return { el, sync };
   }
 
-  const OPTION_BUILDERS = { number: buildNumber, range: buildRange, modifiers: buildModifiers };
+  // One of a few values, as a segmented row of chips
+  function buildChoice(o) {
+    const chips = o.choices.map(c =>
+      h("button", {
+        type: "button",
+        role: "radio",
+        class: "fz-chip",
+        "data-key": c.key,
+        text: c.label,
+        onclick: () => setString(o, c.key),
+      })
+    );
+    const note = h("span", { class: "fz-option-unit" });
+    const el = h(
+      "div",
+      { class: "fz-option" },
+      h("span", { class: "fz-option-label", text: o.label }),
+      h("span", { class: "fz-chips", role: "radiogroup", "aria-label": o.label }, ...chips),
+      note,
+      o.hint && h("p", { class: "fz-option-hint", text: o.hint })
+    );
+    const sync = () => {
+      const value = readValue(o);
+      for (const chip of chips) {
+        chip.setAttribute("aria-checked", String(chip.dataset.key === value));
+      }
+      note.textContent = o.note?.() || "";
+    };
+    return { el, sync };
+  }
+
+  const OPTION_BUILDERS = { number: buildNumber, range: buildRange, modifiers: buildModifiers, choice: buildChoice };
 
   function buildOptions(options) {
     const built = options.map(o => OPTION_BUILDERS[o.type](o));
@@ -789,7 +914,8 @@
   function searchText(s) {
     const options = (s.options ?? []).flatMap(o => [o.label, o.unit, o.hint, ...(o.keys ?? []).map(k => k.label)]);
     const layouts = s.layout ? LAYOUTS.flatMap(l => [l.group, l.label, l.hint]) : [];
-    return [s.label, s.description, s.keywords, ...(s.tips ?? []), ...options, ...layouts]
+    const schemes = s.colors ? FzColors.allSchemes().map(x => x.name) : [];
+    return [s.label, s.description, s.keywords, ...(s.tips ?? []), ...options, ...layouts, ...schemes]
       .filter(Boolean)
       .join(" ")
       .toLowerCase();
@@ -914,9 +1040,381 @@
     return row;
   }
 
+  // ---- color schemes ----
+  // One tile per scheme (presets, then yours, then +), each a small window
+  // painted with it: its light look on the left half, its dark look on the
+  // right (one look on both for a scheme that forces a mode). Picking one of
+  // your schemes shows its editor under the tiles.
+
+  // Colors a new scheme's added color starts from, the first one not in it
+  const NEW_SEEDS = ["#5b8def", "#e5508a", "#2bb673", "#f2a33a"];
+
+  // Variables a tile half paints with (theme/settings.css)
+  function paintHalf(half, scheme, mode) {
+    const p = FzColors.palette(scheme, mode);
+    if (!p) {
+      return;
+    }
+    half.style.setProperty("--fz-sw-frame", p["frame-bg"]);
+    half.style.setProperty("--fz-sw-gradient", p["frame-gradient"]);
+    half.style.setProperty("--fz-sw-selected", p["tab-selected-bg"]);
+    half.style.setProperty("--fz-sw-text", p.text);
+    half.style.setProperty("--fz-sw-accent", p.accent);
+  }
+
+  function buildSchemeTile(scheme, pick) {
+    const halves = ["light", "dark"].map(mode => {
+      const half = h(
+        "div",
+        { class: "fz-scheme-half", "data-mode": scheme.mode || mode },
+        h("i", { class: "fz-scheme-tab" }),
+        h("i", { class: "fz-scheme-line" }),
+        h("i", { class: "fz-scheme-dot" })
+      );
+      paintHalf(half, scheme, scheme.mode || mode);
+      return half;
+    });
+    return h(
+      "button",
+      {
+        type: "button",
+        role: "radio",
+        class: "fz-scheme-tile",
+        "data-scheme": scheme.id,
+        title: scheme.name,
+        "aria-label": scheme.name,
+        onclick: () => pick(scheme.id),
+      },
+      h(
+        "div",
+        { class: "fz-scheme-mock", "data-firefox": scheme.id === FzColors.FIREFOX_ID, "aria-hidden": "true" },
+        ...halves
+      ),
+      h("span", { class: "fz-scheme-label", text: scheme.name })
+    );
+  }
+
+  // With spaces on, the picker is for the space this window shows. Spaces
+  // without their own scheme use the default (the pref), as does everything
+  // with spaces off.
+  function schemeSpace() {
+    const spaces = window.FirefoxZenSpaces;
+    return spaces?.enabled() ? (spaces.list().find(x => x.id === spaces.activeId()) ?? null) : null;
+  }
+
+  // What the picker shows: the space's own scheme, else the default
+  function shownScheme(s) {
+    const own = schemeSpace()?.scheme;
+    return own && FzColors.schemeById(own) ? own : readValue(s);
+  }
+
+  function pickScheme(s, id) {
+    const space = schemeSpace();
+    if (space) {
+      window.FirefoxZenSpaces.setScheme(space.id, id);
+    } else {
+      setString(s, id);
+    }
+  }
+
+  function updateSaved(id, change) {
+    FzColors.saveSchemes(FzColors.savedSchemes().map(x => (x.id === id ? change(structuredClone(x)) : x)));
+  }
+
+  // A copy of the shown scheme's colors and tweaks (not a forced mode, which
+  // the editor can't take off again), picked right away
+  function newScheme(s) {
+    const from = FzColors.schemeById(shownScheme(s));
+    const saved = FzColors.savedSchemes();
+    let n = saved.length + 1;
+    while (saved.some(x => x.name === `Custom ${n}`)) {
+      n++;
+    }
+    const scheme = {
+      id: `custom-${Date.now().toString(36)}`,
+      name: `Custom ${n}`,
+      seeds: from.seeds.length ? [...from.seeds] : [NEW_SEEDS[0]],
+    };
+    for (const half of ["light", "dark"]) {
+      if (from[half]) {
+        scheme[half] = structuredClone(from[half]);
+      }
+    }
+    FzColors.saveSchemes([...saved, scheme]);
+    pickScheme(s, scheme.id);
+  }
+
+  function deleteScheme(s, scheme) {
+    if (!Services.prompt.confirm(window, "Delete Color Scheme", `Delete “${scheme.name}”? This can't be undone.`)) {
+      return;
+    }
+    // Spaces that had it go back to the default
+    if (readValue(s) === scheme.id) {
+      setString(s, FzColors.FIREFOX_ID);
+    }
+    FzColors.saveSchemes(FzColors.savedSchemes().filter(x => x.id !== scheme.id));
+  }
+
+  // Name and colors of the picked scheme, when it's one of yours
+  function buildSchemeEditor(s) {
+    const el = h("div", { class: "fz-options fz-scheme-editor", hidden: true });
+    // Scheme id + color count the inputs were built for
+    let shape = "";
+    let inputs = null;
+    // The color panel reports every move: save at most every 120 ms
+    let pending = null;
+    let timer = null;
+    const flush = () => {
+      clearTimeout(timer);
+      timer = null;
+      if (pending) {
+        const { id, seeds } = pending;
+        pending = null;
+        updateSaved(id, x => ({ ...x, seeds }));
+      }
+    };
+    const queue = (id, seeds) => {
+      pending = { id, seeds };
+      timer ??= setTimeout(flush, 120);
+    };
+
+    function build(scheme) {
+      const seeds = [...scheme.seeds];
+      const name = h("input", {
+        type: "text",
+        class: "fz-number fz-scheme-name",
+        value: scheme.name,
+        maxlength: 40,
+        "aria-label": "Scheme name",
+        onchange: () => {
+          const value = name.value.trim();
+          if (value) {
+            updateSaved(scheme.id, x => ({ ...x, name: value }));
+          } else {
+            name.value = scheme.name;
+          }
+        },
+        onkeydown: e => {
+          if (e.key === "Enter") {
+            name.blur();
+          }
+        },
+      });
+      const colors = seeds.map((seed, i) => {
+        const input = h("input", {
+          type: "color",
+          class: "fz-seed-input",
+          value: seed,
+          "aria-label": `Color ${i + 1}`,
+          oninput: () => {
+            seeds[i] = input.value;
+            queue(scheme.id, [...seeds]);
+          },
+          onchange: () => {
+            seeds[i] = input.value;
+            queue(scheme.id, [...seeds]);
+            flush();
+          },
+        });
+        const remove =
+          seeds.length > 1 &&
+          h("button", {
+            type: "button",
+            class: "fz-seed-remove",
+            title: "Remove this color",
+            "aria-label": `Remove color ${i + 1}`,
+            onclick: () => updateSaved(scheme.id, x => ({ ...x, seeds: x.seeds.filter((_, j) => j !== i) })),
+          });
+        return { input, el: h("span", { class: "fz-seed" }, input, remove) };
+      });
+      const add =
+        seeds.length < FzColors.MAX_SEEDS &&
+        h("button", {
+          type: "button",
+          class: "fz-seed-add",
+          title: "Add a color",
+          "aria-label": "Add a color",
+          onclick: () =>
+            updateSaved(scheme.id, x => ({
+              ...x,
+              seeds: [...x.seeds, NEW_SEEDS.find(c => !x.seeds.includes(c)) ?? NEW_SEEDS[0]],
+            })),
+        });
+      el.replaceChildren(
+        h(
+          "div",
+          { class: "fz-option" },
+          h("label", { class: "fz-option-label", text: "Name", onclick: () => name.focus() }),
+          name,
+          h("button", { type: "button", class: "fz-reset", text: "Delete", onclick: () => deleteScheme(s, scheme) })
+        ),
+        h(
+          "div",
+          { class: "fz-option" },
+          h("span", { class: "fz-option-label", text: "Colors" }),
+          h("span", { class: "fz-seeds" }, ...colors.map(c => c.el), add),
+          h("p", {
+            class: "fz-option-hint",
+            text: "1 color is flat, 2 or 3 make a gradient, 4 put one in each corner.",
+          })
+        )
+      );
+      inputs = { name, colors: colors.map(c => c.input) };
+    }
+
+    const sync = () => {
+      const scheme = FzColors.savedSchemes().find(x => x.id === shownScheme(s));
+      el.hidden = !scheme;
+      if (!scheme) {
+        shape = "";
+        return;
+      }
+      const next = `${scheme.id}/${scheme.seeds.length}`;
+      if (next !== shape) {
+        shape = next;
+        build(scheme);
+        return;
+      }
+      // Same inputs: take changes made elsewhere, but not over one being edited
+      if (document.activeElement !== inputs.name) {
+        inputs.name.value = scheme.name;
+      }
+      if (!pending) {
+        inputs.colors.forEach((input, i) => (input.value = scheme.seeds[i]));
+      }
+    };
+    return { el, sync };
+  }
+
+  function buildColorsSetting(s) {
+    const pick = id => pickScheme(s, id);
+    let radios = [];
+    // Arrow keys pick the next scheme, like a radio group
+    const tiles = h("div", {
+      class: "fz-scheme-tiles",
+      role: "radiogroup",
+      "aria-label": s.label,
+      onkeydown: e => {
+        const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
+        const from = radios.indexOf(e.target);
+        if (!step || from < 0) {
+          return;
+        }
+        e.preventDefault();
+        const next = radios[(from + step + radios.length) % radios.length];
+        next.focus();
+        pick(next.dataset.scheme);
+      },
+    });
+    const add = h(
+      "button",
+      {
+        type: "button",
+        class: "fz-scheme-tile fz-scheme-add",
+        title: "New scheme from the one you have now",
+        "aria-label": "New color scheme",
+        onclick: () => newScheme(s),
+      },
+      h("div", { class: "fz-scheme-mock", "aria-hidden": "true" }),
+      h("span", { class: "fz-scheme-label", text: "New" })
+    );
+    const editor = buildSchemeEditor(s);
+    const options = buildOptions(s.options);
+    const reset = h("button", {
+      type: "button",
+      class: "fz-row-reset",
+      text: "Reset",
+      title: `Reset ${s.label} to Firefox theme and Auto`,
+      onclick: () => {
+        const space = schemeSpace();
+        if (space?.scheme) {
+          window.FirefoxZenSpaces.setScheme(space.id, null);
+        }
+        resetSetting(s);
+      },
+    });
+
+    // With spaces: whose scheme this is, and the default the others use
+    const scopeText = h("span");
+    const useDefault = h("button", {
+      type: "button",
+      class: "fz-option-reset",
+      text: "Use default",
+      title: "This space follows the default scheme again",
+      onclick: () => window.FirefoxZenSpaces.setScheme(schemeSpace().id, null),
+    });
+    const makeDefault = h("button", {
+      type: "button",
+      class: "fz-option-reset",
+      text: "Make default",
+      title: "Spaces without their own scheme use this one",
+      onclick: () => setString(s, shownScheme(s)),
+    });
+    const scope = h("p", { class: "fz-hint fz-scheme-scope" }, scopeText, useDefault, makeDefault);
+
+    const row = h(
+      "div",
+      { class: "fz-setting fz-colors-setting", "data-pref": s.pref },
+      h(
+        "div",
+        { class: "fz-setting-body" },
+        h(
+          "span",
+          { class: "fz-setting-head" },
+          h("span", { class: "fz-setting-title", text: s.label }),
+          h("span", { class: "fz-modified", title: "Changed from the default", "aria-label": "Changed" }),
+          reset
+        ),
+        h("p", { class: "fz-setting-desc", text: s.description })
+      ),
+      scope,
+      tiles,
+      editor.el,
+      options.el,
+      h("ul", { class: "fz-tips" }, ...s.tips.map(t => h("li", { text: t })))
+    );
+
+    // Tiles are rebuilt only when a scheme changes
+    let listKey = "";
+    syncers.push(() => {
+      const list = FzColors.allSchemes();
+      const key = JSON.stringify(list);
+      if (key !== listKey) {
+        listKey = key;
+        radios = list.map(scheme => buildSchemeTile(scheme, pick));
+        tiles.replaceChildren(...radios, add);
+        row.fzSearch = searchText(s);
+      }
+      const active = shownScheme(s);
+      for (const tile of radios) {
+        const on = tile.dataset.scheme === active;
+        tile.setAttribute("aria-checked", String(on));
+        tile.tabIndex = on ? 0 : -1;
+      }
+      const space = schemeSpace();
+      const own = !!(space?.scheme && FzColors.schemeById(space.scheme));
+      const fallback = FzColors.activeScheme().name;
+      scope.hidden = !space;
+      if (space) {
+        scopeText.textContent = own
+          ? `For ${space.icon} ${space.name}. Spaces without their own scheme use ${fallback}.`
+          : `For ${space.icon} ${space.name}, which uses the default, ${fallback}. Picking one gives it its own.`;
+      }
+      useDefault.hidden = !own;
+      makeDefault.hidden = !own || active === readValue(s);
+      row.toggleAttribute("data-modified", isModified(s) || own);
+      editor.sync();
+      options.sync();
+    });
+    return row;
+  }
+
   function buildSetting(s) {
     if (s.layout) {
       return buildLayoutSetting(s);
+    }
+    if (s.colors) {
+      return buildColorsSetting(s);
     }
     const control = s.core
       ? h("span", { class: "fz-badge", text: "Core" })
@@ -1085,7 +1583,7 @@
       });
 
     const resetAll = () => {
-      for (const o of ALL) {
+      for (const o of RESETTABLE) {
         writeValue(o, o.default);
       }
       return "Everything is back to its default.";
@@ -1291,6 +1789,8 @@
   Services.prefs.addObserver(PREF_BRANCH, observer);
   Services.prefs.addObserver(VISIBILITY_PREF, observer);
   Services.prefs.addObserver(VERTICAL_TABS_PREF, observer);
+  // Switched spaces: the scheme picker shows the new one's
+  window.addEventListener("FzSpacesChanged", sync);
   // Firefox's sidebar button expands/collapses: keep the layout picker current.
   const expandedObserver = new MutationObserver(sync);
   const tabs = document.getElementById("tabbrowser-tabs");
@@ -1303,6 +1803,7 @@
       Services.prefs.removeObserver(PREF_BRANCH, observer);
       Services.prefs.removeObserver(VISIBILITY_PREF, observer);
       Services.prefs.removeObserver(VERTICAL_TABS_PREF, observer);
+      window.removeEventListener("FzSpacesChanged", sync);
       expandedObserver.disconnect();
     },
     { once: true }

@@ -172,7 +172,7 @@ function writeFile(id, sealed) {
 
 // ---- snapshots ----
 
-// window: SessionStore window state; meta: { name, icon }; history:
+// window: SessionStore window state; meta: { name, icon, scheme }; history:
 // [{ url, title, time }] oldest first; downloads: see downloadRecord().
 const EMPTY_SNAPSHOT = { window: null, cookies: [], meta: null, history: [], downloads: [] };
 
@@ -458,7 +458,7 @@ export const FzPrivateSpaces = {
     await writeFile(id, await seal(id, await newKey(password), { ...EMPTY_SNAPSHOT, meta }));
   },
 
-  // Its name and icon ({ name, icon }) while unlocked, else null.
+  // Its name, icon and color scheme ({ name, icon, scheme }) while unlocked, else null.
   meta: id => unlocked.get(id)?.meta ?? null,
 
   async setMeta(id, meta) {

@@ -8,6 +8,7 @@ Folder icons from github.com/ferrocyante/Arc-H
 Better unloaded tabs styling from github.com/Felkazz/zen-browser-better-unloaded-tabs
 */
 
+@import url("theme/colors.css");
 @import url("theme/icons.css");
 @import url("theme/tabgroups.css");
 @import url("theme/theme-sidebar.css");

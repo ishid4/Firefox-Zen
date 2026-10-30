@@ -33,6 +33,7 @@
   const SPACES_PREF = "firefox-zen.spaces";
   const ROOT_ID = "fz-library";
   const HTML_NS = "http://www.w3.org/1999/xhtml";
+  const { FzColors } = ChromeUtils.importESModule("chrome://userscripts/content/firefox-zen-colors.sys.mjs");
   const DEFAULT_FAVICON = "chrome://global/skin/icons/defaultFavicon.svg";
 
   const DRAG_THRESHOLD = 5;
@@ -707,6 +708,21 @@
     );
   }
 
+  // A space's column in the colors of its scheme (its own, else the default;
+  // none for Firefox theme), so each space shows what it looks like
+  function paintColumn(column, space) {
+    const scheme = FzColors.schemeById(space.scheme) ?? FzColors.activeScheme();
+    const tokens = FzColors.tokens(scheme);
+    if (!tokens) {
+      return column;
+    }
+    column.setAttribute("fz-scheme", scheme.id);
+    for (const name of ["frame-bg", "frame-gradient-light", "frame-gradient-dark", "text", "accent", "hover"]) {
+      column.style.setProperty(`--fz-col-${name}`, tokens[name]);
+    }
+    return column;
+  }
+
   function buildColumn(space) {
     const active = space.id === api().activeId();
     const tabs = api().tabsIn(space.id);
@@ -809,17 +825,20 @@
       list.append(separator());
     }
 
-    return h(
-      "div",
-      {
-        class: "fz-lib-column",
-        "data-space": space.id,
-        "data-drop-space": space.id,
-        "data-key": `space:${space.id}`,
-        active,
-      },
-      head,
-      list
+    return paintColumn(
+      h(
+        "div",
+        {
+          class: "fz-lib-column",
+          "data-space": space.id,
+          "data-drop-space": space.id,
+          "data-key": `space:${space.id}`,
+          active,
+        },
+        head,
+        list
+      ),
+      space
     );
   }
 
@@ -923,7 +942,7 @@
       );
     }
 
-    return h(
+    const column = h(
       "div",
       {
         class: "fz-lib-column fz-lib-private-column",
@@ -935,6 +954,8 @@
       head,
       list
     );
+    // A locked one's scheme is encrypted with the rest
+    return open ? paintColumn(column, space) : column;
   }
 
   function buildGroup(group, tabs) {

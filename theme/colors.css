@@ -1,0 +1,169 @@
+/* Firefox-Zen colors: the shared color tokens every theme file uses.
+ * Imported first by userChrome.css and userContent.css (about:downloads).
+ * Each token is a light/dark pair; light-dark() resolves where it's used,
+ * so the element's color-scheme picks the half.
+ * A color scheme (JS/firefox-zen-colors.uc.js) sets the tokens on <html> and
+ * adds [fz-colors]; the block below then maps them onto Firefox's own
+ * variables. Without one ("Firefox theme") Firefox's theme shows as is. */
+
+@-moz-document url-prefix("chrome:"), url-prefix("about:downloads") {
+  :root {
+    /* Opaque window background behind the toolbox and sidebar, where Firefox
+     * would otherwise show the bare (black) window without a theme */
+    --fz-frame-bg: light-dark(#e8e8e8, #202020);
+    /* Hairline around floating surfaces on the frame */
+    --fz-frame-edge: light-dark(rgb(0 0 0 / 0.08), rgb(255 255 255 / 0.06));
+
+    /* Opaque floating panels: the Library, Glance's buttons, popups of ours */
+    --fz-panel-bg: Canvas;
+    --fz-panel-text: CanvasText;
+
+    /* Accent for selection, toggles and primary buttons */
+    --fz-accent: var(--color-accent-primary, AccentColor);
+
+    /* Status colors */
+    --fz-attention: light-dark(#d18b00, #f5b82e);
+    --fz-danger: light-dark(#c50042, #ff848b);
+  }
+}
+
+/* ---- color schemes ----
+ * Set by the scheme (inline on <html>): --fz-frame-bg, --fz-frame-gradient-light,
+ * --fz-frame-gradient-dark, --fz-frame-edge, --fz-field-bg, --fz-popup-bg,
+ * --fz-tab-selected-bg, --fz-text, --fz-text-muted, --fz-border, --fz-hover,
+ * --fz-active, --fz-accent, --fz-accent-text.
+ * The window is one surface: the frame color and gradient are painted once
+ * (fixed to the window) and the toolbars and sidebar are see-through over it,
+ * so the gradient runs unbroken behind them, Zen-style. */
+
+@-moz-document url-prefix("chrome:") {
+:root[fz-colors] {
+  --fz-frame-gradient: var(--fz-frame-gradient-light);
+  --fz-frame-paint: var(--fz-frame-gradient) fixed 0 0 / 100vw 100vh no-repeat, var(--fz-frame-bg);
+
+  @media (prefers-color-scheme: dark) {
+    --fz-frame-gradient: var(--fz-frame-gradient-dark);
+  }
+
+  /* Everything follows the mode, not the installed theme's brightness */
+  --toolbar-color-scheme: light dark !important;
+  --tab-selected-color-scheme: light dark !important;
+
+  /* Window (toolbox) */
+  --toolbox-background-color: var(--fz-frame-bg) !important;
+  --toolbox-background-color-inactive: var(--fz-frame-bg) !important;
+  --toolbox-text-color: var(--fz-text) !important;
+  --toolbox-text-color-inactive: var(--fz-text) !important;
+  --toolbox-background-gradient: var(--fz-frame-gradient) !important;
+  --toolbox-background-image: var(--fz-frame-gradient) !important;
+  --toolbox-background-repeat: no-repeat !important;
+  --toolbox-background-position: 0 0 !important;
+  --toolbox-background-size: 100vw 100vh !important;
+  --lwt-accent-color: var(--fz-frame-bg) !important;
+  --lwt-accent-color-inactive: var(--fz-frame-bg) !important;
+  --lwt-text-color: var(--fz-text) !important;
+  --lwt-header-image: none !important;
+  --lwt-additional-images: none !important;
+
+  /* Toolbars and tabs */
+  --toolbar-background-color: transparent !important;
+  --toolbar-text-color: var(--fz-text) !important;
+  --tab-background-color-selected: var(--fz-tab-selected-bg) !important;
+  --tab-text-color-selected: var(--fz-text) !important;
+  --tab-hover-background-color: var(--fz-hover) !important;
+  --lwt-tab-line-color: var(--fz-accent) !important;
+  --toolbarbutton-background-color-hover: var(--fz-hover) !important;
+  --toolbarbutton-background-color-active: var(--fz-active) !important;
+  --toolbarbutton-hover-background: var(--fz-hover) !important;
+  --toolbarbutton-active-background: var(--fz-active) !important;
+  --toolbarbutton-icon-fill-attention: var(--fz-accent) !important;
+  --tabs-navbar-separator-color: transparent !important;
+  --toolbarseparator-color: var(--fz-border) !important;
+  --chrome-content-separator-color: var(--fz-border) !important;
+
+  /* Address and search fields */
+  --toolbar-field-background-color: var(--fz-field-bg) !important;
+  --toolbar-field-background-color-focus: var(--fz-popup-bg) !important;
+  --toolbar-field-text-color: var(--fz-text) !important;
+  --toolbar-field-text-color-focus: var(--fz-text) !important;
+  --toolbar-field-border-color: transparent !important;
+  --toolbar-field-border-color-focus: var(--fz-accent) !important;
+  --urlbarview-background-color-selected: var(--fz-accent) !important;
+  --urlbarview-text-color-selected: var(--fz-accent-text) !important;
+
+  /* Menus and panels */
+  --fz-panel-bg: var(--fz-popup-bg) !important;
+  --fz-panel-text: var(--fz-text) !important;
+  --panel-background-color: var(--fz-popup-bg) !important;
+  --panel-text-color: var(--fz-text) !important;
+  --panel-border-color: var(--fz-border) !important;
+  --arrowpanel-background: var(--fz-popup-bg) !important;
+  --arrowpanel-color: var(--fz-text) !important;
+  --arrowpanel-border-color: var(--fz-border) !important;
+
+  /* Sidebar: see-through to the frame */
+  --sidebar-background-color: transparent !important;
+  --sidebar-text-color: var(--fz-text) !important;
+  --sidebar-border-color: var(--fz-border) !important;
+
+  /* Accent */
+  --color-accent-primary: var(--fz-accent) !important;
+  --color-accent-primary-hover: color-mix(in oklch, var(--fz-accent) 88%, var(--fz-text)) !important;
+  --color-accent-primary-active: color-mix(in oklch, var(--fz-accent) 78%, var(--fz-text)) !important;
+  --button-text-color-primary: var(--fz-accent-text) !important;
+  --focus-outline-color: var(--fz-accent) !important;
+
+  body {
+    background: var(--fz-frame-paint) !important;
+  }
+
+  /* See-through to the body's paint (so a fade shows everywhere), without
+   * the native macOS titlebar vibrancy. Overlays (compact toolbar and
+   * sidebar) paint their own in general.css. */
+  #navigator-toolbox {
+    background: transparent !important;
+
+    &::after {
+      appearance: none !important;
+    }
+  }
+
+  /* The window border paints the frame again; the body has it already */
+  #browser {
+    background: transparent !important;
+  }
+
+  /* The previous scheme's paint over the new one, fading out
+   * (JS/firefox-zen-colors.uc.js). Above the body's background, below
+   * everything in it. */
+  --fz-prev-gradient: var(--fz-prev-frame-gradient-light);
+  --fz-prev-paint: var(--fz-prev-gradient) fixed 0 0 / 100vw 100vh no-repeat, var(--fz-prev-frame-bg);
+
+  @media (prefers-color-scheme: dark) {
+    --fz-prev-gradient: var(--fz-prev-frame-gradient-dark);
+  }
+
+  &[fz-colors-fade] body::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background: var(--fz-prev-paint);
+  }
+
+  &[fz-colors-fade="run"] body::before {
+    opacity: 0;
+    transition: opacity 0.35s ease;
+
+    @media (prefers-reduced-motion: reduce) {
+      transition: none;
+    }
+  }
+
+  /* Firefox switches these by the installed theme's brightness */
+  :is(.urlbar, #searchbar, #sidebar-box) {
+    color-scheme: light dark !important;
+  }
+}
+}

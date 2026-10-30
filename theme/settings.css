@@ -5,7 +5,6 @@
 }
 
 .fz-settings-view {
-  --fz-accent: var(--fz-lib-accent, var(--color-accent-primary, AccentColor));
   --fz-muted: color-mix(in srgb, currentColor 62%, transparent);
   --fz-surface: color-mix(in srgb, currentColor 5%, transparent);
   --fz-surface-hover: color-mix(in srgb, currentColor 9%, transparent);
@@ -289,7 +288,7 @@
     background: var(--fz-surface-hover) !important;
   }
 
-  &[aria-pressed="true"] {
+  &:is([aria-pressed="true"], [aria-checked="true"]) {
     border-color: transparent !important;
     background: var(--fz-accent) !important;
     color: var(--button-text-color-primary, white);
@@ -422,7 +421,7 @@
   overflow: hidden;
   border-radius: 7px;
   border: 1px solid var(--fz-line);
-  background: var(--toolbar-bgcolor, var(--fz-surface));
+  background: var(--fz-surface);
 }
 
 .fz-mock-toolbar {
@@ -534,7 +533,8 @@
   gap: 8px;
 }
 
-.fz-layout-tile {
+.fz-layout-tile,
+.fz-scheme-tile {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -556,7 +556,7 @@
     background: color-mix(in srgb, var(--fz-accent) 10%, transparent) !important;
     box-shadow: inset 0 0 0 1px var(--fz-accent);
 
-    & .fz-layout-label {
+    & :is(.fz-layout-label, .fz-scheme-label) {
       font-weight: 600;
     }
   }
@@ -567,9 +567,223 @@
   }
 }
 
-.fz-layout-label {
+.fz-layout-label,
+.fz-scheme-label {
   font-size: 12px;
   text-align: center;
+}
+
+/* ---- Color schemes ---- */
+.fz-colors-setting {
+  gap: 10px;
+  padding-block: 12px;
+}
+
+.fz-scheme-scope {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin: 0;
+}
+
+.fz-scheme-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 8px;
+}
+
+.fz-scheme-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A small window: light look on the left half, dark on the right. The
+ * gradient is twice a half's width, so it runs on across the split. */
+.fz-scheme-mock {
+  display: flex;
+  height: 52px;
+  overflow: hidden;
+  border: 1px solid var(--fz-line);
+  border-radius: 7px;
+}
+
+.fz-scheme-half {
+  position: relative;
+  flex: 1;
+  background: var(--fz-sw-gradient, none) 0 0 / 200% 100% no-repeat, var(--fz-sw-frame);
+
+  & + & {
+    background-position: 100% 0, 0 0;
+  }
+
+  & > i {
+    position: absolute;
+  }
+}
+
+/* Selected tab with a line of text, and the accent */
+.fz-scheme-tab {
+  inset: 9px 0 auto 6px;
+  height: 11px;
+  border-radius: 4px 0 0 4px;
+  background: var(--fz-sw-selected);
+
+  .fz-scheme-half + .fz-scheme-half > & {
+    inset-inline: 0 6px;
+    border-radius: 0 4px 4px 0;
+  }
+}
+
+.fz-scheme-line {
+  inset: 13px auto auto 10px;
+  width: 60%;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--fz-sw-text);
+  opacity: 0.75;
+
+  .fz-scheme-half + .fz-scheme-half > & {
+    inset-inline-start: 0;
+    width: 40%;
+  }
+}
+
+.fz-scheme-dot {
+  inset: auto auto 7px 7px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--fz-sw-accent);
+
+  .fz-scheme-half + .fz-scheme-half > & {
+    inset-inline-start: auto;
+    inset-inline-end: 7px;
+  }
+}
+
+/* Firefox theme: Firefox's own light and dark */
+.fz-scheme-mock[data-firefox] > .fz-scheme-half {
+  --fz-sw-frame: #f0f0f4;
+  --fz-sw-selected: #ffffff;
+  --fz-sw-text: #15141a;
+  --fz-sw-accent: #0061e0;
+
+  & + .fz-scheme-half {
+    --fz-sw-frame: #1c1b22;
+    --fz-sw-selected: #42414d;
+    --fz-sw-text: #fbfbfe;
+    --fz-sw-accent: #00ddff;
+  }
+}
+
+.fz-scheme-add .fz-scheme-mock {
+  display: grid;
+  place-items: center;
+  border-style: dashed;
+  color: var(--fz-muted);
+
+  &::before {
+    content: "+";
+    font-size: 22px;
+    line-height: 1;
+  }
+}
+
+.fz-scheme-editor {
+  padding: 10px 12px;
+  border-radius: 9px;
+  background: var(--fz-surface);
+}
+
+.fz-scheme-name {
+  width: 180px;
+  font-variant-numeric: normal;
+}
+
+.fz-seeds {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.fz-seed {
+  position: relative;
+  display: flex;
+}
+
+.fz-seed-input {
+  width: 32px;
+  height: 32px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--fz-line);
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+
+  &::-moz-color-swatch {
+    border: none;
+    border-radius: 50%;
+  }
+
+  &:focus-visible {
+    outline: var(--focus-outline, 2px solid var(--fz-accent));
+    outline-offset: 2px;
+  }
+}
+
+.fz-seed-remove,
+.fz-seed-add {
+  display: grid;
+  place-items: center;
+  margin: 0 !important;
+  padding: 0 !important;
+  border-radius: 50%;
+  color: inherit;
+  font: inherit;
+  line-height: 1;
+}
+
+/* × on the swatch's corner while hovered */
+.fz-seed-remove {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  width: 16px;
+  min-width: 0;
+  height: 16px;
+  border: 1px solid var(--fz-line) !important;
+  background: var(--arrowpanel-background, Canvas) !important;
+  font-size: 11px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+
+  &::before {
+    content: "\00d7";
+  }
+
+  .fz-seed:is(:hover, :focus-within) > & {
+    opacity: 1;
+  }
+}
+
+.fz-seed-add {
+  width: 32px;
+  height: 32px;
+  border: 1px dashed var(--fz-line) !important;
+  background: transparent !important;
+  color: var(--fz-muted);
+  font-size: 18px;
+
+  &::before {
+    content: "+";
+  }
+
+  &:hover {
+    background: var(--fz-surface-hover) !important;
+  }
 }
 
 .fz-layout-note,
@@ -825,7 +1039,7 @@
   gap: 4px;
   padding: 4px;
   border-radius: 5px;
-  background: var(--toolbar-bgcolor, Canvas);
+  background: var(--fz-panel-bg);
   box-shadow: 0 0 0 1px var(--fz-line);
   opacity: 0;
   translate: -8px 0;
@@ -1057,5 +1271,33 @@
 @media (prefers-reduced-motion: reduce) {
   .fz-settings-view * {
     transition: none !important;
+  }
+}
+
+/* Websites follow the mode: the page splits into light and dark */
+.fz-preview-websites .fz-mock-page {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  padding-inline: 10px;
+  transition: background 0.2s ease;
+
+  & > i {
+    width: 70%;
+    height: 3px;
+    border-radius: 2px;
+    background: var(--fz-line);
+
+    &:nth-child(2) { width: 50%; }
+    &:nth-child(3) { width: 60%; }
+  }
+}
+
+.fz-setting[data-on] .fz-preview-websites .fz-mock-page {
+  background: linear-gradient(90deg, #f4f4f6 50%, #23222b 50%);
+
+  & > i {
+    background: linear-gradient(90deg, rgb(0 0 0 / 0.25) 50%, rgb(255 255 255 / 0.3) 50%) 0 0 / 143% 100%;
   }
 }

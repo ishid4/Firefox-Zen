@@ -4,7 +4,7 @@
  * tint and bar so they stand out. */
 
 #downloadsListBox > richlistitem.download-state[state="2"] {
-  --fz-download-attention: light-dark(#d18b00, #f5b82e);
+  --fz-download-attention: var(--fz-attention);
 
   background-color: color-mix(in srgb, var(--fz-download-attention) 16%, transparent) !important;
   box-shadow: inset 3px 0 0 var(--fz-download-attention);
@@ -35,7 +35,7 @@
   padding: 0;
   border: none;
   border-radius: 9px;
-  background: var(--toolbar-bgcolor, Canvas);
+  background: var(--fz-panel-bg);
   box-shadow: 0 0 0 1px color-mix(in srgb, currentColor 12%, transparent), 0 6px 16px rgb(0 0 0 / 0.25);
   overflow: visible;
   pointer-events: none;

@@ -6,9 +6,10 @@
 
 // Model
 // - Space list (global, all windows): JSON in pref firefox-zen.spaces.list
-//   [{ id, name, icon, container }]. Prefs always persist, even without
+//   [{ id, name, icon, container, scheme }]. Prefs always persist, even without
 //   session restore. container = userContextId new tabs in the space open in
-//   (0/missing = no container).
+//   (0/missing = no container). scheme = color scheme id shown while the space
+//   is active (missing = the default one; JS/firefox-zen-colors.uc.js).
 // - Tab's space: SessionStore custom tab value (survives restarts/restore).
 // - Window's active space: SessionStore custom window value.
 // - Pinned tabs are global "Pins": never assigned, never hidden
@@ -36,6 +37,7 @@
   const DEFAULT_ICONS = ["🏠", "💼", "🎮", "📚", "🎵", "🛒", "✈️", "🧪", "🎨"];
   const PRIVATE_ICON = "🕶️";
   const PRIVATE_MODULE = "chrome://userscripts/content/firefox-zen-private-spaces.sys.mjs";
+  const { FzColors } = ChromeUtils.importESModule("chrome://userscripts/content/firefox-zen-colors.sys.mjs");
   const FLUSHER_MODULE = "moz-src:///browser/components/sessionstore/TabStateFlusher.sys.mjs";
   // A private space's window changed its tabs; other windows get FzPrivateTabsChanged.
   const PRIVATE_TABS_TOPIC = "firefox-zen-private-tabs-changed";
@@ -96,6 +98,7 @@
         private: true,
         name: meta?.name || `Private ${n}`,
         icon: meta?.icon || PRIVATE_ICON,
+        scheme: meta?.scheme || null,
         locked: !isUnlocked(space.id),
       };
     });
@@ -428,6 +431,24 @@
     const space = list.find(s => s.id === id);
     if (space && icon) {
       space.icon = [...icon].slice(0, 2).join("");
+      writeSpaces(list);
+    }
+  }
+
+  // null = the default scheme. A private space keeps it in its encrypted data.
+  function setSpaceScheme(id, scheme) {
+    if (readSpaces().find(s => s.id === id)?.private) {
+      setPrivateMeta(id, { scheme }).catch(e => console.error("firefox-zen-spaces:", e));
+      return;
+    }
+    const list = readSpaces();
+    const space = list.find(s => s.id === id);
+    if (space && (space.scheme || null) !== scheme) {
+      if (scheme) {
+        space.scheme = scheme;
+      } else {
+        delete space.scheme;
+      }
       writeSpaces(list);
     }
   }
@@ -827,12 +848,15 @@
         }
       }
       const container = containerOf(space);
+      // A scheme of yours goes along whole, so it exists where it's imported
+      const scheme = space.scheme && FzColors.schemeById(space.scheme);
       await IOUtils.writeJSON(path, {
         format: SPACE_FORMAT,
         space: {
           name: space.name,
           icon: space.icon,
           container: container ? ContextualIdentityService.getUserContextLabel(container) : null,
+          scheme: scheme ? (FzColors.PRESETS.includes(scheme) ? scheme.id : scheme) : null,
         },
         tabs,
       });
@@ -871,10 +895,30 @@
     }
   }
 
+  // An exported space's scheme: a preset's id, or a scheme of the exporter's,
+  // saved here unless the same one already is. Returns the id to use, or null.
+  function importScheme(scheme) {
+    if (typeof scheme === "string") {
+      return FzColors.schemeById(scheme) ? scheme : null;
+    }
+    if (!FzColors.validScheme(scheme)) {
+      return null;
+    }
+    const saved = FzColors.savedSchemes();
+    const same = saved.find(x => x.name === scheme.name && JSON.stringify(x.seeds) === JSON.stringify(scheme.seeds));
+    if (same) {
+      return same.id;
+    }
+    const id = saved.some(x => x.id === scheme.id) ? `custom-${Date.now().toString(36)}` : scheme.id;
+    FzColors.saveSchemes([...saved, { ...scheme, id }]);
+    return id;
+  }
+
   // A new space (new id) with the export's tabs, in a normal window. Its
   // container is matched by name, if one by that name exists.
   async function importNormalSpace(data) {
     const id = crypto.randomUUID();
+    const scheme = importScheme(data.space?.scheme);
     const container =
       data.space?.container &&
       ContextualIdentityService.getPublicIdentities().find(
@@ -887,6 +931,7 @@
         name: String(data.space?.name || "Imported"),
         icon: String(data.space?.icon || DEFAULT_ICONS[0]),
         container: container?.userContextId || 0,
+        ...(scheme && { scheme }),
       },
     ]);
     const win = await normalWindow();
@@ -1494,9 +1539,50 @@
       }
     });
 
+    // Color Scheme ▸ : Default (the Settings one), then every scheme
+    const schemeMenu = document.createXULElement("menu");
+    schemeMenu.setAttribute("label", "Color Scheme");
+    schemeMenu.dataset.action = "scheme";
+    const schemePopup = document.createXULElement("menupopup");
+    schemeMenu.append(schemePopup);
+    schemePopup.addEventListener("popupshowing", e => {
+      if (e.target !== schemePopup) {
+        return;
+      }
+      const space = readSpaces().find(s => s.id === menu.dataset.spaceId);
+      const current = FzColors.schemeById(space?.scheme)?.id ?? "";
+      const radio = (label, value) => {
+        const mi = document.createXULElement("menuitem");
+        mi.setAttribute("label", label);
+        mi.setAttribute("type", "radio");
+        mi.dataset.scheme = value;
+        mi.toggleAttribute("checked", value === current);
+        return mi;
+      };
+      const edit = document.createXULElement("menuitem");
+      edit.setAttribute("label", "Edit Color Schemes…");
+      edit.dataset.edit = "true";
+      schemePopup.replaceChildren(
+        radio(`Default (${FzColors.activeScheme().name})`, ""),
+        document.createXULElement("menuseparator"),
+        ...FzColors.allSchemes().map(x => radio(x.name, x.id)),
+        document.createXULElement("menuseparator"),
+        edit
+      );
+    });
+    schemePopup.addEventListener("command", e => {
+      e.stopPropagation();
+      if (e.target.dataset.edit) {
+        window.FirefoxZenLibrary?.open("settings");
+      } else if (e.target.dataset.scheme != null) {
+        setSpaceScheme(menu.dataset.spaceId, e.target.dataset.scheme || null);
+      }
+    });
+
     menu.append(
       item("Rename Space…", "rename"),
       item("Change Icon…", "icon"),
+      schemeMenu,
       containerMenu,
       item("Unload Space", "unload"),
       item("Unlock…", "unlock"),
@@ -1830,6 +1916,8 @@
     create: () => createSpace({ switchToIt: false }),
     rename: setSpaceName,
     setIcon: setSpaceIcon,
+    // A color scheme id, or null for the default one
+    setScheme: setSpaceScheme,
     reorder: reorderSpaces,
     remove: deleteSpace,
     // Into any space, private ones included (asks for its password if locked).

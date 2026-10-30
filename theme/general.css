@@ -121,7 +121,7 @@ toolbar .toolbarbutton-1 {
     /* Firefox's own toolbox paint (theme color/gradient included). Opaque
      * base so it never shows the black window behind it without a theme. */
     #navigator-toolbox {
-      background-color: light-dark(#e8e8e8, #202020) !important;
+      background-color: var(--fz-frame-bg) !important;
       background-image: var(--toolbox-background-gradient, none), image(var(--toolbox-background-color)) !important;
       background-size: 100vw 100vh, auto !important;
     }
@@ -182,7 +182,7 @@ toolbar .toolbarbutton-1 {
     /* Opaque and matching the toolbox (theme color/gradient included), since
      * it now covers the page. Same paint as Firefox's own expand-on-hover
      * overlay: the toolbox gradient sized to the window, over an opaque base. */
-    background-color: light-dark(#e8e8e8, #202020) !important;
+    background-color: var(--fz-frame-bg) !important;
     background-image: var(--toolbox-background-gradient, none), image(var(--toolbox-background-color)) !important;
     background-size: 100vw 100vh, auto !important;
     box-shadow: 0 0 16px rgb(0 0 0 / 0.25);
@@ -236,7 +236,7 @@ toolbar .toolbarbutton-1 {
     --fz-window-border: var(--fz-window-border-width, 6px);
 
     #browser {
-      background-color: light-dark(#e8e8e8, #202020);
+      background-color: var(--fz-frame-bg);
       background-image: var(--toolbox-background-gradient, none), image(var(--toolbox-background-color));
       background-size: 100vw 100vh, auto;
     }
@@ -247,7 +247,7 @@ toolbar .toolbarbutton-1 {
 
       margin: var(--fz-window-border) !important;
       overflow: clip;
-      box-shadow: 0 0 0 1px light-dark(rgb(0 0 0 / 0.08), rgb(255 255 255 / 0.06));
+      box-shadow: 0 0 0 1px var(--fz-frame-edge);
 
       &:not([sidebar-positionend]) {
         margin-inline-start: calc(var(--fz-sidebar-edge) + var(--fz-launcher-gap, 0px)) !important;

@@ -3,9 +3,9 @@
  * Size and place come from JS (the content area's box). */
 
 #fz-library {
-  --fz-lib-bg: var(--toolbar-bgcolor, Canvas);
-  --fz-lib-fg: var(--toolbar-color, CanvasText);
-  --fz-lib-accent: var(--color-accent-primary, AccentColor);
+  --fz-lib-bg: var(--fz-panel-bg);
+  --fz-lib-fg: var(--fz-panel-text);
+  --fz-lib-accent: var(--fz-accent);
   --fz-lib-line: color-mix(in srgb, currentColor 12%, transparent);
   --fz-lib-surface: color-mix(in srgb, currentColor 5%, transparent);
   --fz-lib-hover: color-mix(in srgb, currentColor 9%, transparent);
@@ -138,7 +138,7 @@
     width: 7px;
     height: 7px;
     border-radius: 50%;
-    background: var(--fz-lib-accent, var(--color-accent-primary, AccentColor));
+    background: var(--fz-lib-accent);
   }
 }
 
@@ -332,6 +332,25 @@
 
   &[active] {
     border-color: color-mix(in srgb, var(--fz-lib-accent) 55%, transparent);
+  }
+
+  /* Painted with its space's scheme (JS/firefox-zen-library.uc.js) */
+  &[fz-scheme] {
+    --fz-col-gradient: var(--fz-col-frame-gradient-light);
+    --fz-lib-accent: var(--fz-col-accent);
+    --fz-lib-hover: var(--fz-col-hover);
+
+    @media (prefers-color-scheme: dark) {
+      --fz-col-gradient: var(--fz-col-frame-gradient-dark);
+    }
+
+    border-color: color-mix(in srgb, var(--fz-col-text) 10%, transparent);
+    background: var(--fz-col-gradient) 0 0 / 100% 100% no-repeat, var(--fz-col-frame-bg);
+    color: var(--fz-col-text);
+
+    &[active] {
+      border-color: var(--fz-col-accent);
+    }
   }
 }
 
@@ -805,7 +824,7 @@
 
 /* Pins full and the dragged tabs don't fit */
 .fz-lib-essentials[refusing] {
-  border-color: light-dark(#c50042, #ff848b) !important;
+  border-color: var(--fz-danger) !important;
   border-style: dashed !important;
   cursor: not-allowed;
 }
@@ -1014,7 +1033,7 @@
 
 /* ---- downloads view ---- */
 .fz-lib-dl-row {
-  --fz-lib-attention: light-dark(#d18b00, #f5b82e);
+  --fz-lib-attention: var(--fz-attention);
 
   display: flex;
   align-items: center;
@@ -1052,7 +1071,7 @@
   }
 
   &[blocked] .fz-lib-dl-status {
-    color: light-dark(#c50042, #ff848b);
+    color: var(--fz-danger);
     opacity: 1;
   }
 }

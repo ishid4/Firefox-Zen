@@ -201,7 +201,7 @@
     justify-content: flex-end;
     min-height: 32px;
     -moz-window-dragging: drag;
-    background-color: light-dark(#e8e8e8, #202020);
+    background-color: var(--fz-frame-bg);
     background-image: var(--toolbox-background-gradient, none), image(var(--toolbox-background-color));
     background-size: 100vw 100vh, auto;
     color: var(--toolbox-text-color, inherit);
