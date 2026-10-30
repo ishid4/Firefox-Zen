@@ -185,6 +185,20 @@
     window.openTrustedLinkIn = hooked;
   }
 
+  // ---- keeping the session ----
+
+  // A tab's space lives in session restore, so turning spaces on also turns
+  // on reopening the previous windows and tabs at start. Only then, so it can
+  // still be turned off in Firefox's settings afterwards.
+  const STARTUP_PAGE_PREF = "browser.startup.page";
+  const STARTUP_RESUME = 3;
+
+  function ensureSessionRestore() {
+    if (Services.prefs.getIntPref(STARTUP_PAGE_PREF, 1) !== STARTUP_RESUME) {
+      Services.prefs.setIntPref(STARTUP_PAGE_PREF, STARTUP_RESUME);
+    }
+  }
+
   // ---- tab / window values ----
 
   function rawSpaceOf(tab) {
@@ -1816,6 +1830,7 @@
     observe(_subject, _topic, name) {
       if (name === ENABLED_PREF) {
         if (enabled()) {
+          ensureSessionRestore();
           init();
         } else {
           showAll();
