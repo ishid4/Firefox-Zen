@@ -236,7 +236,8 @@
     box-shadow: 0 4px 16px rgb(0 0 0 / 0.25);
     transition: translate 0.2s ease, opacity 0.15s ease !important;
 
-    &:not(:hover, :focus-within, :has([open])) {
+    /* [fz-hold-hover]: on the macOS traffic lights (JS/firefox-zen-window-controls.uc.js) */
+    &:not(:hover, :focus-within, [fz-hold-hover], :has([open])) {
       translate: 0 calc(-100% + var(--fz-titlebar-peek));
       opacity: 0;
       box-shadow: none;

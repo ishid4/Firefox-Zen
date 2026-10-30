@@ -132,9 +132,12 @@ toolbar .toolbarbutton-1 {
       transition: max-height 0s, opacity 0.15s ease !important;
     }
 
+    /* [fz-hold-hover]: the pointer is on the macOS traffic lights
+     * (JS/firefox-zen-window-controls.uc.js) */
     #navigator-toolbox:not(
         :hover,
         :focus-within,
+        [fz-hold-hover],
         :has([open], #urlbar:is([focused], [popover-open]))
       )
       #nav-bar:not([customizing]) {
