@@ -46,7 +46,8 @@ export class FzStoreParent extends JSWindowActorParent {
 
   // The browser window this tab is in.
   get #window() {
-    return this.browsingContext.top.embedderElement?.ownerGlobal ?? null;
+    // (embedderElement.ownerGlobal is undefined from this module.)
+    return this.browsingContext.top.topChromeWindow ?? null;
   }
 
   #openMods() {
