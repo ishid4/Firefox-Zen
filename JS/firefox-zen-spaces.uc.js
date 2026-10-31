@@ -52,11 +52,11 @@
   // in the meantime doesn't drag us into another space.
   let holdSpace = false;
 
-  // Footer carousel: visible() spaces at a time (VISIBLE_PREF, 2-8); hovering
-  // the first/last visible slot scrolls one slot that way.
-  const VISIBLE_PREF = "firefox-zen.spaces.visible";
-  const VISIBLE_DEFAULT = 4;
-  const visible = () => Math.min(8, Math.max(2, Services.prefs.getIntPref(VISIBLE_PREF, VISIBLE_DEFAULT)));
+  // Footer carousel: always four icons wide. Up to 4 spaces show full size,
+  // 5-6 shrink to fit, more become dots; past what a view holds, hovering the
+  // first/last visible slot scrolls one slot that way.
+  const footerLayout = count =>
+    count <= 4 ? { mode: "full", perView: 4 } : count <= 6 ? { mode: "compact", perView: 6 } : { mode: "dots", perView: 9 };
   const SCROLL_FIRST_DELAY = 250;
   const SCROLL_REPEAT_DELAY = 350;
   let viewStart = 0;
@@ -1286,7 +1286,7 @@
     // Keep the window inside the list, and bring the active space into view
     // when it changes (not on every re-render, so a hover-scroll sticks).
     const count = list.length;
-    const VISIBLE = visible();
+    const { mode, perView: VISIBLE } = footerLayout(count);
     const maxStart = Math.max(0, count - VISIBLE);
     const activeIndex = list.findIndex(s => s.id === activeId);
     if (activeId !== lastRenderedActive && activeIndex >= 0) {
@@ -1301,6 +1301,7 @@
 
     const track = h("div", { class: "fz-space-list" }, ...buttons);
     const viewport = h("div", { class: "fz-space-viewport" }, track);
+    viewport.setAttribute("fz-layout", mode);
     viewport.style.setProperty("--fz-visible-slots", String(Math.min(count, VISIBLE)));
     updateCarousel(viewport, count);
     viewport.addEventListener("mousemove", e => onViewportHover(viewport, count, e));
@@ -1314,7 +1315,7 @@
   function updateCarousel(viewport, count) {
     viewport.style.setProperty("--fz-view-start", String(viewStart));
     viewport.classList.toggle("fz-more-left", viewStart > 0);
-    viewport.classList.toggle("fz-more-right", viewStart + visible() < count);
+    viewport.classList.toggle("fz-more-right", viewStart + footerLayout(count).perView < count);
   }
 
   function stopScroll() {
@@ -1325,7 +1326,7 @@
   // Which slot the pointer is over decides the direction, rather than which
   // button: buttons slide under a still cursor while scrolling.
   function onViewportHover(viewport, count, e) {
-    const VISIBLE = visible();
+    const VISIBLE = footerLayout(count).perView;
     if (count <= VISIBLE) {
       return;
     }
@@ -1836,10 +1837,6 @@
           showAll();
           renderBar();
         }
-        return;
-      }
-      if (name === VISIBLE_PREF) {
-        renderBar();
         return;
       }
       if (name === LIST_PREF && enabled()) {

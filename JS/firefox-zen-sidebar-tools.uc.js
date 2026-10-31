@@ -105,7 +105,7 @@
   // window keeps all its pins. The Library checks the limit itself.
   // firefox-zen.pins.max, 1-36 (Settings → Library).
   const MAX_PINS_PREF = "firefox-zen.pins.max";
-  const maxPins = () => Math.min(36, Math.max(1, Services.prefs.getIntPref(MAX_PINS_PREF, 12)));
+  const maxPins = () => Math.min(36, Math.max(1, Services.prefs.getIntPref(MAX_PINS_PREF, 9)));
   const pinCount = () => gBrowser.pinnedTabCount;
 
   window.FirefoxZenPins = {

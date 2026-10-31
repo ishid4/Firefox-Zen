@@ -51,9 +51,8 @@ Then open `about:support`, click **Clear startup cache…**, and restart.
 | `firefox-zen.glance` | true | Alt+click a link to open it in a floating Glance window (see below) |
 | `firefox-zen.glance.modifiers` | alt | Keys held while clicking a link to open Glance: `ctrl`, `alt`, `shift`, joined with `+` |
 | `firefox-zen.glance.width` / `.height` | 700 / 940 | Glance size in thousandths of the content area (Settings sliders, or drag its edges) |
-| `firefox-zen.pins.max` | 12 | Most pinned tabs (1-36) |
-| `firefox-zen.spaces.visible` | 4 | Spaces the footer shows at once (2-8) |
-| `firefox-zen.private-spaces.autolock-minutes` | 10 | Lock every private space after this many idle minutes (0 = never) |
+| `firefox-zen.pins.max` | 9 | Most pinned tabs (1-36) |
+| `firefox-zen.private-spaces.autolock-minutes` | 1 | Lock and hide every private space after this many idle minutes (0 = never) |
 | `firefox-zen.show-folder-icons` | true | Arc folder icons on tab groups |
 | `firefox-zen.download-cue` | true | A new download flies to the Library button, which ripples, shows a progress ring and opens on Downloads (see [Downloads](#downloads)) |
 | `firefox-zen.download-cue.icon-seconds` | 7 | How long the Library button shows the downloads icon after a download starts (0-10, 0 = never) |
@@ -140,8 +139,8 @@ rewritten every few seconds while it changes.
   unlocked (saved). Quitting Firefox locks it; after a restart every private
   space starts locked.
 - **Auto-lock**: after `firefox-zen.private-spaces.autolock-minutes` minutes
-  (default 10, 0 = off) with no keyboard or mouse input on the computer, every
-  private space locks.
+  (default 1, 0 = off) with no keyboard or mouse input on the computer, every
+  private space locks and they're hidden again.
 - **Moving tabs**: drag tabs onto its Library column or footer button, or use
   the tab menu's **Move to Space** (a locked space asks for its password).
   Drag its tabs to another column, or use **Move to Space** in its window, to
@@ -369,8 +368,8 @@ used when present.
 
 ### Pins
 
-At most 12 pinned tabs by default (Settings → Library, `firefox-zen.pins.max`). The tab right-click menu shows the count next to
-Pin Tab / Unpin Tab (e.g. 3/12), and Pin Tab is disabled once they're full;
+At most 9 pinned tabs by default (Settings → Library, `firefox-zen.pins.max`). The tab right-click menu shows the count next to
+Pin Tab / Unpin Tab (e.g. 3/9), and Pin Tab is disabled once they're full;
 dragging a tab into the pinned area or onto the Library's Pins does nothing
 then. Windows restored from a session keep all their pinned tabs.
 
@@ -407,9 +406,10 @@ Ctrl+Shift+T reopens them). Folders and pinned tabs stay.
 
 ### Glance
 
-Like Zen's Glance: Alt+click a link and the page grows out of it into a
+Like Zen's Glance: Alt+click (Option+click on macOS) a link and the page grows out of it into a
 floating window over the current tab, with the tab dimmed behind it. The
-shortcut can be any mix of Ctrl, Alt and Shift (Settings → Glance → Open with).
+shortcut can be any mix of Ctrl, Alt and Shift (Control, Option and Shift on
+macOS; Settings → Glance → Open with).
 With Ctrl or Shift in it, Firefox's own new tab / new window for that click is
 skipped; other clicks behave as usual.
 

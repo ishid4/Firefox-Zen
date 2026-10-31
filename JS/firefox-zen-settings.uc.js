@@ -23,36 +23,24 @@
   const AUTOLOCK = {
     type: "number",
     pref: "private-spaces.autolock-minutes",
-    default: 10,
+    default: 1,
     min: 0,
     max: 1440,
     unit: "minutes",
     label: "Lock private spaces after",
-    hint: "Without input, anywhere on the computer. 0 never locks.",
+    hint: "Without input, anywhere on the computer. Also hides them. 0 never locks.",
   };
 
   // JS/firefox-zen-sidebar-tools.uc.js
   const PIN_LIMIT = {
     type: "number",
     pref: "pins.max",
-    default: 12,
+    default: 9,
     min: 1,
     max: 36,
     unit: "pinned tabs",
     label: "Allow up to",
     hint: "Pinned tabs show in every space. Pins you already have stay when you lower it.",
-  };
-
-  // JS/firefox-zen-spaces.uc.js
-  const SPACES_VISIBLE = {
-    type: "number",
-    pref: "spaces.visible",
-    default: 4,
-    min: 2,
-    max: 8,
-    unit: "spaces",
-    label: "Footer shows",
-    hint: "Hover the first or last one to scroll to the rest.",
   };
 
   // JS/firefox-zen-download-cue.uc.js
@@ -79,17 +67,21 @@
   };
 
   // Which modifiers + click open a glance (JS/firefox-zen-glance.uc.js).
+  // macOS names Alt "Option" and Ctrl "Control".
+  const IS_MAC = AppConstants.platform === "macosx";
+  const ALT_LABEL = IS_MAC ? "Option" : "Alt";
+  const CTRL_LABEL = IS_MAC ? "Control" : "Ctrl";
   const GLANCE_MODIFIERS = {
     type: "modifiers",
     pref: "glance.modifiers",
     default: "alt",
     keys: [
-      { key: "ctrl", label: "Ctrl" },
-      { key: "alt", label: "Alt" },
+      { key: "ctrl", label: CTRL_LABEL },
+      { key: "alt", label: ALT_LABEL },
       { key: "shift", label: "Shift" },
     ],
     label: "Open with",
-    hint: "With Ctrl or Shift, Firefox doesn't also open the link in a new tab or window.",
+    hint: `With ${CTRL_LABEL} or Shift, Firefox doesn't also open the link in a new tab or window.`,
   };
 
   // Glance size, in thousandths of the content area (JS/firefox-zen-glance.uc.js).
@@ -188,7 +180,7 @@
             "Right-click a space to rename it, set its icon or container, unload, export or delete it.",
             "+ in the footer creates spaces, folders and password-protected private spaces.",
           ],
-          options: [SPACES_VISIBLE, AUTOLOCK],
+          options: [AUTOLOCK],
         },
         {
           pref: "tab-sections",
@@ -306,7 +298,7 @@
           pref: "glance",
           default: true,
           label: "Glance",
-          description: "Click a link with a shortcut held (Alt by default) to peek at it in a floating window.",
+          description: `Click a link with a shortcut held (${ALT_LABEL} by default) to peek at it in a floating window.`,
           preview: "glance",
           tips: ["Esc or a click outside closes it. Drag its edges to resize; the size is kept."],
           options: [GLANCE_MODIFIERS, ...GLANCE_SIZE],

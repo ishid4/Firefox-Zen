@@ -31,7 +31,8 @@
 // - It keeps its own history (pages its tabs visited) and download list,
 //   encrypted with it; Firefox's private ones are dropped when its window
 //   closes. Downloaded files themselves stay on disk, unencrypted.
-// - After AUTOLOCK_PREF minutes of no input (0 = off) every private space locks.
+// - After AUTOLOCK_PREF minutes of no input (0 = off) every private space locks
+//   and they're hidden.
 // - Export writes its encrypted file (with its id) for import elsewhere.
 // - Closing the space's window keeps it unlocked (saved, window-less); Lock
 //   or quitting forgets the key. "Clear and Close" empties it for good;
@@ -57,7 +58,7 @@ const PRIVATE_OA = { privateBrowsingId: 1 };
 const HISTORY_TOPIC = "firefox-zen-private-history-changed";
 const DOWNLOADS_TOPIC = "firefox-zen-private-downloads-changed";
 const AUTOLOCK_PREF = "firefox-zen.private-spaces.autolock-minutes";
-const AUTOLOCK_DEFAULT = 10;
+const AUTOLOCK_DEFAULT = 1;
 const HISTORY_MAX = 5000;
 const EXPORT_FORMAT = "firefox-zen-private-space";
 
@@ -906,18 +907,14 @@ function watchDownloads() {
 
 // ---- auto-lock ----
 
-// Locks every private space after AUTOLOCK_PREF minutes without input
-// (anywhere on the computer, as Firefox's idle service counts it).
+// Hides (and so locks) every private space after AUTOLOCK_PREF minutes
+// without input (anywhere on the computer, as Firefox's idle service counts it).
 const idleService = Cc["@mozilla.org/widget/useridleservice;1"].getService(Ci.nsIUserIdleService);
 let idleSeconds = 0;
 const idleObserver = {
   observe(_subject, topic) {
-    if (topic === "idle" && unlocked.size) {
-      (async () => {
-        for (const id of [...unlocked.keys()]) {
-          await FzPrivateSpaces.lock(id);
-        }
-      })().catch(e => console.error("firefox-zen-private-spaces: auto-lock", e));
+    if (topic === "idle" && (unlocked.size || shown)) {
+      FzPrivateSpaces.setShown(false).catch(e => console.error("firefox-zen-private-spaces: auto-lock", e));
     }
   },
 };

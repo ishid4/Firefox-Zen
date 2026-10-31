@@ -240,6 +240,78 @@
   }
 }
 
+/* 5-6 spaces: smaller icons, six in the width of four. 7+: dots, nine per
+ * view. --fz-slot (button + 2px gap) is set here so the viewport and track
+ * follow. Both keep four full slots' width (fewer dots center in it), so the
+ * + button stays put. */
+.fz-space-viewport:is([fz-layout="compact"], [fz-layout="dots"]) {
+  width: calc(4 * 32px - 2px);
+
+  > .fz-space-list {
+    margin-inline: auto;
+  }
+}
+
+.fz-space-viewport[fz-layout="compact"] {
+  --fz-slot: calc(128px / 6);
+
+  .fz-space {
+    width: calc(var(--fz-slot) - 2px);
+    border-radius: 6px;
+    font-size: 11px;
+  }
+
+  .fz-space-has-container::after {
+    inset-inline: 5px;
+  }
+
+  .fz-space-private::after {
+    width: 10px;
+    height: 10px;
+    inset-inline-end: 0;
+    background-size: 7px;
+  }
+}
+
+.fz-space-viewport[fz-layout="dots"] {
+  --fz-slot: calc(128px / 9);
+
+  .fz-space {
+    width: calc(var(--fz-slot) - 2px);
+    border-radius: 4px;
+    font-size: 0;
+    box-shadow: none;
+
+    &[aria-pressed="true"] {
+      background-color: transparent;
+    }
+
+    /* The dot; a container's color tints it */
+    &::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--fz-space-container-color, currentColor);
+      transition: scale 0.15s ease;
+    }
+
+    &::after,
+    &:not([aria-pressed="true"]) > .fz-space-icon {
+      display: none;
+    }
+
+    /* The open space shows its icon instead */
+    &[aria-pressed="true"] {
+      font-size: 12px;
+
+      &::before {
+        display: none;
+      }
+    }
+  }
+}
+
 .fz-space-add {
   width: 30px;
   height: 30px;
