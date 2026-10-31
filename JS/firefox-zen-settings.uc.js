@@ -17,6 +17,7 @@
   const HTML_NS = "http://www.w3.org/1999/xhtml";
   const { FzMods } = ChromeUtils.importESModule("chrome://userscripts/content/firefox-zen-mods.sys.mjs");
   const { FzColors } = ChromeUtils.importESModule("chrome://userscripts/content/firefox-zen-colors.sys.mjs");
+  const { FzSchemeCard } = ChromeUtils.importESModule("chrome://userscripts/content/firefox-zen-scheme-card.sys.mjs");
 
   // Options shown under a feature while it's on. Each reads and writes its own
   // pref; `default` is what an unset pref means to the feature's script.
@@ -479,13 +480,15 @@
     FzMods.importState(saved.mods);
   }
 
-  function pickFile(mode, title) {
+  const SETTINGS_FILE = { filter: ["Firefox-Zen settings", "*.json"], name: "firefox-zen-settings.json", extension: "json" };
+
+  function pickFile(mode, title, file = SETTINGS_FILE) {
     const fp = Cc["@mozilla.org/filepicker;1"].createInstance(Ci.nsIFilePicker);
     fp.init(window.browsingContext, title, mode);
-    fp.appendFilter("Firefox-Zen settings", "*.json");
+    fp.appendFilter(...file.filter);
     fp.appendFilters(Ci.nsIFilePicker.filterAll);
-    fp.defaultString = "firefox-zen-settings.json";
-    fp.defaultExtension = "json";
+    fp.defaultString = file.name;
+    fp.defaultExtension = file.extension;
     return new Promise(resolve =>
       fp.open(rv => resolve(rv === Ci.nsIFilePicker.returnCancel ? null : fp.file.path))
     );
@@ -1127,6 +1130,7 @@
       id: `custom-${Date.now().toString(36)}`,
       name: `Custom ${n}`,
       seeds: from.seeds.length ? [...from.seeds] : [NEW_SEEDS[0]],
+      created: FzColors.today(),
     };
     for (const half of ["light", "dark"]) {
       if (from[half]) {
@@ -1146,6 +1150,143 @@
       setString(s, FzColors.FIREFOX_ID);
     }
     FzColors.saveSchemes(FzColors.savedSchemes().filter(x => x.id !== scheme.id));
+  }
+
+  // ---- share cards (JS/firefox-zen-scheme-card.sys.mjs) ----
+  // A PNG to post anywhere; importing one (or a recompressed copy) adds the
+  // scheme with its name and the date it was first made.
+
+  const CARD_FILE = { filter: ["Images", "*.png; *.jpg; *.jpeg; *.webp"], name: "scheme.png", extension: "png" };
+
+  // The file's name, or null when cancelled
+  async function saveCard(scheme, png) {
+    const slug = scheme.name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "") || "scheme";
+    const path = await pickFile(Ci.nsIFilePicker.modeSave, "Save Color Scheme Card", { ...CARD_FILE, name: `${slug}.png` });
+    if (!path) {
+      return null;
+    }
+    await IOUtils.write(path, png);
+    return PathUtils.filename(path);
+  }
+
+  // As an image other apps paste (like Screenshots' copy). Pasted copies
+  // lose the PNG's text chunk; the dot code still reads.
+  function copyCard(png) {
+    const imgTools = Cc["@mozilla.org/image/tools;1"].getService(Ci.imgITools);
+    const image = imgTools.decodeImageFromArrayBuffer(png.buffer, "image/png");
+    const transfer = Cc["@mozilla.org/widget/transferable;1"].createInstance(Ci.nsITransferable);
+    transfer.init(null);
+    transfer.addDataFlavor("application/x-moz-nativeimage");
+    transfer.setTransferData("application/x-moz-nativeimage", image);
+    Services.clipboard.setData(transfer, null, Ci.nsIClipboard.kGlobalClipboard);
+  }
+
+  // The card over the Library: copy it, save it or close. Esc and a click
+  // outside close it too.
+  async function showCard(scheme, opener) {
+    const png = await FzSchemeCard.cardPng(document, scheme);
+    const url = URL.createObjectURL(new Blob([png], { type: "image/png" }));
+    // The hint, then what Copy or Save did
+    const status = h("p", {
+      class: "fz-hint",
+      role: "status",
+      text: "Post it anywhere. Anyone with Firefox-Zen can add the scheme with Import.",
+    });
+    const run = async (action, done) => {
+      try {
+        const result = await action();
+        if (result !== null) {
+          status.textContent = done(result);
+        }
+      } catch (e) {
+        console.error(e);
+        status.textContent = `Couldn't do that: ${e.message}`;
+      }
+    };
+    const close = () => {
+      overlay.remove();
+      URL.revokeObjectURL(url);
+      opener?.focus();
+    };
+    const copy = h("button", {
+      type: "button",
+      class: "fz-reset fz-primary",
+      text: "Copy image",
+      onclick: () => run(() => copyCard(png), () => "Copied. Paste it anywhere."),
+    });
+    const overlay = h(
+      "div",
+      {
+        class: "fz-card-overlay",
+        onclick: e => e.target === overlay && close(),
+        onkeydown: e => {
+          // Not the Library's Esc, which would close it
+          if (e.key === "Escape") {
+            e.preventDefault();
+            e.stopPropagation();
+            close();
+          }
+        },
+      },
+      h(
+        "div",
+        { class: "fz-card-dialog", role: "dialog", "aria-modal": "true", "aria-label": `${scheme.name} card` },
+        h("img", { class: "fz-card-image", src: url, alt: `Color scheme card for ${scheme.name}` }),
+        status,
+        h(
+          "div",
+          { class: "fz-card-actions" },
+          h("button", { type: "button", class: "fz-reset", text: "Close", onclick: close }),
+          h("button", {
+            type: "button",
+            class: "fz-reset",
+            text: "Save…",
+            onclick: () => run(() => saveCard(scheme, png), name => `Saved ${name}.`),
+          }),
+          copy
+        )
+      )
+    );
+    (document.getElementById("fz-library") ?? document.documentElement).append(overlay);
+    copy.focus();
+  }
+
+  // Comparable form: everything but the id
+  const sorted = v =>
+    v && typeof v === "object" && !Array.isArray(v)
+      ? Object.fromEntries(Object.keys(v).sort().map(k => [k, sorted(v[k])]))
+      : v;
+  const schemeKey = ({ id, ...rest }) => JSON.stringify(sorted(rest));
+
+  async function importCard(s) {
+    const path = await pickFile(Ci.nsIFilePicker.modeOpen, "Import Color Scheme Card", CARD_FILE);
+    if (!path) {
+      return;
+    }
+    const card = await FzSchemeCard.readCard(document, await IOUtils.read(path));
+    if (!card) {
+      Services.prompt.alert(
+        window,
+        "Import Color Scheme Card",
+        "No color scheme found in this image. Use the whole card as it was shared, without cropping it."
+      );
+      return;
+    }
+    const saved = FzColors.savedSchemes();
+    // Imported before: pick that one
+    const same = saved.find(x => schemeKey({ ...x, created: FzColors.createdOf(x) }) === schemeKey(card));
+    if (same) {
+      pickScheme(s, same.id);
+      return;
+    }
+    const taken = name => FzColors.allSchemes().some(x => x.name === name);
+    let name = card.name;
+    for (let n = 2; taken(name); n++) {
+      name = `${card.name} ${n}`;
+    }
+    const scheme = { ...card, id: `custom-${Date.now().toString(36)}`, name, created: card.created ?? FzColors.today() };
+    FzColors.saveSchemes([...saved, scheme]);
+    pickScheme(s, scheme.id);
   }
 
   // ---- scheme editor ----
@@ -1447,6 +1588,8 @@
       });
 
       const wheel = buildWheel(scheme);
+      const createdOn = FzColors.createdOf(scheme);
+      const created = createdOn && h("span", { class: "fz-hint", text: `Created ${FzSchemeCard.formatDate(createdOn)}` });
 
       // Swatches: the native picker for exact colors, × to remove
       const swatches = scheme.seeds.map((seed, i) => {
@@ -1568,7 +1711,15 @@
           { class: "fz-option" },
           h("label", { class: "fz-option-label", text: "Name", onclick: () => name.focus() }),
           name,
-          h("button", { type: "button", class: "fz-reset", text: "Delete", onclick: () => deleteScheme(s, view()) })
+          h("button", {
+            type: "button",
+            class: "fz-reset",
+            text: "Share card…",
+            title: "Save this scheme as an image to post. Importing the image adds the scheme.",
+            onclick: e => showCard(view(), e.currentTarget).catch(console.error),
+          }),
+          h("button", { type: "button", class: "fz-reset", text: "Delete", onclick: () => deleteScheme(s, view()) }),
+          created
         ),
         h(
           "div",
@@ -1672,6 +1823,18 @@
       h("div", { class: "fz-scheme-mock", "aria-hidden": "true" }),
       h("span", { class: "fz-scheme-label", text: "New" })
     );
+    const importTile = h(
+      "button",
+      {
+        type: "button",
+        class: "fz-scheme-tile fz-scheme-add fz-scheme-import",
+        title: "Add a scheme from a shared card image",
+        "aria-label": "Import a color scheme card",
+        onclick: () => importCard(s).catch(console.error),
+      },
+      h("div", { class: "fz-scheme-mock", "aria-hidden": "true" }),
+      h("span", { class: "fz-scheme-label", text: "Import" })
+    );
     const editor = buildSchemeEditor(s);
     const options = buildOptions(s.options);
     const reset = h("button", {
@@ -1746,7 +1909,11 @@
           }
           return tile;
         });
-        tiles.replaceChildren(...radios, add);
+        // Built-in first, then yours with New and Import
+        const builtIn = radios.filter(tile => FzColors.PRESETS.some(x => x.id === tile.dataset.scheme));
+        const yours = radios.filter(tile => !builtIn.includes(tile));
+        const heading = text => h("span", { class: "fz-layout-group-title fz-scheme-group", role: "presentation", text });
+        tiles.replaceChildren(heading("Built-in"), ...builtIn, heading("Your schemes"), ...yours, add, importTile);
         row.fzSearch = searchText(s);
       }
       const active = shownScheme(s);

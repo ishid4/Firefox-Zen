@@ -8,7 +8,8 @@
 // JS/firefox-zen-colors.uc.js; theme/colors.css maps the palette onto
 // Firefox's own variables.
 //
-// A scheme is { id, name, seeds, gradient?, grain?, mode?, light?, dark? }:
+// A scheme is { id, name, seeds, gradient?, grain?, mode?, light?, dark?,
+// created? }:
 // - seeds: 1-4 "#rrggbb" colors. 1 paints a flat window, more a gradient.
 //   Only their hue and colorfulness count (the editor's wheel): how light
 //   each surface is comes from the mode.
@@ -22,6 +23,9 @@
 //   much color the backgrounds take (0-2, default 1), shift moves their
 //   lightness (-0.1 to 0.1, default 0). So each half is tuned on its own
 //   instead of one being the other inverted.
+// - created: "YYYY-MM-DD" the scheme was first made. It stays the same when
+//   the scheme is shared and imported elsewhere (JS/firefox-zen-scheme-card.sys.mjs).
+//   Schemes made before it existed have it in their id (createdOf).
 // The scheme "firefox" means no scheme: Firefox's theme shows as it is.
 //
 // Mode (MODE_PREF): system / light / dark. Each window applies it to its own
@@ -47,6 +51,7 @@ const CONTENT_VALUES = { dark: 0, light: 1, system: 2 };
 const MODES = ["system", "light", "dark"];
 export const FIREFOX_ID = "firefox";
 const HEX_RE = /^#[0-9a-f]{6}$/i;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_SEEDS = 4;
 const GRADIENTS = ["linear", "radial", "corners"];
 // Chroma at the color wheel's rim; seeds beyond it look the same anyway
@@ -430,8 +435,33 @@ export function validScheme(s) {
     s.seeds.every(c => HEX_RE.test(c)) &&
     (s.gradient == null || (typeof s.gradient == "object" && (s.gradient.type == null || GRADIENTS.includes(s.gradient.type)))) &&
     (s.grain == null || Number.isFinite(s.grain)) &&
-    (s.mode == null || ["light", "dark"].includes(s.mode))
+    (s.mode == null || ["light", "dark"].includes(s.mode)) &&
+    (s.created == null || (typeof s.created == "string" && DATE_RE.test(s.created)))
   );
+}
+
+// A time as "YYYY-MM-DD", in local time
+function dateOf(time) {
+  const d = new Date(time);
+  const pad = n => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** Today as a scheme's created date */
+export function today() {
+  return dateOf(Date.now());
+}
+
+/**
+ * "YYYY-MM-DD" a scheme was first made, or null (presets). Older schemes
+ * only have it in their id, custom-<Date.now() in base 36>.
+ */
+export function createdOf(scheme) {
+  if (scheme?.created) {
+    return scheme.created;
+  }
+  const time = parseInt(/^custom-([0-9a-z]+)$/.exec(scheme?.id ?? "")?.[1], 36);
+  return time > 0 ? dateOf(time) : null;
 }
 
 /** The user's saved schemes (invalid entries dropped) */
@@ -525,6 +555,8 @@ export const FzColors = {
   fromWheel,
   wheelRgb,
   validScheme,
+  today,
+  createdOf,
   savedSchemes,
   saveSchemes,
   allSchemes,

@@ -617,6 +617,15 @@
   gap: 8px;
 }
 
+/* Spans the grid: starts a row of its own */
+.fz-scheme-group {
+  grid-column: 1 / -1;
+
+  &:not(:first-child) {
+    margin-top: 6px;
+  }
+}
+
 .fz-scheme-label {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -713,6 +722,11 @@
     font-size: 22px;
     line-height: 1;
   }
+}
+
+.fz-scheme-import .fz-scheme-mock::before {
+  content: "\2193";
+  font-size: 18px;
 }
 
 .fz-scheme-editor {
@@ -1416,4 +1430,54 @@
   & > i {
     background: linear-gradient(90deg, rgb(0 0 0 / 0.25) 50%, rgb(255 255 255 / 0.3) 50%) 0 0 / 143% 100%;
   }
+}
+
+/* ---- share card popup (over the Library) ---- */
+.fz-card-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(0 0 0 / 0.45);
+}
+
+.fz-card-dialog {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  max-width: 100%;
+  max-height: 100%;
+  box-sizing: border-box;
+  padding: 16px;
+  border-radius: var(--fz-lib-radius, 10px);
+  background: var(--arrowpanel-background, var(--fz-lib-bg));
+  color: var(--arrowpanel-color, inherit);
+  box-shadow: 0 0 0 1px var(--fz-line), 0 16px 48px rgb(0 0 0 / 0.35);
+  user-select: text;
+
+  & > .fz-hint {
+    max-width: 360px;
+    margin: 0;
+    text-align: center;
+  }
+}
+
+/* The card at 2:3, as tall as fits under the buttons */
+.fz-card-image {
+  display: block;
+  width: auto;
+  height: min(560px, calc(100vh - 220px));
+  aspect-ratio: 2 / 3;
+  border-radius: 8px;
+  box-shadow: 0 0 0 1px var(--fz-line);
+}
+
+.fz-card-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  align-self: stretch;
 }
