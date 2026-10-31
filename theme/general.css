@@ -373,6 +373,49 @@ toolbar .toolbarbutton-1 {
   }
 }
 
+/* A pinned tab dragged over the tab list (JS/firefox-zen-sidebar-tools.uc.js):
+ * it becomes a tab row (icon and title, sized like the list's tabs, read into
+ * the variables), and the items from the pointer on slide down to open its
+ * slot */
+#tabbrowser-tabs[orient="vertical"][fz-unpin-drop] {
+  #tabbrowser-arrowscrollbox > * {
+    transition: translate 0.2s ease;
+  }
+
+  /* #pinned-tabs-container outweighs the rules hiding pinned tabs' titles;
+   * the collapsed sidebar has no titles */
+  &[expanded] > #pinned-tabs-container .tabbrowser-tab[pinned][dragtarget] {
+    width: var(--fz-unpin-width) !important;
+    max-width: none !important;
+    opacity: 0.85;
+
+    .tab-background {
+      margin-inline: var(--fz-unpin-margin, var(--tab-margin-inline-inner, 6px)) !important;
+    }
+
+    .tab-content {
+      justify-content: flex-start !important;
+      padding-inline: var(--fz-unpin-padding, 10px) !important;
+    }
+
+    .tab-label-container {
+      display: flex !important;
+      flex: 1 1 0 !important;
+      flex-direction: column;
+      justify-content: center;
+      width: auto !important;
+      min-width: 0;
+      margin-inline-start: var(--fz-unpin-gap, 8px);
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #tabbrowser-tabs[fz-unpin-drop] #tabbrowser-arrowscrollbox > * {
+    transition: none;
+  }
+}
+
 #fz-pin-slot {
   position: absolute;
   box-sizing: border-box;

@@ -179,15 +179,30 @@
     return (dragged._dragData?.movingTabs ?? [dragged]).filter(t => t.localName === "tab" && !t.pinned);
   }
 
+  // A tile's box where it sits in the grid: screenX/Y leave out the slides
+  // and Firefox's drag transforms
+  function tileBox(t) {
+    const { width, height } = window.windowUtils.getBoundsWithoutFlushing(t);
+    return { left: t.screenX - window.mozInnerScreenX, top: t.screenY - window.mozInnerScreenY, width, height };
+  }
+
   // Positions of the grid's slots, from the tiles already in it
   function gridOf(tiles, container) {
-    const first = tiles[0].getBoundingClientRect();
-    const rowCount = tiles.filter(t => Math.abs(t.getBoundingClientRect().top - first.top) < 1).length;
+    const first = tileBox(tiles[0]);
+    const rowCount = tiles.filter(t => Math.abs(tileBox(t).top - first.top) < 1).length;
     const width = container.shadowRoot?.querySelector("[part~='items-wrapper']")?.clientWidth ?? container.clientWidth;
     const cols = rowCount < tiles.length ? rowCount : Math.max(rowCount, Math.floor(width / first.width) || 1);
-    const pitchX = tiles[1] && rowCount > 1 ? tiles[1].getBoundingClientRect().left - first.left : first.width;
+    const pitchX = tiles[1] && rowCount > 1 ? tileBox(tiles[1]).left - first.left : first.width;
     const pitchY = first.height;
-    const bg = tiles[0].querySelector(".tab-background")?.getBoundingClientRect() ?? first;
+    // Where the background sits in the tile (both moved alike)
+    const tileRect = tiles[0].getBoundingClientRect();
+    const bgRect = tiles[0].querySelector(".tab-background")?.getBoundingClientRect() ?? tileRect;
+    const bg = {
+      left: first.left + bgRect.left - tileRect.left,
+      top: first.top + bgRect.top - tileRect.top,
+      width: bgRect.width,
+      height: bgRect.height,
+    };
     return {
       cols,
       slot(i) {
@@ -204,6 +219,11 @@
         };
       },
       rows: n => Math.ceil(n / cols),
+      // The slot under a point, by the tiles' boxes
+      at(x, y) {
+        const col = Math.min(cols - 1, Math.max(0, Math.floor((x - first.left) / pitchX)));
+        return Math.max(0, Math.floor((y - first.top) / pitchY)) * cols + col;
+      },
       pitchY,
       tileWidth: first.width,
     };
@@ -221,6 +241,23 @@
     for (const tab of tabs) {
       tab.style.translate = `${left - pinSlot.ghostLeft}px 0`;
     }
+  }
+
+  // The empty tile marking a slot
+  function showSlotTile(s) {
+    let slot = document.getElementById(SLOT_ID);
+    if (!slot) {
+      slot = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
+      slot.id = SLOT_ID;
+      gBrowser.tabContainer.append(slot);
+    }
+    const origin = gBrowser.tabContainer.getBoundingClientRect();
+    Object.assign(slot.style, {
+      left: `${s.left - origin.left}px`,
+      top: `${s.top - origin.top}px`,
+      width: `${s.width}px`,
+      height: `${s.height}px`,
+    });
   }
 
   function hidePinSlot() {
@@ -295,20 +332,7 @@
       }
     });
 
-    let slot = document.getElementById(SLOT_ID);
-    if (!slot) {
-      slot = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
-      slot.id = SLOT_ID;
-      gBrowser.tabContainer.append(slot);
-    }
-    const s = grid.slot(index);
-    const origin = gBrowser.tabContainer.getBoundingClientRect();
-    Object.assign(slot.style, {
-      left: `${s.left - origin.left}px`,
-      top: `${s.top - origin.top}px`,
-      width: `${s.width}px`,
-      height: `${s.height}px`,
-    });
+    showSlotTile(grid.slot(index));
     gBrowser.tabContainer.setAttribute("fz-pin-drop", "");
     pinSlot = { ...pinSlot, grid, index, tabs, before: tiles[index] ?? null };
   }
@@ -327,6 +351,300 @@
           }
         }
       }, 0);
+    }
+  }
+
+  // ---- reordering the pinned tabs: show where it lands ----
+
+  // Firefox slides the other tiles out of a dragged pinned tile's way by its
+  // own idea of the rows, and marks nothing. Here the tiles slide to leave the
+  // grid slot under the pointer free, the empty tile marks it, and the drop
+  // moves the tile there.
+  let reorderSlot = null; // { grid, all, others, index, tabs } while showing a slot
+  let reorderDrop = null; // where the drop goes, until Firefox's drop is done
+
+  // Pinned tabs of this window being dragged (none for other drags)
+  function draggedPinned(e) {
+    const dragged = e.dataTransfer?.mozGetDataAt(TAB_DROP_TYPE, 0);
+    if (!dragged || dragged.ownerDocument !== document || !dragged.pinned || e.dataTransfer.dropEffect === "copy") {
+      return [];
+    }
+    return (dragged._dragData?.movingTabs ?? [dragged]).filter(t => t.localName === "tab" && t.pinned);
+  }
+
+  function hideReorderSlot() {
+    if (!reorderSlot) {
+      return;
+    }
+    for (const tile of [...reorderSlot.all, ...reorderSlot.tabs]) {
+      tile.style.removeProperty("translate");
+    }
+    document.getElementById(SLOT_ID)?.remove();
+    reorderSlot = null;
+  }
+
+  // Runs after Firefox's own dragover handler (bubbling, on the same
+  // container), which has just moved the dragged tile and slid the others.
+  function onReorderDragOver(e) {
+    const container = document.getElementById("pinned-tabs-container");
+    const tabs = container ? draggedPinned(e) : [];
+    const box = container?.getBoundingClientRect();
+    const over =
+      box && e.clientX >= box.left && e.clientX <= box.right && e.clientY >= box.top && e.clientY <= box.bottom;
+    if (!tabs.length || !over) {
+      hideReorderSlot();
+      return;
+    }
+    // Measured once: the tiles move while the slot shows
+    const all = reorderSlot?.all ?? pinnedTiles();
+    const others = all.filter(t => !tabs.includes(t));
+    reorderSlot ??= { all, others, tabs, grid: others.length ? gridOf(all, container) : null };
+    // Firefox's slides are replaced by these
+    for (const tile of others) {
+      tile.style.transform = "";
+    }
+    // Firefox moves the tile only up and down outside the expanded grid
+    if (!gBrowser.tabContainer.isContainerVerticalPinnedGrid?.(tabs[0])) {
+      for (const tab of tabs) {
+        const { left, width } = tileBox(tab);
+        const edge = Math.min(Math.max(e.clientX - width / 2, box.left), box.right - width);
+        tab.style.translate = `${edge - left}px 0`;
+      }
+    }
+    const { grid } = reorderSlot;
+    if (!grid) {
+      return;
+    }
+    const index = Math.min(grid.at(e.clientX, e.clientY), others.length);
+    if (reorderSlot.index === index) {
+      return;
+    }
+    reorderSlot.index = index;
+
+    // Every other tile in order, skipping the slot
+    others.forEach((tile, i) => {
+      const from = grid.slot(all.indexOf(tile));
+      const to = grid.slot(i < index ? i : i + 1);
+      const dx = to.dx - from.dx;
+      const dy = to.dy - from.dy;
+      if (dx || dy) {
+        tile.style.translate = `${dx}px ${dy}px`;
+      } else {
+        tile.style.removeProperty("translate");
+      }
+    });
+    showSlotTile(grid.slot(index));
+  }
+
+  // Before Firefox's drop handler: note the slot, and keep Firefox from
+  // moving (and animating) the tile to the spot its own drag code picked.
+  function onReorderDrop(e) {
+    const slot = reorderSlot;
+    hideReorderSlot();
+    reorderDrop = null;
+    if (!slot || slot.index === undefined) {
+      return;
+    }
+    const dragData = e.dataTransfer?.mozGetDataAt(TAB_DROP_TYPE, 0)?._dragData;
+    if (dragData) {
+      dragData.dropElement = null;
+      dragData.translateX = 0;
+      dragData.translateY = 0;
+    }
+    reorderDrop = { tabs: slot.tabs, before: slot.others[slot.index] ?? null, after: slot.others.at(-1) };
+  }
+
+  // After Firefox's drop handler (bubbling)
+  function onReorderDropDone() {
+    const drop = reorderDrop;
+    reorderDrop = null;
+    const tabs = drop?.tabs.filter(t => t.pinned && !t.closing && t.isConnected) ?? [];
+    for (const tab of tabs) {
+      tab.style.removeProperty("translate");
+    }
+    if (!tabs.length) {
+      return;
+    }
+    if (drop.before?.pinned) {
+      gBrowser.moveTabsBefore(tabs, drop.before);
+    } else if (drop.after?.pinned) {
+      gBrowser.moveTabsAfter(tabs, drop.after);
+    }
+  }
+
+  // ---- dragging a pinned tab out into the tab list: show where it lands ----
+
+  // Firefox keeps a dragged pinned tab above New Tab, at its tile size, and
+  // unpins one dropped on the list as the first tab. While a pinned tab is over
+  // the list here, it becomes a tab row under the pointer ([fz-unpin-drop],
+  // theme/general.css), the items from the pointer on slide down to open its
+  // slot, and the drop unpins it into that slot: with tab sections
+  // (JS/firefox-zen-tab-sections.uc.js) above or below the line, by which side
+  // of the line the slot is on.
+  //
+  // Positions come from screenY, which leaves out the slides (and Firefox's
+  // drag transforms), so nothing needs measuring before the slot opens.
+  const PERIPHERY_ID = "tabbrowser-arrowscrollbox-periphery";
+
+  let unpinSlot = null; // { tabs, items, index } while showing a slot
+  let unpinDrop = null; // where the drop goes, until Firefox has unpinned
+
+  // Pinned tabs of this window being dragged (none for other drags)
+  function draggedToUnpin(e) {
+    const dragged = e.dataTransfer?.mozGetDataAt(TAB_DROP_TYPE, 0);
+    if (!dragged || dragged.ownerDocument !== document || !dragged.pinned || e.dataTransfer.dropEffect === "copy") {
+      return [];
+    }
+    return (dragged._dragData?.movingTabs ?? [dragged]).filter(t => t.localName === "tab" && t.pinned);
+  }
+
+  const boundsOf = el => window.windowUtils.getBoundsWithoutFlushing(el);
+
+  // The list's shown items, top to bottom, with the screen Y a slot opens
+  // before. The line splits the periphery (line + New Tab): a slot over the
+  // line's top half is above it, anything lower below it.
+  function listItems(box) {
+    const items = [];
+    for (const el of box.children) {
+      const height = boundsOf(el).height;
+      if (!height) {
+        continue;
+      }
+      let mid = el.screenY + height / 2;
+      const line = el.id === PERIPHERY_ID && document.getElementById("fz-tab-separator");
+      if (line && boundsOf(line).height) {
+        mid = el.screenY + boundsOf(line).top - boundsOf(el).top + boundsOf(line).height / 2;
+      }
+      items.push({ el, mid });
+    }
+    return items.sort((a, b) => a.mid - b.mid);
+  }
+
+  // A tab row in the list to size the dragged tab like, read when the slot
+  // first shows: the first loose tab, or New Tab's row
+  function rowStyle(box) {
+    const tc = gBrowser.tabContainer;
+    const ref = [...box.children].find(el => el.localName === "tab" && boundsOf(el).height);
+    const row = ref ?? document.getElementById("tabs-newtab-button") ?? box;
+    tc.style.setProperty("--fz-unpin-width", `${boundsOf(row).width}px`);
+    const content = ref?.querySelector(".tab-content");
+    const icon = ref?.querySelector(".tab-icon-stack");
+    const label = ref?.querySelector(".tab-label-container");
+    const background = ref?.querySelector(".tab-background");
+    if (content && icon && label && background) {
+      const style = getComputedStyle(content);
+      tc.style.setProperty("--fz-unpin-padding", `${style.paddingInlineStart} ${style.paddingInlineEnd}`);
+      tc.style.setProperty("--fz-unpin-gap", `${Math.max(0, boundsOf(label).left - boundsOf(icon).right)}px`);
+      tc.style.setProperty("--fz-unpin-margin", getComputedStyle(background).marginInline);
+    }
+    return { x: row.screenX, height: boundsOf(row).height || boundsOf(unpinSlot.tabs[0]).height };
+  }
+
+  function hideUnpinSlot() {
+    if (!unpinSlot) {
+      return;
+    }
+    for (const { el } of unpinSlot.items ?? []) {
+      el.style.removeProperty("translate");
+    }
+    const tc = gBrowser.tabContainer;
+    tc.removeAttribute("fz-unpin-drop");
+    for (const name of ["--fz-unpin-width", "--fz-unpin-padding", "--fz-unpin-gap", "--fz-unpin-margin"]) {
+      tc.style.removeProperty(name);
+    }
+    unpinSlot = null;
+  }
+
+  // Runs after Firefox's own dragover handler (bubbling, on the same
+  // container), which has just placed the dragged tab inside the pinned area.
+  function onUnpinDragOver(e) {
+    const box = document.getElementById("tabbrowser-arrowscrollbox");
+    const tabs = box?.getAttribute("orient") === "vertical" ? draggedToUnpin(e) : [];
+    const rect = box?.getBoundingClientRect();
+    const over = rect && e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom;
+    if (!tabs.length || !over) {
+      hideUnpinSlot();
+      return;
+    }
+    if (!unpinSlot) {
+      unpinSlot = { tabs };
+      unpinSlot.row = rowStyle(box);
+      gBrowser.tabContainer.setAttribute("fz-unpin-drop", "");
+    }
+    const { row } = unpinSlot;
+
+    // The dragged tab as a row under the pointer
+    for (const tab of tabs) {
+      tab.style.transform = `translate(${row.x - tab.screenX}px, ${e.screenY - row.height / 2 - tab.screenY}px)`;
+    }
+
+    const items = listItems(box);
+    let index = items.findIndex(item => item.mid > e.screenY);
+    if (index === -1) {
+      index = items.length;
+    }
+    if (unpinSlot.index === index && unpinSlot.items?.length === items.length) {
+      return;
+    }
+    for (const { el } of unpinSlot.items ?? []) {
+      el.style.removeProperty("translate");
+    }
+    items.forEach(({ el }, i) => {
+      if (i >= index) {
+        el.style.translate = `0 ${row.height}px`;
+      }
+    });
+    unpinSlot = { ...unpinSlot, items, index };
+  }
+
+  // Before Firefox's drop handler: note the slot, and keep Firefox from moving
+  // the tab next to the pinned tab its own drag animation picked.
+  function onUnpinDrop(e) {
+    const slot = unpinSlot;
+    hideUnpinSlot();
+    unpinDrop = null;
+    if (!slot?.items) {
+      return;
+    }
+    const dragData = e.dataTransfer?.mozGetDataAt(TAB_DROP_TYPE, 0)?._dragData;
+    if (dragData) {
+      dragData.dropElement = null;
+    }
+    const items = slot.items.map(item => item.el);
+    const line = items.findIndex(el => el.id === PERIPHERY_ID);
+    const notLine = el => el && el.id !== PERIPHERY_ID;
+    const prev = items.slice(0, slot.index).findLast(notLine) ?? null;
+    const next = items.slice(slot.index).find(notLine) ?? null;
+    const sections = !!window.FirefoxZenTabSections?.active() && line !== -1;
+    const above = sections ? slot.index <= line : undefined;
+    // Above the line (or without one): right after the item before the slot;
+    // below it: right before the item after
+    const [after, before] = above !== false ? [prev, prev ? null : next] : [next ? null : prev, next];
+    unpinDrop = { tabs: slot.tabs, after, before, above };
+  }
+
+  // After Firefox's drop handler (bubbling), which unpinned the tabs as the
+  // first ones in the list: move them into the slot before it's drawn.
+  function onUnpinDropDone() {
+    const drop = unpinDrop;
+    unpinDrop = null;
+    const tabs = drop?.tabs.filter(t => !t.pinned && !t.closing && t.isConnected) ?? [];
+    if (!tabs.length) {
+      return;
+    }
+    if (drop.after?.isConnected && !tabs.includes(drop.after)) {
+      gBrowser.moveTabsAfter(tabs, drop.after);
+    } else if (drop.before?.isConnected && !tabs.includes(drop.before)) {
+      gBrowser.moveTabsBefore(tabs, drop.before);
+    }
+    // Right after a folder can land a tab in it
+    for (const tab of tabs) {
+      if (tab.group) {
+        gBrowser.ungroupTab(tab);
+      }
+    }
+    if (drop.above !== undefined) {
+      window.FirefoxZenTabSections.setAbove(tabs, drop.above, { now: true });
     }
   }
 
@@ -446,13 +764,23 @@
     window.addEventListener("SSWindowRestored", queuePinnedRows);
     gBrowser.tabContainer.addEventListener("dragover", onPinDragOver, true);
     gBrowser.tabContainer.addEventListener("drop", onPinDrop, true);
+    gBrowser.tabContainer.addEventListener("dragover", onReorderDragOver);
+    gBrowser.tabContainer.addEventListener("drop", onReorderDrop, true);
+    gBrowser.tabContainer.addEventListener("drop", onReorderDropDone);
+    gBrowser.tabContainer.addEventListener("dragover", onUnpinDragOver);
+    gBrowser.tabContainer.addEventListener("drop", onUnpinDrop, true);
+    gBrowser.tabContainer.addEventListener("drop", onUnpinDropDone);
     // Left the tab strip, or the drag ended anywhere else
     gBrowser.tabContainer.addEventListener("dragleave", e => {
       if (!gBrowser.tabContainer.contains(e.relatedTarget)) {
         hidePinSlot();
+        hideReorderSlot();
+        hideUnpinSlot();
       }
     });
     window.addEventListener("dragend", hidePinSlot, true);
+    window.addEventListener("dragend", hideReorderSlot, true);
+    window.addEventListener("dragend", hideUnpinSlot, true);
     window.addEventListener("SidebarShown", () => {
       injectCheckbox().catch(e => console.error("firefox-zen-sidebar-tools:", e));
     });

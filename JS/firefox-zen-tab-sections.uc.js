@@ -245,25 +245,48 @@
       return;
     }
     const above = e.clientY < lineMiddle(separator);
+    let crossing = false;
     for (const item of dragged._dragData?.movingTabs ?? [dragged]) {
       if (isLooseItem(item)) {
+        crossing ||= isAboveItem(item) !== above;
         for (const tab of tabsOf(item)) {
           dropped.set(tab, above);
         }
       }
     }
+    // Firefox animates the dropped tab into a slot it works out in whole tab
+    // heights from where the drag started, which across the line (and New
+    // Tab) is the wrong place, and only moves it once that animation ends.
+    // With no drag offset it skips the animation and moves it right away.
+    if (crossing && dragged._dragData) {
+      dragged._dragData.translateY = 0;
+    }
     queueNormalize();
   }
 
+  // After Firefox's own drop handler (bubbling, on the same container): put
+  // the dropped tab on its side of the line before it's drawn below it.
+  function onDropDone() {
+    if (dropped.size) {
+      normalize();
+    }
+  }
+
   // The Library (JS/firefox-zen-library.uc.js) moves tabs across the line
-  // by dragging them in its Spaces view.
+  // by dragging them in its Spaces view, and the sidebar tools
+  // (JS/firefox-zen-sidebar-tools.uc.js) by dragging pinned tabs out.
+  // `now` applies it at once, for tabs already moved into place.
   window.FirefoxZenTabSections = {
     active,
-    setAbove(tabs, above) {
+    setAbove(tabs, above, { now = false } = {}) {
       for (const tab of tabs) {
         dropped.set(tab, above);
       }
-      queueNormalize();
+      if (now) {
+        normalize();
+      } else {
+        queueNormalize();
+      }
     },
   };
 
@@ -272,16 +295,20 @@
   let dragItem = null; // a dragged tab or split view (not a folder)
   let reserved = null; // { el, space } scroll room kept at the list's end
 
-  // Bottom of the last loose item, in screen pixels
+  // Bottom of the last loose item where it sits in the list, in screen pixels.
+  // screenY leaves out the transforms the drag slides items with, like
+  // Firefox's own bounds: counting a slid last tab would pull the end up a
+  // tab's height as soon as it slides out of the way, so the dragged tab could
+  // never reach the last slot and the last tab would slide back over it.
   function looseEndScreenY() {
     let end = null;
     for (const el of scrollbox().children) {
       if (isLooseItem(el) && !isAboveItem(el) && isShown(el)) {
         const b = window.windowUtils.getBoundsWithoutFlushing(el);
-        end = Math.max(end ?? -Infinity, b.bottom);
+        end = Math.max(end ?? -Infinity, el.screenY + b.height);
       }
     }
-    return end === null ? null : window.mozInnerScreenY + end;
+    return end;
   }
 
   // The last shown item above the line that isn't being dragged, with the
@@ -406,14 +433,23 @@
         }
       }
 
+      // With nothing above the line, the gap is the empty space between the
+      // top of the list and the line: drop before the first loose item there.
       const last = lastAboveItem();
-      const inGap = !!last && event.clientY < lineMiddle(separator) && event.clientY > last.bottom;
+      const gapTop = last ? last.bottom : scrollbox().getBoundingClientRect().top;
+      const inGap = event.clientY < lineMiddle(separator) && event.clientY > gapTop;
       let to = dragData.animDropElementIndex ?? from;
       if (inGap) {
         to = lineIndex + 0.5;
         dragData.animDropElementIndex = to;
-        dragData.dropElement = last.el;
-        dragData.dropBefore = false;
+        if (last) {
+          dragData.dropElement = last.el;
+          dragData.dropBefore = false;
+        } else {
+          dragData.dropElement =
+            items.find(el => isLooseItem(el) && !moving?.has(el) && el !== dragItem && isShown(el)) ?? null;
+          dragData.dropBefore = true;
+        }
         delete dragData.shouldCreateGroupOnDrop;
         delete dragData.shouldDropIntoCollapsedTabGroup;
         this._clearDragOverGroupingTimer?.();
@@ -544,6 +580,7 @@
     tc.addEventListener("TabUnpinned", onTabUnpinned);
     tc.addEventListener("SSTabRestoring", onTabRestoring);
     tc.addEventListener("drop", onDrop, true);
+    tc.addEventListener("drop", onDropDone);
     window.addEventListener("SSWindowRestored", readAll);
     // Switching to vertical tabs flips the scrollbox's orient.
     new MutationObserver(queueNormalize).observe(scrollbox(), { attributes: true, attributeFilter: ["orient"] });
