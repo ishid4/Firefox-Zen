@@ -8,6 +8,16 @@
   margin-top: -12px;
 }
 
+/* Check daily switch, at the toolbar's end */
+.fz-mods-auto-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-inline-start: auto;
+  color: var(--fz-muted);
+  font-size: 12px;
+}
+
 .fz-mods-empty {
   margin: 0;
   padding: 24px 0;

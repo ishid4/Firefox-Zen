@@ -21,7 +21,7 @@
 // of ids), so it survives reinstalling a mod and goes into settings files.
 // Every scan bumps `stamp`, which windows use to reload what they loaded.
 
-import { setTimeout, clearTimeout } from "resource://gre/modules/Timer.sys.mjs";
+import { setTimeout, clearTimeout, setInterval } from "resource://gre/modules/Timer.sys.mjs";
 
 const PREF_BRANCH = "firefox-zen.mods.";
 const ENABLED_PREF = PREF_BRANCH + "enabled";
@@ -579,8 +579,9 @@ async function prepareInstall(path, { update = null, folder = null } = {}) {
 // A mod can list "updateURL" (its newest mod.json, to read "version" from)
 // and "downloadURL" (a .zip of the mod, like Export makes, or of a whole
 // repository with #path/to/the/mod's/folder at the end). Both must be
-// https (or http on localhost, for testing). Checks run at startup at most
-// once per CHECK_INTERVAL while AUTO_CHECK_PREF is on, and from the Mods tab.
+// https (or http on localhost, for testing). While AUTO_CHECK_PREF is on,
+// checks run at startup and again whenever CHECK_INTERVAL has passed since
+// the last one (the browser can stay open for days); also from the Mods tab.
 // Updating downloads the zip and shows what changed before anything is
 // replaced (prepareUpdate). INSTALLED_FILE keeps a hash of each mod's files
 // as installed, so edits made since then can be warned about.
@@ -888,8 +889,10 @@ Services.prefs.addObserver(TRUSTED_PREF, () => syncContentSheets());
 
 const ready = scan().catch(e => console.error("Firefox-Zen mods:", e));
 
-// Startup check, once the browser has settled.
-setTimeout(() => {
+// Automatic checks: once the browser has settled, then hourly, each one only
+// if CHECK_INTERVAL has passed since the last check. Turning the pref on
+// checks right away when one is due.
+function autoCheck() {
   const last = Services.prefs.getIntPref(LAST_CHECK_PREF, 0);
   if (
     !safeMode &&
@@ -899,7 +902,12 @@ setTimeout(() => {
   ) {
     checkUpdates().catch(e => console.error("Firefox-Zen mods: update check", e));
   }
+}
+setTimeout(() => {
+  autoCheck();
+  setInterval(autoCheck, 60 * 60 * 1000);
 }, 15000);
+Services.prefs.addObserver(AUTO_CHECK_PREF, autoCheck);
 
 export const FzMods = {
   CHANGED_TOPIC,

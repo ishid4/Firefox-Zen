@@ -384,6 +384,7 @@
   let view = null;
   let list = null;
   let search = null;
+  let autoCheck = null;
   let setStatus = () => {};
   const syncers = [];
 
@@ -435,6 +436,26 @@
     }
     await FzMods.remove(mod.id);
     return `Removed ${mod.name}.`;
+  }
+
+  // Install…: a mod is a folder or a .zip, and one file picker can't take both.
+  const INSTALL_MENU_ID = "fz-mods-install-menu";
+
+  function openInstallMenu(anchor) {
+    let menu = document.getElementById(INSTALL_MENU_ID);
+    if (!menu) {
+      menu = document.createXULElement("menupopup");
+      menu.id = INSTALL_MENU_ID;
+      const item = (label, dir) => {
+        const mi = document.createXULElement("menuitem");
+        mi.setAttribute("label", label);
+        mi.addEventListener("command", () => run(() => install(dir)));
+        return mi;
+      };
+      menu.append(item("From Folder…", true), item("From Zip…", false));
+      document.getElementById("mainPopupSet").append(menu);
+    }
+    menu.openPopup(anchor, "after_start");
   }
 
   async function install(dir) {
@@ -604,6 +625,7 @@
 
   function sync() {
     if (view?.isConnected) {
+      autoCheck.checked = Services.prefs.getBoolPref(FzMods.AUTO_CHECK_PREF, true);
       syncers.forEach(fn => fn());
     }
   }
@@ -635,6 +657,13 @@
 
     const button = (text, fn) => h("button", { type: "button", class: "fz-reset", text, onclick: () => run(fn) });
 
+    autoCheck = h("input", {
+      type: "checkbox",
+      role: "switch",
+      class: "fz-switch",
+      onchange: e => Services.prefs.setBoolPref(FzMods.AUTO_CHECK_PREF, e.target.checked),
+    });
+
     list = h("div", { class: "fz-list" });
     view = h(
       "div",
@@ -661,8 +690,13 @@
       h(
         "div",
         { class: "fz-mods-toolbar" },
-        button("Install from folder…", () => install(true)),
-        button("Install from zip…", () => install(false)),
+        h("button", {
+          type: "button",
+          class: "fz-reset",
+          text: "Install…",
+          "aria-haspopup": "menu",
+          onclick: e => openInstallMenu(e.currentTarget),
+        }),
         button("Open mods folder", () => FzMods.openFolder() ?? null),
         button("Reload", async () => {
           await FzMods.rescan();
@@ -671,7 +705,13 @@
         button("Check for updates", async () => {
           const count = await FzMods.checkUpdates();
           return count ? `${count} update${count === 1 ? "" : "s"} available.` : "Every mod is up to date.";
-        })
+        }),
+        h(
+          "label",
+          { class: "fz-mods-auto-check", title: "Daily, at Firefox startup" },
+          autoCheck,
+          "Check daily updates"
+        )
       ),
       h(
         "section",

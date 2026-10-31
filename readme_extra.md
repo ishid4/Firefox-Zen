@@ -59,7 +59,7 @@ Then open `about:support`, click **Clear startup cache…**, and restart.
 | `firefox-zen.show-menu-icons` | true | Icons in context menus |
 | `firefox-zen.mods.enabled` | [] | Ids of the [mods](#mods) that are on (JSON); `firefox-zen.mods.trusted` lists the scripts confirmed to run |
 | `firefox-zen.mods.safe-mode` | false | Load no mods on the next start (then clears itself) |
-| `firefox-zen.mods.auto-update-check` | true | Check mods for updates at startup, at most once a day |
+| `firefox-zen.mods.auto-update-check` | true | Check mods for updates at startup and once a day while Firefox stays open (**Check daily update** in the Mods tab) |
 
 Settings → Sidebar → **Sidebar layout** sets the sidebar in one click:
 **Always shown** (Full, Icons, Expand on hover) or **Auto-hide** (compact
@@ -227,7 +227,7 @@ Mods change or add to Firefox-Zen without editing its files. The Library's
 **Mods** tab (above Settings) lists them with a switch each; changes apply
 instantly, in every window.
 
-- **Install from folder…** / **Install from zip…** copy a mod into
+- **Install…** → **From Folder…** or **From Zip…** copies a mod into
   `chrome/mods/<id>/`. Or put the folder there yourself and press **Reload**
   (which also reloads every mod's files after you edit them).
 - On the [mods store](https://ishid4.github.io/Firefox-Zen-Mods/), **Install**
@@ -254,9 +254,9 @@ scripts you trust. CSS-only mods turn on when installed.
 
 #### Updates
 
-A mod that lists an `updateURL` is checked for a newer version at startup (at
-most once a day; `firefox-zen.mods.auto-update-check` turns that off) and by
-**Check for updates** in the Mods tab. A mod with an update gets an
+A mod that lists an `updateURL` is checked for a newer version at startup and
+once a day while Firefox stays open (**Check daily update** in the Mods tab turns that
+off) and by **Check for updates**. A mod with an update gets an
 **Update: x.y** badge, and the Library's Mods button a dot.
 
 **Review update…** downloads it and shows, before anything changes:
