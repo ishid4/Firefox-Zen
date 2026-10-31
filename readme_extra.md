@@ -230,6 +230,14 @@ instantly, in every window.
 - **Install from folder…** / **Install from zip…** copy a mod into
   `chrome/mods/<id>/`. Or put the folder there yourself and press **Reload**
   (which also reloads every mod's files after you edit them).
+- On the [mods store](https://ishid4.github.io/Firefox-Zen-Mods/), **Install**
+  installs a mod in one click (Firefox asks first, in the tab). A mod with a
+  script is installed off and the Mods tab opens to turn it on. For a mod
+  that's already installed the button opens the Mods tab, where an update is
+  reviewed as below. Only that page can ask to install, and only mods from the
+  store's own release (`JS/firefox-zen-store.sys.mjs`). To try a local copy of
+  the store, set `firefox-zen.mods.store-dev` to `true` and restart:
+  `http://localhost` and `127.0.0.1` then count as the store.
 - Each row: **Folder** opens it, **Export…** zips it to share, **Remove…**
   deletes it and its options. Options unfold while the mod is on; a dot marks
   options changed from their defaults, with **Reset** on hover.

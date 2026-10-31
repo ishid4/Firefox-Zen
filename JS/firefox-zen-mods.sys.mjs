@@ -785,6 +785,20 @@ async function prepareUpdate(id) {
   }
 }
 
+// Downloads a mod's .zip (a downloadURL, #folder and all) and reads it like
+// prepareInstall. Used by Install on the store page (JS/FzStore).
+async function prepareDownload(url) {
+  await IOUtils.makeDirectory(MODS_DIR, { createAncestors: true });
+  const zip = PathUtils.join(MODS_DIR, `.install-${Date.now()}.zip`);
+  try {
+    await IOUtils.write(zip, await request(url, "bytes"));
+    const folder = decodeURIComponent(new URL(url).hash.slice(1)) || null;
+    return await prepareInstall(zip, { folder });
+  } finally {
+    await IOUtils.remove(zip, { ignoreAbsent: true });
+  }
+}
+
 async function remove(id) {
   const mod = mods.get(id);
   if (!mod) {
@@ -910,6 +924,7 @@ export const FzMods = {
   resetOptions,
   fileURL,
   prepareInstall,
+  prepareDownload,
   remove,
   exportMod,
   exportState,
