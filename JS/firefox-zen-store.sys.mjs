@@ -53,6 +53,10 @@ try {
       },
     },
     matches,
+    // Without it Firefox keeps actors out of web content processes, and the
+    // store page is one ("doesn't match remote type 'webIsolated=…'"). The
+    // child only passes a mod id on; FzStoreParent checks everything.
+    safeForUntrustedWebProcess: true,
   });
 } catch (e) {
   console.error("Firefox-Zen store: couldn't register the store actor", e);
