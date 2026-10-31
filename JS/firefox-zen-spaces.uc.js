@@ -1458,8 +1458,8 @@
       item("Create Private Space…", "chrome://browser/skin/privateBrowsing.svg", "private"),
       item("Import…", "chrome://browser/skin/import.svg", "import"),
       item("Show Private Spaces", "chrome://browser/skin/privateBrowsing.svg", "toggle-private"),
-      item("Create Folder", "chrome://browser/skin/tabbrowser/tab-groups.svg", "folder"),
       document.createXULElement("menuseparator"),
+      item("Create Folder", "chrome://browser/skin/tabbrowser/tab-groups.svg", "folder"),
       item("New Tab", "chrome://global/skin/icons/plus.svg", "tab")
     );
     menu.addEventListener("command", e => {
