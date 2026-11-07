@@ -1,20 +1,23 @@
 // ==UserScript==
 // @name           Firefox-Zen Updates
-// @description    The theme's version, a daily check for a newer one on GitHub, and updating the chrome folder without losing local edits
+// @description    The theme's version, a check for a newer one on GitHub at startup, and updating the chrome folder without losing local edits
 // ==/UserScript==
 
 // Background module (loaded once by fx-autoconfig, shared by every window).
 // The Library's About tab (JS/firefox-zen-about.uc.js) shows what's here.
 //
-// Version: chrome/version.json, { version, repository, branch, notes }.
-// "version" is MAJOR.MINOR.PATCH (see readme_extra.md, Updates). "repository"
+// Version: chrome/version.json, { version, repository, branch, history }.
+// "version" is MAJOR.MINOR.PATCH (see readme_extra.md, Updates). "history" is
+// every release, newest first: [{ version, date: "YYYY-MM-DD", notes }]; the
+// About tab shows it, and what's new since the installed version. "repository"
 // and "branch" say where updates come from, so a fork only edits this file;
 // updating keeps the local ones (see mergeVersionFile).
 //
 // Checks: GitHub's version.json on that branch (raw.githubusercontent.com).
-// While AUTO_CHECK_PREF is on: once the browser has settled after startup,
-// then hourly, each only when CHECK_INTERVAL has passed since the last one.
-// What it found is kept in prefs (LATEST_PREF, NOTES_PREF), so every window
+// While AUTO_CHECK_PREF is on (Check at startup): once per Firefox start,
+// after the browser has settled. Off: only when asked (Check for updates).
+// What it found is kept in prefs (LATEST_PREF, NOTES_PREF: the releases
+// newer than this one, as JSON), so every window
 // can show it right away at the next start, before any new check.
 //
 // Updating, two kinds of install:
@@ -37,7 +40,7 @@
 // The loader in Firefox's install folder (program/) can't be written from
 // here: when it changed, the About tab says to run the installer again.
 
-import { setTimeout, clearTimeout, setInterval } from "resource://gre/modules/Timer.sys.mjs";
+import { setTimeout, clearTimeout } from "resource://gre/modules/Timer.sys.mjs";
 
 const PREF_BRANCH = "firefox-zen.update.";
 const AUTO_CHECK_PREF = PREF_BRANCH + "auto-check";
@@ -51,7 +54,6 @@ const SEEN_PREF = PREF_BRANCH + "seen";
 const DEV_PREF = PREF_BRANCH + "dev-url";
 const CHANGED_TOPIC = "firefox-zen-update-changed";
 
-const CHECK_INTERVAL = 24 * 60 * 60; // seconds
 const MAX_DOWNLOAD = 20 * 1024 * 1024;
 const MAX_HASHED = 5 * 1024 * 1024;
 
@@ -146,8 +148,36 @@ function parseVersionFile(data) {
     version: VERSION_RE.test(text(data?.version, 40)) ? text(data.version, 40) : null,
     repository: REPO_RE.test(repo) ? repo.replace(/(\.git)?\/?$/, "") : DEFAULT_REPO,
     branch: BRANCH_RE.test(branch) ? branch : "main",
-    notes: text(data?.notes, 4000),
+    history: parseHistory(data),
   };
+}
+
+// [{ version, date, notes }], newest first. An older version.json with only
+// "notes" gives one entry.
+function parseHistory(data) {
+  const list = Array.isArray(data?.history) ? data.history : [];
+  const out = [];
+  for (const e of list.slice(0, 200)) {
+    const version = text(e?.version, 40);
+    if (VERSION_RE.test(version) && !out.some(x => x.version === version)) {
+      const date = text(e.date, 10);
+      out.push({ version, date: /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null, notes: text(e.notes, 4000) });
+    }
+  }
+  const version = text(data?.version, 40);
+  if (VERSION_RE.test(version) && !out.some(x => x.version === version)) {
+    out.push({ version, date: null, notes: text(data?.notes, 4000) });
+  }
+  return out.sort((a, b) => compareVersions(b.version, a.version));
+}
+
+function readNewer() {
+  try {
+    const list = JSON.parse(Services.prefs.getStringPref(NOTES_PREF, "[]"));
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return []; // the 1.0.0 format: plain text
+  }
 }
 
 // version.json on disk now (what the next start runs, after an update).
@@ -183,7 +213,7 @@ const zipURL = l => (devURL ? `${devURL}/main.zip` : `${l.repository}/archive/re
 
 // ---- state ----
 
-let local = { version: null, repository: DEFAULT_REPO, branch: "main", notes: "", git: false };
+let local = { version: null, repository: DEFAULT_REPO, branch: "main", history: [], git: false };
 let checking = false;
 let lastError = null;
 // { to, backup, git } after an update this session: a restart loads it.
@@ -198,10 +228,12 @@ function status() {
     version: local.version,
     repository: local.repository,
     branch: local.branch,
-    notes: local.notes,
+    // Releases up to this one, newest first.
+    history: local.history.filter(e => !local.version || compareVersions(e.version, local.version) <= 0),
     git: local.git,
     latest: latest || null,
-    latestNotes: available ? Services.prefs.getStringPref(NOTES_PREF, "") : "",
+    // Releases newer than this one (what an update brings), newest first.
+    newer: available ? readNewer().filter(e => compareVersions(e.version, local.version) > 0) : [],
     available,
     unseen: available && Services.prefs.getStringPref(SEEN_PREF, "") !== latest,
     checkedAt: Services.prefs.getIntPref(LAST_CHECK_PREF, 0) * 1000 || null,
@@ -259,7 +291,8 @@ async function check() {
       throw new Error(`no version in ${rawURL(local)}`);
     }
     Services.prefs.setStringPref(LATEST_PREF, remote.version);
-    Services.prefs.setStringPref(NOTES_PREF, remote.notes);
+    const newer = remote.history.filter(e => !local.version || compareVersions(e.version, local.version) > 0);
+    Services.prefs.setStringPref(NOTES_PREF, JSON.stringify(newer.slice(0, 30)));
     lastError = null;
   } catch (e) {
     lastError = `Update check failed: ${e.message}`;
@@ -531,7 +564,8 @@ async function mergeVersionFile(srcPath, record) {
 }
 
 // Downloads the newest version and compares it with the files here. Returns
-// { from, to, notes, url, loader, items, cancel, commit(paths) }; each item
+// { from, to, newer, url, loader, items, cancel, commit(paths) } (newer: the
+// releases it brings, from its history); each item
 // is { path, status: "added" | "changed" | "removed", edited, apply, before,
 // after } (before/after: texts, null when binary or absent). edited: the file
 // here isn't what the theme shipped. apply: the suggested choice. Files
@@ -614,7 +648,7 @@ async function prepareUpdate() {
     return {
       from: local.version,
       to: meta.version,
-      notes: meta.notes,
+      newer: meta.history.filter(e => compareVersions(e.version, local.version ?? "0") > 0),
       url,
       loader: await loaderChanged(src),
       items,
@@ -721,9 +755,10 @@ const ready = (async () => {
   notify();
 })().catch(e => console.error("Firefox-Zen update:", e));
 
+// One check per Firefox start, once the browser has settled; off, only the
+// About tab's Check for updates checks.
 function autoCheck() {
-  const last = Services.prefs.getIntPref(LAST_CHECK_PREF, 0);
-  if (Services.prefs.getBoolPref(AUTO_CHECK_PREF, true) && Date.now() / 1000 - last > CHECK_INTERVAL) {
+  if (Services.prefs.getBoolPref(AUTO_CHECK_PREF, true)) {
     check().catch(e => console.error("Firefox-Zen update check:", e));
   }
 }
@@ -732,9 +767,7 @@ setTimeout(() => {
     .then(() => ensureRecord())
     .catch(e => console.error("Firefox-Zen update: install record", e))
     .then(autoCheck);
-  setInterval(autoCheck, 60 * 60 * 1000);
 }, 20000);
-Services.prefs.addObserver(AUTO_CHECK_PREF, autoCheck);
 
 export const FzUpdate = {
   CHANGED_TOPIC,

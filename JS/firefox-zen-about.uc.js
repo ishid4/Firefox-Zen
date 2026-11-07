@@ -150,33 +150,32 @@
             "div",
             { class: "fz-about-version-text" },
             h("strong", { class: "fz-about-name", text: "Firefox-Zen" }),
-            h("span", { class: "fz-about-number", text: s.version ? `Version ${s.version}` : "Version unknown" })
+            h("span", { class: "fz-about-number", text: s.version ? `Version ${s.version}` : "Version unknown" }),
+            // Latest · checked · source · install kind, on one line.
+            h("span", {
+              class: "fz-hint fz-about-facts",
+              text: [
+                s.latest ? `Latest ${s.latest}` : "Not checked yet",
+                s.checkedAt && `checked ${when(s.checkedAt)}`,
+                `${s.repository.replace("https://github.com/", "")} (${s.branch})`,
+                s.git ? "git checkout" : "downloaded files",
+              ]
+                .filter(Boolean)
+                .join(" · "),
+            })
           ),
           state
         ),
-        h(
-          "dl",
-          { class: "fz-update-facts" },
-          h("dt", { text: "Latest version" }),
-          h("dd", { text: s.latest ?? "Not checked yet" }),
-          h("dt", { text: "Last checked" }),
-          h("dd", { text: when(s.checkedAt) }),
-          h("dt", { text: "Updates from" }),
-          h("dd", { text: `${s.repository.replace("https://", "")} (${s.branch})` }),
-          h("dt", { text: "Installed as" }),
-          h("dd", { text: s.git ? "git checkout" : "downloaded files" })
-        ),
-        s.available && s.latestNotes && h("p", { class: "fz-about-notes" }, h("strong", { text: `What's new in ${s.latest}: ` }), s.latestNotes),
-        !s.available && s.notes && h("p", { class: "fz-about-notes fz-hint", text: s.notes }),
+        s.available && s.newer.length && buildReleases(s.newer, { title: "What's new" }),
         s.error && h("p", { class: "fz-about-error", text: s.error }),
         h(
           "div",
           { class: "fz-mods-toolbar fz-about-actions" },
           update,
           check,
-          h("label", { class: "fz-mods-auto-check", title: "At Firefox startup, at most once a day" }, autoCheck, "Check daily")
+          h("label", { class: "fz-mods-auto-check", title: "Check for a new version each time Firefox starts. Off: only when you click Check for updates." }, autoCheck, "Check at startup")
         ),
-        ].filter(c => c != null && c !== false) // parts not shown
+        ].filter(c => c && typeof c === "object") // parts not shown
       );
 
       restartBanner.hidden = !s.updated;
@@ -196,7 +195,10 @@
     };
 
     const scriptsList = h("div", { class: "fz-about-scripts" });
+    const scriptsCount = h("span", { class: "fz-about-fold-count" });
     const changesList = h("div", { class: "fz-about-changes" });
+    const changesCount = h("span", { class: "fz-about-fold-count" });
+    const historySection = h("div", { class: "fz-about-slot" });
 
     view = h(
       "div",
@@ -211,38 +213,28 @@
         versionBox
       ),
       h(
-        "section",
-        { class: "fz-category", "aria-labelledby": "fz-about-links-title" },
-        h("h3", { class: "fz-category-title", id: "fz-about-links-title", text: "Links" }),
-        h(
-          "div",
-          { class: "fz-about-links" },
-          ...LINKS(FzUpdate.status().repository).map(l =>
-            h(
-              "button",
-              { type: "button", class: "fz-about-link", title: l.url, onclick: () => openLink(l.url) },
-              h("span", { class: "fz-about-link-label", text: l.label }),
-              h("span", { class: "fz-hint", text: l.hint })
-            )
-          )
+        "nav",
+        { class: "fz-about-links", "aria-label": "Links" },
+        ...LINKS(FzUpdate.status().repository).map(l =>
+          h("button", {
+            type: "button",
+            class: "fz-reset fz-about-link",
+            title: `${l.hint}\n${l.url}`,
+            text: l.label,
+            onclick: () => openLink(l.url),
+          })
         )
       ),
-      h(
-        "section",
-        { class: "fz-category", "aria-labelledby": "fz-about-how-title" },
-        h("h3", { class: "fz-category-title", id: "fz-about-how-title", text: "How it works" }),
-        buildHowItWorks(),
-        scriptsList
-      ),
-      h(
-        "section",
-        { class: "fz-category", "aria-labelledby": "fz-about-changes-title" },
-        h("h3", { class: "fz-category-title", id: "fz-about-changes-title", text: "Your changes" }),
+      historySection,
+      fold("How it works", scriptsCount, false, buildHowItWorks(), scriptsList),
+      fold(
+        "Your changes",
+        changesCount,
+        false,
         h(
           "p",
           { class: "fz-hint fz-about-para" },
-          "Files in the chrome folder that aren't as Firefox-Zen shipped them. Updating never overwrites these without asking, ",
-          "and saves any it replaces in chrome/.firefox-zen/backups. Your mods (chrome/mods) are never touched."
+          "Files that aren't as Firefox-Zen shipped them. Updates never overwrite these without asking, and back up what they replace. chrome/mods is never touched."
         ),
         changesList,
         h(
@@ -271,8 +263,9 @@
     renderStatus();
     FzUpdate.ready.then(() => {
       renderStatus();
-      fillScripts(scriptsList);
-      fillChanges(changesList);
+      fillHistory(historySection);
+      fillScripts(scriptsList, scriptsCount);
+      fillChanges(changesList, changesCount);
     });
     return view;
   }
@@ -291,59 +284,81 @@
     );
   }
 
-  function buildHowItWorks() {
-    const p = (...parts) => h("p", { class: "fz-about-para" }, ...parts);
-    const code = t => h("code", { class: "fz-about-code", text: t });
+  // A folded section: the title, a count beside it, open on click.
+  function fold(title, count, open, ...content) {
+    return h(
+      "details",
+      { class: "fz-category fz-about-fold", open },
+      h("summary", { class: "fz-category-title fz-about-fold-title" }, h("span", { text: title }), count),
+      ...content
+    );
+  }
+
+  // Releases as a compact list: version, date, notes.
+  function buildReleases(list, { title = null, current = null } = {}) {
+    const date = d => (d ? new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { dateStyle: "medium" }) : "");
     return h(
       "div",
-      { class: "fz-about-how" },
-      p(
-        h("strong", { text: "Loader. " }),
-        "Firefox reads ",
-        code("config.js"),
-        " from its install folder at startup (the installer copies it there from ",
-        code("program/"),
-        "). It starts fx-autoconfig from ",
-        code("chrome/utils"),
-        ", which loads everything in ",
-        code("chrome/JS"),
-        "."
-      ),
-      p(
-        h("strong", { text: "Window scripts " }),
-        "(",
-        code(".uc.js"),
-        ") run in every browser window and build the interface: spaces, the Library, the sidebar layout. ",
-        h("strong", { text: "Background modules " }),
-        "(",
-        code(".sys.mjs"),
-        ") load once and are shared by every window: color schemes, mods, private spaces, updates."
-      ),
-      p(
-        h("strong", { text: "Styles. " }),
-        code("userChrome.css"),
-        " imports the theme's ",
-        code("theme/*.css"),
-        " for the browser itself; ",
-        code("userContent.css"),
-        " styles Firefox's own pages. Settings switch them with ",
-        code("firefox-zen.*"),
-        " prefs."
-      ),
-      p(
-        h("strong", { text: "Mods " }),
-        "live in ",
-        code("chrome/mods"),
-        " and load after the theme. Updates leave them alone."
-      ),
-      p(
-        h("strong", { text: "Edits. " }),
-        "Scripts and styles changed by hand keep working and show up below as edited. A script only reloads with Firefox: restart after editing one."
+      { class: "fz-about-releases" },
+      title && h("strong", { class: "fz-about-releases-title", text: title }),
+      ...list.map(e =>
+        h(
+          "div",
+          { class: "fz-about-release" },
+          h(
+            "div",
+            { class: "fz-about-release-head" },
+            h("span", { class: "fz-about-release-version", text: e.version }),
+            e.date && h("span", { class: "fz-hint", text: date(e.date) }),
+            e.version === current && h("span", { class: "fz-badge fz-mod-kind", text: "Installed" })
+          ),
+          e.notes && h("p", { class: "fz-about-release-notes", text: e.notes })
+        )
       )
     );
   }
 
-  async function fillScripts(list) {
+  const SHOWN_RELEASES = 3;
+
+  function fillHistory(slot) {
+    const { history, version } = FzUpdate.status();
+    if (!history.length) {
+      slot.replaceChildren();
+      return;
+    }
+    const older = history.slice(SHOWN_RELEASES);
+    slot.replaceChildren(
+      h(
+        "section",
+        { class: "fz-category", "aria-labelledby": "fz-about-history-title" },
+        h("h3", { class: "fz-category-title", id: "fz-about-history-title", text: "Version history" }),
+        buildReleases(history.slice(0, SHOWN_RELEASES), { current: version }),
+        older.length
+          ? h(
+              "details",
+              { class: "fz-about-older" },
+              h("summary", { class: "fz-about-older-title", text: `${older.length} older version${older.length === 1 ? "" : "s"}` }),
+              buildReleases(older, { current: version })
+            )
+          : null
+      )
+    );
+  }
+
+  function buildHowItWorks() {
+    const code = t => h("code", { class: "fz-about-code", text: t });
+    const item = (term, ...parts) => h("li", {}, h("strong", { text: term }), " ", ...parts);
+    return h(
+      "ul",
+      { class: "fz-about-how" },
+      item("Loader:", code("config.js"), " in Firefox's folder starts fx-autoconfig (", code("chrome/utils"), "), which loads ", code("chrome/JS"), "."),
+      item("Scripts:", code(".uc.js"), " run in each window; ", code(".sys.mjs"), " load once, shared by all windows."),
+      item("Styles:", code("userChrome.css"), " imports ", code("theme/*.css"), "; settings switch them with ", code("firefox-zen.*"), " prefs."),
+      item("Mods:", code("chrome/mods"), ", loaded after the theme. Edited scripts reload only with Firefox.")
+    );
+  }
+
+  async function fillScripts(list, count) {
     let scripts;
     let changes = [];
     try {
@@ -357,21 +372,19 @@
     } catch {}
     const state = new Map(changes.map(c => [c.path, c.state]));
     const label = { edited: "Edited", added: "Added by you" };
+    // One line each: name and what it does (file and whole text on hover).
     const row = s =>
       h(
         "div",
-        { class: "fz-about-script", "data-state": state.get(s.file) ?? "" },
-        h(
-          "div",
-          { class: "fz-about-script-head" },
-          h("span", { class: "fz-about-script-name", text: s.name.replace(/^Firefox-Zen /, "") }),
-          h("code", { class: "fz-about-script-file", text: s.file.replace(/^JS\//, "") }),
-          state.get(s.file) && h("span", { class: "fz-badge fz-about-edited", text: label[state.get(s.file)] ?? state.get(s.file) })
-        ),
-        s.description && h("p", { class: "fz-setting-desc fz-hint", text: s.description })
+        { class: "fz-about-script", "data-state": state.get(s.file) ?? "", title: `${s.file}\n${s.description}` },
+        h("span", { class: "fz-about-script-name", text: s.name.replace(/^Firefox-Zen /, "") }),
+        h("span", { class: "fz-about-script-desc", text: s.description }),
+        state.get(s.file) && h("span", { class: "fz-badge fz-about-edited", text: label[state.get(s.file)] ?? state.get(s.file) })
       );
     const windows = scripts.filter(s => !s.background);
     const background = scripts.filter(s => s.background);
+    const edited = scripts.filter(x => state.has(x.file)).length;
+    count.textContent = `${scripts.length} scripts` + (edited ? ` · ${edited} edited` : "");
     list.replaceChildren(
       h("h4", { class: "fz-about-subtitle", text: `Window scripts (${windows.length})` }),
       ...windows.map(row),
@@ -380,15 +393,17 @@
     );
   }
 
-  async function fillChanges(list) {
+  async function fillChanges(list, count) {
     list.replaceChildren(h("p", { class: "fz-hint", text: "Looking for changes…" }));
     let changes;
     try {
       changes = await FzUpdate.localChanges();
     } catch (e) {
+      count.textContent = "";
       list.replaceChildren(h("p", { class: "fz-about-error", text: `Couldn't compare the files: ${e.message}` }));
       return;
     }
+    count.textContent = changes.length ? `${changes.length} file${changes.length === 1 ? "" : "s"}` : "none";
     if (!changes.length) {
       list.replaceChildren(h("p", { class: "fz-hint", text: "None: every file is as shipped." }));
       return;
@@ -442,8 +457,9 @@
       page.replaceWith(aboutView);
       view = aboutView;
       renderStatus();
-      fillScripts(aboutView.querySelector(".fz-about-scripts"));
-      fillChanges(aboutView.querySelector(".fz-about-changes"));
+      const counts = aboutView.querySelectorAll(".fz-about-fold-count");
+      fillScripts(aboutView.querySelector(".fz-about-scripts"), counts[0]);
+      fillChanges(aboutView.querySelector(".fz-about-changes"), counts[1]);
       if (message) {
         setStatus(message.text, { error: message.error });
       }
@@ -545,7 +561,7 @@
         h("dt", { text: "Changes" }),
         h("dd", { text: counts || "Only the version number is new." })
       ),
-      pending.notes ? h("p", { class: "fz-about-notes" }, h("strong", { text: "What's new: " }), pending.notes) : "",
+      pending.newer.length ? buildReleases(pending.newer, { title: "What's new" }) : "",
       edited.length
         ? h(
             "div",

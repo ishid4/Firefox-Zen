@@ -234,11 +234,12 @@ Failed downloads (the ones that need Retry) are tinted yellow.
 ### About and updates
 
 The Library's **About** tab (between Settings and Close) shows the installed
-version, the links (repository, issues, mods store), how the pieces fit
-together (the loader, every script in `chrome/JS` with what it does, the
-styles, mods), and **Your changes**: files in the chrome folder that aren't as
-Firefox-Zen shipped them (edited, added or missing). Scripts edited by hand
-are marked in the script list too.
+version, the links (repository, issues, mods store), the **Version history**
+(the last three releases; older ones unfold), and two folded sections: **How
+it works** (the loader, styles, mods, and every script in `chrome/JS` on one
+line with what it does) and **Your changes**: files in the chrome folder that
+aren't as Firefox-Zen shipped them (edited, added or missing). Scripts edited
+by hand are marked in the script list too.
 
 **Versions.** `chrome/version.json` holds the version, `MAJOR.MINOR.PATCH`:
 
@@ -248,15 +249,21 @@ are marked in the script list too.
   changed (run the installer again), prefs were renamed or reset, or files
   moved in a way your edits may not survive.
 
-A new version is released by raising `version` (and writing `notes`, shown
-as "What's new") in `version.json` on `main`; every install sees it within a
-day. `repository` and `branch` say where updates come from: a fork changes
+A new version is released on `main` by raising `version` in `version.json`
+and adding its entry at the top of `history`:
+
+```json
+{ "version": "1.2.0", "date": "2026-12-01", "notes": "What changed, in a sentence or two." }
+```
+
+Every install sees it within a day; About shows the entries newer than the
+installed version as "What's new", and the whole list as the version history. `repository` and `branch` say where updates come from: a fork changes
 them there, and updates keep the local values.
 
-**Checks.** At startup (once Firefox has settled) and hourly while it stays
-open, Firefox-Zen reads `version.json` on GitHub if a day has passed since the
-last check (`firefox-zen.update.auto-check`, the **Check daily** switch, turns
-this off; **Check for updates** checks now). When a newer version is there,
+**Checks.** Each time Firefox starts (once it has settled), Firefox-Zen reads
+`version.json` on GitHub. The **Check at startup** switch
+(`firefox-zen.update.auto-check`) turns this off: then it only checks when you
+click **Check for updates**. When a newer version is there,
 the footer's Library button and the toolbar's Firefox-Zen button show an
 update icon and open the Library on About, until About has been seen; the
 About button keeps a dot until the update is installed.

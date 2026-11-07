@@ -1,6 +1,22 @@
 {
-  "version": "1.1.0",
+  "version": "1.2.0",
   "repository": "https://github.com/ishid4/Firefox-Zen",
   "branch": "main",
-  "notes": "Each space, private ones included, can have its own download folder (right-click a space → Download Folder): its downloads and Save As go there, and the Library's Open downloads folder opens it. First start now also asks for the needed restart in a notification bar."
+  "history": [
+    {
+      "version": "1.2.0",
+      "date": "2026-11-07",
+      "notes": "A more compact About tab with the version history, and How it works and Your changes folded away. Updates are now checked each time Firefox starts; turn off Check at startup to check only by hand."
+    },
+    {
+      "version": "1.1.0",
+      "date": "2026-11-07",
+      "notes": "Each space, private ones included, can have its own download folder (right-click a space → Download Folder): its downloads and Save As go there, and the Library's Open downloads folder opens it. First start now also asks for the needed restart in a notification bar."
+    },
+    {
+      "version": "1.0.0",
+      "date": "2026-11-07",
+      "notes": "First versioned release: an About tab in the Library, with daily update checks and in-place updates that keep your edits."
+    }
+  ]
 }
