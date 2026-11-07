@@ -984,7 +984,8 @@
     return null;
   }
 
-  window.FirefoxZenMods = { buildView };
+  // buildFileDiff: also the About tab's update review (JS/firefox-zen-about.uc.js).
+  window.FirefoxZenMods = { buildView, buildFileDiff };
 
   // ---- per-window setup ----
 

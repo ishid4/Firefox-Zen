@@ -117,7 +117,10 @@ Then start Firefox and click **Restart now** when Firefox-Zen asks (first start 
   sidebar, …), and pick a sidebar layout (Full, Icons, Auto-hide, …) in one click.
 - Once Spaces is on, use the bar under the tabs to switch spaces and **+** to
   create spaces, folders or private spaces. Right-click a space for more.
-- Its first button opens the **Library** (spaces, history, downloads, mods, settings).
+- Its first button opens the **Library** (spaces, history, downloads, mods, settings, about).
+- Firefox-Zen checks GitHub for a new version once a day. When there is one,
+  the Library button shows an update icon: click it, then **Update** on the
+  **About** tab. Files you edited are never replaced without asking.
 
 | Windows / Linux | macOS | Does |
 | --- | --- | --- |

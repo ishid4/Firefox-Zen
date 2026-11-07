@@ -1,3 +1,5 @@
 # Mods people install themselves; the example ships with the theme.
 /mods/*
 !/mods/example/
+# Update state and backups (JS/firefox-zen-update.sys.mjs).
+/.firefox-zen/

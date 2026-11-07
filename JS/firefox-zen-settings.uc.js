@@ -2358,7 +2358,10 @@
         if (!library) {
           return;
         }
-        if (library.isOpen() && library.view() === "settings") {
+        // An update waiting and not seen yet (JS/firefox-zen-about.uc.js).
+        if (win.FirefoxZenAbout?.opensAbout() && !(library.isOpen() && library.view() === "about")) {
+          library.open("about");
+        } else if (library.isOpen() && library.view() === "settings") {
           library.close();
         } else {
           library.open("settings");

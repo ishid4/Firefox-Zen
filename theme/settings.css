@@ -4,6 +4,12 @@
   list-style-image: url("icons/customize.svg") !important;
 }
 
+/* A Firefox-Zen update not seen yet (JS/firefox-zen-about.uc.js) */
+:root[fz-update-unseen] #firefox-zen-settings-button {
+  list-style-image: url("icons/update.svg") !important;
+  fill: var(--fz-accent) !important;
+}
+
 .fz-settings-view {
   --fz-muted: color-mix(in srgb, currentColor 62%, transparent);
   --fz-surface: color-mix(in srgb, currentColor 5%, transparent);

@@ -1,0 +1,199 @@
+/* Firefox-Zen about: the Library's About tab (built by JS/firefox-zen-about.uc.js).
+   Reuses the Settings and Mods tabs' look (theme/settings.css, theme/mods.css). */
+
+.fz-about-version {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 10px;
+}
+
+.fz-about-version-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.fz-about-logo {
+  width: 40px;
+  height: 40px;
+}
+
+.fz-about-version-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-inline-end: auto;
+}
+
+.fz-about-name {
+  font-size: 15px;
+}
+
+.fz-about-number {
+  color: var(--fz-muted);
+  user-select: text;
+}
+
+.fz-about-new {
+  background: var(--fz-accent);
+  color: var(--button-text-color-primary, white);
+}
+
+.fz-about-notes {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--fz-surface);
+  box-sizing: border-box;
+  line-height: 1.45;
+  user-select: text;
+}
+
+.fz-about-error {
+  margin: 0;
+  color: var(--text-color-error, #e22850);
+  font-size: 12px;
+  user-select: text;
+}
+
+.fz-about-actions {
+  margin-top: 0;
+  align-items: center;
+}
+
+.fz-about-slot:empty {
+  display: none;
+}
+
+/* ---- Links ---- */
+.fz-about-links {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+  padding-top: 8px;
+}
+
+.fz-about-link {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px 12px !important;
+  border: 1px solid var(--fz-line) !important;
+  border-radius: 8px;
+  background: var(--fz-surface) !important;
+  color: inherit;
+  text-align: start;
+
+  &:hover {
+    background: var(--fz-surface-hover) !important;
+  }
+}
+
+.fz-about-link-label {
+  font-weight: 600;
+  color: var(--fz-accent);
+}
+
+/* ---- How it works ---- */
+.fz-about-how {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 8px;
+}
+
+.fz-about-para {
+  margin: 0;
+  line-height: 1.5;
+  user-select: text;
+}
+
+.fz-about-code {
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--fz-surface-hover);
+  font-family: monospace;
+  font-size: 0.95em;
+  user-select: text;
+  overflow-wrap: anywhere;
+}
+
+.fz-about-subtitle {
+  margin: 14px 0 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fz-muted);
+}
+
+.fz-about-scripts,
+.fz-about-changes {
+  display: flex;
+  flex-direction: column;
+}
+
+.fz-about-script {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-block: 8px;
+
+  & + & {
+    border-top: 1px solid var(--fz-line);
+  }
+}
+
+.fz-about-script-head,
+.fz-about-change {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fz-about-change {
+  padding-block: 4px;
+}
+
+.fz-about-script-name {
+  font-weight: 600;
+}
+
+.fz-about-script-file {
+  color: var(--fz-muted);
+  font-family: monospace;
+  font-size: 12px;
+  user-select: text;
+}
+
+.fz-about-edited {
+  background: color-mix(in srgb, #e9a700 28%, transparent);
+
+  [data-state="added"] > & {
+    background: color-mix(in srgb, #2ea043 25%, transparent);
+  }
+
+  [data-state="missing"] > & {
+    background: color-mix(in srgb, #e5534b 25%, transparent);
+  }
+}
+
+/* ---- Update review: a checkbox per file, diffs folded but for edited files ---- */
+.fz-about-file {
+  & > .fz-diff-head {
+    cursor: pointer;
+  }
+
+  &[data-collapsed] > :not(.fz-diff-head) {
+    display: none;
+  }
+
+  &[data-collapsed] > .fz-diff-head {
+    border-bottom: none;
+  }
+}
+
+.fz-about-apply-label {
+  display: flex;
+  align-items: center;
+}

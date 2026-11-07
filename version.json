@@ -1,0 +1,6 @@
+{
+  "version": "1.0.0",
+  "repository": "https://github.com/ishid4/Firefox-Zen",
+  "branch": "main",
+  "notes": "First versioned release: an About tab in the Library, with daily update checks and in-place updates that keep your edits."
+}

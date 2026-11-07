@@ -150,6 +150,14 @@
   background-image: url("icons/library.svg");
 }
 
+/* A Firefox-Zen update not seen yet: the update icon, until About is opened
+   (JS/firefox-zen-about.uc.js). The downloads cue below wins while it shows. */
+#fz-spaces-bar[fz-update] .fz-library {
+  background-image: url("icons/update.svg");
+  fill: var(--fz-accent);
+  opacity: 1;
+}
+
 /* A tab dragged from the Library over a space button */
 .fz-space.fz-lib-drop-target {
   opacity: 1 !important;

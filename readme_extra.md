@@ -221,6 +221,57 @@ progress, Pause / Resume / Cancel, Retry, Show in folder, search, Clear
 finished and Open downloads folder. Click a finished download to open it.
 Failed downloads (the ones that need Retry) are tinted yellow.
 
+### About and updates
+
+The Library's **About** tab (between Settings and Close) shows the installed
+version, the links (repository, issues, mods store), how the pieces fit
+together (the loader, every script in `chrome/JS` with what it does, the
+styles, mods), and **Your changes**: files in the chrome folder that aren't as
+Firefox-Zen shipped them (edited, added or missing). Scripts edited by hand
+are marked in the script list too.
+
+**Versions.** `chrome/version.json` holds the version, `MAJOR.MINOR.PATCH`:
+
+- PATCH (1.0.**1**): fixes only.
+- MINOR (1.**1**.0): new features or settings; existing settings keep working.
+- MAJOR (**2**.0.0): something that needs you: the loader in `program/`
+  changed (run the installer again), prefs were renamed or reset, or files
+  moved in a way your edits may not survive.
+
+A new version is released by raising `version` (and writing `notes`, shown
+as "What's new") in `version.json` on `main`; every install sees it within a
+day. `repository` and `branch` say where updates come from: a fork changes
+them there, and updates keep the local values.
+
+**Checks.** At startup (once Firefox has settled) and hourly while it stays
+open, Firefox-Zen reads `version.json` on GitHub if a day has passed since the
+last check (`firefox-zen.update.auto-check`, the **Check daily** switch, turns
+this off; **Check for updates** checks now). When a newer version is there,
+the footer's Library button and the toolbar's Firefox-Zen button show an
+update icon and open the Library on About, until About has been seen; the
+About button keeps a dot until the update is installed.
+
+**Updating.**
+
+- An install made with git (the installer's choice when git is there):
+  **Update with git** runs `git pull --ff-only` in the chrome folder. git
+  stops, and changes nothing, if your edits conflict with the update; commit
+  or stash them first.
+- Downloaded files: **Update…** downloads the branch's zip and lists every
+  file it adds, changes or removes, with a diff and a checkbox each. Files you
+  edited that the update also changes are listed first and unfolded; checked,
+  they get the new version, unchecked they keep yours. Files you edited that
+  the update doesn't change aren't touched. Every file replaced or removed is
+  copied to `chrome/.firefox-zen/backups/<from>-to-<to>-<time>/` first.
+  `chrome/mods` (but `mods/example`) is never touched.
+  Firefox-Zen knows what it shipped from `chrome/.firefox-zen/installed.json`
+  (a hash of each file). An install without one (made by the installer, or
+  before 1.0.0) gets one at startup from the files on disk.
+- Either way the new scripts load at the next start: **Restart now**. When
+  the update changes the loader (`program/`, copied into Firefox's install
+  folder, which Firefox-Zen can't write to), About says to run the installer
+  again.
+
 ### Mods
 
 Mods change or add to Firefox-Zen without editing its files. The Library's

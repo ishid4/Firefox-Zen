@@ -19,6 +19,8 @@
 // - Downloads: Firefox's downloads (or a private space's).
 // - Mods: built by JS/firefox-zen-mods.uc.js (window.FirefoxZenMods).
 // - Settings: built by JS/firefox-zen-settings.uc.js (window.FirefoxZenSettings).
+// - About: built by JS/firefox-zen-about.uc.js (window.FirefoxZenAbout). While
+//   it says an update is waiting, the footer button opens on About.
 //
 // The Library is core: always on. The toolbar's Firefox-Zen button opens it on
 // Settings, so it can be reached before Spaces (and its footer) is on.
@@ -55,7 +57,7 @@
 
   let root = null;
   let main = null;
-  const VIEWS = ["spaces", "history", "downloads", "mods", "settings"];
+  const VIEWS = ["spaces", "history", "downloads", "mods", "settings", "about"];
   let view = Services.prefs.getStringPref(VIEW_PREF, "spaces");
   let filterText = "";
   let renderQueued = false;
@@ -173,6 +175,8 @@
   let sidebarHeld = null;
 
   const holdsSidebar = name => name !== "settings";
+  // Detours: the footer button opens the last of the other views.
+  const isDetour = name => name === "mods" || name === "settings" || name === "about";
 
   function holdSidebar() {
     if (sidebarHeld) {
@@ -314,6 +318,9 @@
     // (JS/firefox-zen-download-cue.uc.js): open on Downloads.
     if (window.FirefoxZenDownloadCue?.opensDownloads() && !(root && view === "downloads")) {
       open("downloads");
+    } else if (window.FirefoxZenAbout?.opensAbout() && !(root && view === "about")) {
+      // Showing the update icon (JS/firefox-zen-about.uc.js): open on About.
+      open("about");
     } else if (root) {
       close();
     } else {
@@ -323,8 +330,8 @@
 
   function setView(name, { render = true } = {}) {
     view = VIEWS.includes(name) ? name : "spaces";
-    // Mods and Settings are detours: the footer button opens the last content view.
-    if (view !== "mods" && view !== "settings") {
+    // Mods, Settings and About are detours: the footer button opens the last content view.
+    if (!isDetour(view)) {
       Services.prefs.setStringPref(VIEW_PREF, view);
     }
     if (root) {
@@ -378,6 +385,7 @@
         h("div", { class: "fz-lib-rail-spacer" }),
         window.FirefoxZenMods && nav("mods", "Mods"),
         window.FirefoxZenSettings && nav("settings", "Settings"),
+        window.FirefoxZenAbout && nav("about", "About"),
         h("button", {
           type: "button",
           class: "fz-lib-nav fz-lib-nav-close",
@@ -428,6 +436,8 @@
       main.replaceChildren(window.FirefoxZenMods.buildView());
     } else if (view === "settings" && window.FirefoxZenSettings) {
       main.replaceChildren(window.FirefoxZenSettings.buildView());
+    } else if (view === "about" && window.FirefoxZenAbout) {
+      main.replaceChildren(window.FirefoxZenAbout.buildView());
     } else {
       main.replaceChildren(...buildSpacesShell());
       renderBoard();

@@ -146,6 +146,20 @@
   --fz-lib-nav-icon: url("icons/settings.svg");
 }
 
+.fz-lib-nav-about {
+  --fz-lib-nav-icon: url("icons/info.svg");
+}
+
+/* A Firefox-Zen update is waiting (JS/firefox-zen-about.uc.js) */
+:root[fz-update-available] .fz-lib-nav-about::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  margin-inline-start: auto;
+  border-radius: 50%;
+  background: var(--fz-accent);
+}
+
 .fz-lib-nav-close {
   --fz-lib-nav-icon: url("icons/close.svg");
 }
