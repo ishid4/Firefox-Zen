@@ -1,8 +1,13 @@
 {
-  "version": "1.2.0",
+  "version": "1.2.1",
   "repository": "https://github.com/ishid4/Firefox-Zen",
   "branch": "main",
   "history": [
+    {
+      "version": "1.2.1",
+      "date": "2026-11-07",
+      "notes": "The installers list profiles by the name Firefox shows (like Zen or Original profile), not just the folder. On Windows, Run with PowerShell keeps the window open at the end so you can read the result."
+    },
     {
       "version": "1.2.0",
       "date": "2026-11-07",

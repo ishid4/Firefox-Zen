@@ -3,7 +3,21 @@
 # Running it again updates an existing install.
 # $env:FIREFOX_ZEN_PROFILE = '<profile folder>' skips the profile picker.
 
-& {
+# "Run with PowerShell" (and shortcuts, Win+R) start a window just for this
+# script, which closes as soon as it ends: then wait for Enter at the end, so
+# the result stays readable. Pasted into an open PowerShell, nothing changes.
+$fzOwnWindow = & {
+  if ($Host.Name -ne 'ConsoleHost') { return $false }
+  # PowerShell takes any prefix of a parameter name (-c, -Comm, -f...)
+  $flags = @([Environment]::GetCommandLineArgs() | Select-Object -Skip 1 |
+    Where-Object { $_ -match '^[-/]\w' } | ForEach-Object { $_.Substring(1).ToLower() })
+  $any = { param($names) [bool]($flags | Where-Object { $f = $_; $names | Where-Object { $_.StartsWith($f) } }) }
+  # -Command/-File/-EncodedCommand run a script and exit, unless -NoExit;
+  # -NonInteractive can't read Enter.
+  (& $any 'command', 'file', 'encodedcommand') -and -not (& $any 'noexit', 'noninteractive')
+}
+
+try { & {
   $ErrorActionPreference = 'Stop'
   [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
@@ -199,4 +213,11 @@
   Say ''
   Say 'Firefox-Zen is installed.' Green
   Say 'Start Firefox and click "Restart now" when Firefox-Zen asks (first start only).'
+} } catch {
+  Write-Host "Install failed: $_" -ForegroundColor Red
+} finally {
+  if ($fzOwnWindow) {
+    Write-Host ''
+    Read-Host 'Press Enter to close' | Out-Null
+  }
 }
