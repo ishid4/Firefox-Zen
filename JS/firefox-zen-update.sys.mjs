@@ -379,20 +379,77 @@ async function ensureRecord() {
 
 // ---- local changes ----
 
-let gitPath;
+const WIN = Services.appinfo.OS === "WINNT";
+
+// PATH as Windows has it saved (machine, then user): Firefox started from
+// Explorer has it as "Path", which Subprocess.pathSearch doesn't read, and a
+// Firefox started before git was installed doesn't have it at all.
+function registryPath() {
+  const out = [];
+  const read = (root, key) => {
+    const reg = Cc["@mozilla.org/windows-registry-key;1"].createInstance(Ci.nsIWindowsRegKey);
+    try {
+      reg.open(root, key, Ci.nsIWindowsRegKey.ACCESS_READ);
+      if (reg.hasValue("Path")) {
+        out.push(reg.readStringValue("Path"));
+      }
+    } catch {
+    } finally {
+      reg.close();
+    }
+  };
+  read(Ci.nsIWindowsRegKey.ROOT_KEY_LOCAL_MACHINE, "SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment");
+  read(Ci.nsIWindowsRegKey.ROOT_KEY_CURRENT_USER, "Environment");
+  return out.join(";");
+}
+
+// %VAR% in a registry PATH entry.
+const expand = dir => dir.replace(/%([^%]+)%/g, (m, name) => Services.env.get(name) || m);
+
+function gitCandidates() {
+  const name = WIN ? "git.exe" : "git";
+  const sep = WIN ? ";" : ":";
+  const dirs = [Services.env.get("PATH"), WIN ? registryPath() : ""]
+    .join(sep)
+    .split(sep)
+    .map(d => expand(d.trim().replace(/^"|"$/g, "")))
+    .filter(Boolean);
+  if (WIN) {
+    const pf = Services.env.get("ProgramFiles") || "C:\\Program Files";
+    const pf86 = Services.env.get("ProgramFiles(x86)") || "C:\\Program Files (x86)";
+    const local = Services.env.get("LOCALAPPDATA");
+    dirs.push(`${pf}\\Git\\cmd`, `${pf}\\Git\\bin`, `${pf86}\\Git\\cmd`);
+    if (local) {
+      dirs.push(`${local}\\Programs\\Git\\cmd`);
+    }
+  } else {
+    dirs.push("/usr/bin", "/usr/local/bin", "/opt/homebrew/bin", "/opt/local/bin");
+  }
+  return [...new Set(dirs)].map(d => {
+    try {
+      return PathUtils.join(d, name);
+    } catch {
+      return null; // not an absolute path
+    }
+  });
+}
+
+// Found once; not finding it is tried again next time (git installed since).
+let gitPath = null;
 async function findGit() {
-  if (gitPath === undefined) {
-    const { Subprocess } = ChromeUtils.importESModule("resource://gre/modules/Subprocess.sys.mjs");
-    gitPath = null;
-    for (const name of ["git", "git.exe"]) {
-      try {
-        gitPath = await Subprocess.pathSearch(name);
-        break;
-      } catch {}
+  if (gitPath) {
+    return gitPath;
+  }
+  for (const path of gitCandidates()) {
+    if (path && (await IOUtils.exists(path).catch(() => false))) {
+      return (gitPath = path);
     }
   }
-  return gitPath;
+  return null;
 }
+
+// What to run by hand when Firefox can't.
+const gitCommand = () => `git -C "${CHROME_DIR}" pull --ff-only`;
 
 async function run(command, args) {
   const { Subprocess } = ChromeUtils.importESModule("resource://gre/modules/Subprocess.sys.mjs");
@@ -422,7 +479,7 @@ async function localChanges() {
   if (local.git) {
     const git = await findGit();
     if (!git) {
-      throw new Error("git isn't on PATH");
+      throw new Error("git wasn't found, so changes can't be listed");
     }
     const { exitCode, output } = await run(git, ["-c", "core.quotepath=off", "status", "--porcelain=v1", "--untracked-files=all"]);
     if (exitCode) {
@@ -713,17 +770,26 @@ async function prepareUpdate() {
   }
 }
 
-// A git checkout: git pull --ff-only. Returns git's output.
+// A git checkout: git pull --ff-only. Returns git's output. Errors carry
+// `command` (what to run in a terminal instead) and `kind`: "no-git", or
+// "pull" (git refused, its output is the message).
 async function gitPull() {
   await ready;
+  const fail = (message, kind) => Object.assign(new Error(message), { kind, command: gitCommand() });
   const git = await findGit();
   if (!git) {
-    throw new Error(`git isn't on PATH. In a terminal: git -C "${CHROME_DIR}" pull --ff-only`);
+    throw fail("Firefox couldn't find git. Install it from git-scm.com, or run this in a terminal:", "no-git");
   }
   const before = local.version;
-  const { exitCode, output } = await run(git, ["pull", "--ff-only"]);
+  let result;
+  try {
+    result = await run(git, ["pull", "--ff-only"]);
+  } catch (e) {
+    throw fail(`Couldn't run ${git}: ${e.message}`, "no-git");
+  }
+  const { exitCode, output } = result;
   if (exitCode) {
-    throw new Error(output.trim() || `git pull exited with ${exitCode}`);
+    throw fail(output.trim() || `git pull exited with ${exitCode}`, "pull");
   }
   local = await readLocal();
   if (local.version !== before) {

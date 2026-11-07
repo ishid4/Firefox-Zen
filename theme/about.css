@@ -283,3 +283,36 @@
   display: flex;
   align-items: center;
 }
+
+/* ---- Errors: selectable, with what to copy ---- */
+.fz-about-view :is(.fz-status, .fz-about-error, .fz-banner-text) {
+  user-select: text;
+}
+
+.fz-about-problem .fz-banner-text {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fz-about-copyable {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.fz-about-pre {
+  flex: 1;
+  min-width: 0;
+  max-height: 160px;
+  margin: 0;
+  padding: 6px 8px;
+  overflow: auto;
+  border-radius: 6px;
+  background: var(--fz-surface-hover);
+  font-family: monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}

@@ -88,6 +88,8 @@
     });
 
     const versionBox = h("div", { class: "fz-about-version" });
+    // What went wrong with the last update attempt (kept across re-renders).
+    const problemSlot = h("div", { class: "fz-about-slot" });
     const subtitle = h("span", { class: "fz-subtitle" });
     const restartBanner = h("div", { class: "fz-banner", role: "status", hidden: true });
     const loaderSlot = h("div", { class: "fz-about-slot" });
@@ -128,7 +130,7 @@
           type: "button",
           class: "fz-reset fz-primary",
           text: s.git ? `Update to ${s.latest} with git` : `Update to ${s.latest}…`,
-          onclick: e => (s.git ? updateWithGit(e.currentTarget, setStatus) : reviewUpdate(setStatus)),
+          onclick: e => (s.git ? updateWithGit(e.currentTarget, setStatus, problemSlot) : reviewUpdate(setStatus)),
         });
 
       let state;
@@ -210,7 +212,8 @@
         "section",
         { class: "fz-category", "aria-labelledby": "fz-about-version-title" },
         h("h3", { class: "fz-category-title", id: "fz-about-version-title", text: "Version" }),
-        versionBox
+        versionBox,
+        problemSlot
       ),
       h(
         "nav",
@@ -423,20 +426,49 @@
 
   // ---- updating ----
 
-  async function updateWithGit(button, setStatus) {
+  // A copyable block: the text, and a Copy button.
+  function copyable(text) {
+    const copy = h("button", { type: "button", class: "fz-reset fz-about-copy", text: "Copy" });
+    copy.onclick = () => {
+      Cc["@mozilla.org/widget/clipboardhelper;1"].getService(Ci.nsIClipboardHelper).copyString(text);
+      copy.textContent = "Copied";
+      setTimeout(() => (copy.textContent = "Copy"), 1500);
+    };
+    return h("div", { class: "fz-about-copyable" }, h("pre", { class: "fz-about-pre", text }), copy);
+  }
+
+  async function updateWithGit(button, setStatus, slot) {
     button.disabled = true;
+    slot.replaceChildren();
     setStatus("Running git pull…");
     try {
       const output = await FzUpdate.gitPull();
       setStatus(output.split("\n").pop() || "Updated.");
     } catch (e) {
-      setStatus(
-        `git pull stopped: ${e.message.split("\n").slice(-3).join(" ")}. Commit or stash your changes in the chrome folder, then try again.`,
-        { error: true }
+      setStatus(null);
+      const pull = e.kind === "pull";
+      slot.replaceChildren(
+        h(
+          "div",
+          { class: "fz-banner fz-banner-warning fz-about-problem", role: "alert" },
+          h(
+            "div",
+            { class: "fz-banner-text" },
+            h("strong", { text: pull ? "git pull stopped." : "Couldn't update with git." }),
+            " ",
+            pull
+              ? "Usually local changes in the chrome folder are in the way: commit or stash them, then try again. git said:"
+              : e.message,
+            pull && copyable(e.message),
+            e.command && pull && h("span", { text: "Or run it yourself in a terminal:" }),
+            e.command && copyable(e.command)
+          )
+        )
       );
       button.disabled = false;
     }
   }
+
 
   async function reviewUpdate(setStatus) {
     const aboutView = view;
