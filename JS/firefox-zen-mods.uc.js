@@ -697,6 +697,17 @@
           "aria-haspopup": "menu",
           onclick: e => openInstallMenu(e.currentTarget),
         }),
+        h("button", {
+          type: "button",
+          class: "fz-reset",
+          text: "Mods store",
+          title: "Looks and features made by others, installed in one click",
+          onclick: () => {
+            const { FzStore } = ChromeUtils.importESModule("chrome://userscripts/content/firefox-zen-store.sys.mjs");
+            window.FirefoxZenLibrary?.close();
+            openWebLinkIn(FzStore.STORE_URL, "tab");
+          },
+        }),
         button("Open mods folder", () => FzMods.openFolder() ?? null),
         button("Reload", async () => {
           await FzMods.rescan();

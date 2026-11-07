@@ -218,6 +218,8 @@ let checking = false;
 let lastError = null;
 // { to, backup, git } after an update this session: a restart loads it.
 let updated = null;
+// { version, count, backup } after a restore this session: a restart loads it.
+let restored = null;
 
 const notify = () => Services.obs.notifyObservers(null, CHANGED_TOPIC);
 
@@ -240,6 +242,7 @@ function status() {
     checking,
     error: lastError,
     updated,
+    restored,
     dir: CHROME_DIR,
     backupDir: BACKUP_DIR,
   };
@@ -770,9 +773,207 @@ async function prepareUpdate() {
   }
 }
 
+// ---- restoring ----
+// Puts back the files of the installed version as Firefox-Zen shipped them:
+// edited ones get the original again, deleted ones come back. Files the
+// theme doesn't ship (your own) and chrome/mods stay. Like updating, it lists
+// every file first ({ version, source, items, cancel, commit(paths) }, items
+// as in prepareUpdate, with `label`), and saves what it replaces in
+// BACKUP_DIR. version.json keeps its repository and branch.
+// Downloaded files: the version's zip, from the tag v<version> (each release
+// is tagged), else the branch's zip when that is still the same version.
+// git checkouts: the files of the checked-out commit (git checkout HEAD).
+
+const stampNow = () => new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+
+async function backupTo(backup, rel) {
+  const from = resolveIn(CHROME_DIR, rel);
+  if (!(await IOUtils.exists(from))) {
+    return false;
+  }
+  const to = resolveIn(backup, rel);
+  await IOUtils.makeDirectory(PathUtils.parent(to), { createAncestors: true });
+  await IOUtils.copy(from, to);
+  return true;
+}
+
+async function prepareRestore() {
+  await ready;
+  local = await readLocal();
+  if (!local.version) {
+    throw new Error("version.json is missing or has no version, so the original files aren't known");
+  }
+  return local.git ? prepareGitRestore() : prepareFilesRestore();
+}
+
+async function prepareFilesRestore() {
+  const record = await ensureRecord();
+  const tmp = PathUtils.join(STATE_DIR, `update-${Date.now()}`);
+  await IOUtils.makeDirectory(tmp, { createAncestors: true });
+  const cancel = () => IOUtils.remove(tmp, { recursive: true, ignoreAbsent: true }).catch(() => {});
+  try {
+    const tagURL = devURL ? `${devURL}/v${local.version}.zip` : `${local.repository}/archive/refs/tags/v${local.version}.zip`;
+    const zip = PathUtils.join(tmp, "download.zip");
+    const src = PathUtils.join(tmp, "files");
+    let url = null;
+    for (const candidate of [tagURL, zipURL(local)]) {
+      try {
+        await IOUtils.write(zip, await request(candidate, "bytes"));
+      } catch {
+        continue;
+      }
+      await IOUtils.remove(src, { recursive: true, ignoreAbsent: true });
+      await extractZip(zip, src);
+      let meta = null;
+      try {
+        meta = parseVersionFile(await IOUtils.readJSON(PathUtils.join(src, VERSION_FILE)));
+      } catch {}
+      if (meta?.version === local.version) {
+        url = candidate;
+        break;
+      }
+    }
+    if (!url) {
+      throw new Error(
+        `couldn't download version ${local.version}'s files (no tag v${local.version}, and the branch has moved on). ` +
+          "Updating to the newest version also brings back its files."
+      );
+    }
+
+    const shipped = {};
+    const items = [];
+    for (const rel of await listFiles(src)) {
+      const after = await IOUtils.read(resolveIn(src, rel));
+      shipped[rel] = hashBytes(rel, after);
+      if (rel === VERSION_FILE) {
+        continue; // written merged (mergeVersionFile)
+      }
+      const target = resolveIn(CHROME_DIR, rel);
+      const info = await IOUtils.stat(target).catch(() => null);
+      const before = info?.type === "regular" ? await IOUtils.read(target) : null;
+      if (before && hashBytes(rel, before) === shipped[rel]) {
+        continue;
+      }
+      items.push({
+        path: rel,
+        status: before ? "changed" : "added",
+        label: before ? "Edited" : "Missing",
+        edited: !!before,
+        apply: true,
+        before: decode(rel, before),
+        after: decode(rel, after),
+      });
+    }
+    items.sort((a, b) => a.path.localeCompare(b.path));
+
+    return {
+      version: local.version,
+      source: url,
+      items,
+      cancel,
+      async commit(paths = items.map(i => i.path)) {
+        const chosen = new Set(paths);
+        const backup = PathUtils.join(BACKUP_DIR, `restore-${local.version}-${stampNow()}`);
+        let saved = 0;
+        try {
+          for (const item of items.filter(i => chosen.has(i.path))) {
+            saved += (await backupTo(backup, item.path)) ? 1 : 0;
+            const target = resolveIn(CHROME_DIR, item.path);
+            await IOUtils.makeDirectory(PathUtils.parent(target), { createAncestors: true });
+            await IOUtils.copy(resolveIn(src, item.path), target);
+            await IOUtils.setPermissions(target, 0o644, false);
+          }
+          const merged = await mergeVersionFile(PathUtils.join(src, VERSION_FILE), record);
+          if (merged) {
+            await IOUtils.writeUTF8(PathUtils.join(CHROME_DIR, VERSION_FILE), merged);
+          } else {
+            saved += (await backupTo(backup, VERSION_FILE)) ? 1 : 0;
+            await IOUtils.copy(PathUtils.join(src, VERSION_FILE), PathUtils.join(CHROME_DIR, VERSION_FILE));
+          }
+          await writeRecord({ version: local.version, source: "download", time: Date.now(), files: shipped });
+          return finishRestore(chosen.size, saved ? backup : null);
+        } catch (e) {
+          e.message += saved ? ` (replaced files so far are saved in ${backup})` : "";
+          throw e;
+        } finally {
+          await cancel();
+        }
+      },
+    };
+  } catch (e) {
+    await cancel();
+    throw e;
+  }
+}
+
+async function prepareGitRestore() {
+  const git = await findGit();
+  if (!git) {
+    throw Object.assign(new Error("Firefox couldn't find git. Install it from git-scm.com, or run this in a terminal:"), {
+      command: `git -C "${CHROME_DIR}" checkout HEAD -- .`,
+    });
+  }
+  const { exitCode, output } = await run(git, ["-c", "core.quotepath=off", "status", "--porcelain=v1", "--untracked-files=no"]);
+  if (exitCode) {
+    throw new Error(output.trim() || `git status exited with ${exitCode}`);
+  }
+  const items = [];
+  for (const line of output.split("\n")) {
+    const code = line.slice(0, 2);
+    const rel = line.slice(3).trim().replace(/^"|"$/g, "");
+    // Not in the commit (added, renamed): nothing to restore it to.
+    if (line.length < 4 || code.includes("A") || code.includes("R") || isSkipped(rel)) {
+      continue;
+    }
+    const missing = code.includes("D");
+    const target = resolveIn(CHROME_DIR, rel);
+    const before = missing || !target ? null : await IOUtils.read(target).catch(() => null);
+    const shown = TEXT_FILE.test(rel) ? await run(git, ["show", `HEAD:${rel}`]).catch(() => null) : null;
+    items.push({
+      path: rel,
+      status: before ? "changed" : "added",
+      label: before ? "Edited" : "Missing",
+      edited: !!before,
+      apply: true,
+      before: decode(rel, before),
+      after: shown && !shown.exitCode ? shown.output : null,
+    });
+  }
+  items.sort((a, b) => a.path.localeCompare(b.path));
+  return {
+    version: local.version,
+    source: "git (the checked-out commit)",
+    items,
+    cancel: async () => {},
+    async commit(paths = items.map(i => i.path)) {
+      const backup = PathUtils.join(BACKUP_DIR, `restore-${local.version}-${stampNow()}`);
+      let saved = 0;
+      for (const rel of paths) {
+        saved += (await backupTo(backup, rel)) ? 1 : 0;
+      }
+      if (paths.length) {
+        const r = await run(git, ["checkout", "HEAD", "--", ...paths]);
+        if (r.exitCode) {
+          throw new Error((r.output.trim() || `git checkout exited with ${r.exitCode}`) + (saved ? ` (your files are saved in ${backup})` : ""));
+        }
+      }
+      return finishRestore(paths.length, saved ? backup : null);
+    },
+  };
+}
+
+function finishRestore(count, backup) {
+  Services.appinfo.invalidateCachesOnRestart();
+  restored = { version: local.version, count, backup };
+  notify();
+  return backup;
+}
+
 // A git checkout: git pull --ff-only. Returns git's output. Errors carry
-// `command` (what to run in a terminal instead) and `kind`: "no-git", or
-// "pull" (git refused, its output is the message).
+// `command` (what to run in a terminal instead) and `kind`: "no-git",
+// "pull" (git refused, its output is the message), "version-edited" (pulled,
+// but a locally edited version.json still names an older version) or
+// "behind" (git is up to date, yet GitHub has a newer version).
 async function gitPull() {
   await ready;
   const fail = (message, kind) => Object.assign(new Error(message), { kind, command: gitCommand() });
@@ -797,6 +998,26 @@ async function gitPull() {
     updated = { to: local.version, backup: null, loader: false, git: true };
   }
   notify();
+  // Pulled (or already up to date), yet still older than GitHub: git keeps
+  // a version.json edited here, which then names an old version.
+  const { available, latest } = status();
+  if (available) {
+    const edited = await run(git, ["status", "--porcelain", "--", VERSION_FILE]).catch(() => null);
+    if (edited?.output.trim()) {
+      throw Object.assign(
+        new Error(
+          `git is up to date, but version.json here was edited and says ${local.version} (GitHub has ${latest}). ` +
+            "git keeps local edits, so restore the file to get the shipped one:"
+        ),
+        { kind: "version-edited", command: `git -C "${CHROME_DIR}" restore ${VERSION_FILE}` }
+      );
+    }
+    throw fail(
+      `git says "${output.trim().split("\n").pop()}", but GitHub has ${latest} and this checkout is ${local.version}. ` +
+        "It may follow another remote or branch than the one in version.json.",
+      "behind"
+    );
+  }
   return output.trim();
 }
 
@@ -846,6 +1067,7 @@ export const FzUpdate = {
   localChanges,
   scripts,
   prepareUpdate,
+  prepareRestore,
   gitPull,
   restart,
   openFolder: path => {

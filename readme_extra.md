@@ -234,12 +234,23 @@ Failed downloads (the ones that need Retry) are tinted yellow.
 ### About and updates
 
 The Library's **About** tab (between Settings and Close) shows the installed
-version, the links (repository, issues, mods store), the **Version history**
+version, the links (repository, issues, fx-autoconfig), the **Version history**
 (the last three releases; older ones unfold), and two folded sections: **How
 it works** (the loader, styles, mods, and every script in `chrome/JS` on one
 line with what it does) and **Your changes**: files in the chrome folder that
 aren't as Firefox-Zen shipped them (edited, added or missing). Scripts edited
 by hand are marked in the script list too.
+
+**Restore original files…** (in Your changes) puts back the installed
+version's files as shipped: edited files get the original again and deleted
+ones come back. Like an update it lists every file first, with a diff and a
+checkbox each, and copies your versions to
+`chrome/.firefox-zen/backups/restore-<version>-<time>/` before replacing
+them. Files you added, `chrome/mods` and your settings stay; `version.json`
+keeps its `repository` and `branch`. A git checkout gets the files of its
+checked-out commit (`git checkout HEAD -- <files>`); downloaded files come from
+the release's tag `v<version>` on GitHub, or from the branch while it's still
+that version.
 
 **Versions.** `chrome/version.json` holds the version, `MAJOR.MINOR.PATCH`:
 
@@ -255,6 +266,10 @@ and adding its entry at the top of `history`:
 ```json
 { "version": "1.2.0", "date": "2026-12-01", "notes": "What changed, in a sentence or two." }
 ```
+
+Then tag the release commit `v<version>` and push the tag
+(`git tag v1.2.0 && git push origin v1.2.0`): restoring a downloaded-files
+install fetches that tag's zip.
 
 Every install sees it within a day; About shows the entries newer than the
 installed version as "What's new", and the whole list as the version history. `repository` and `branch` say where updates come from: a fork changes
@@ -295,6 +310,7 @@ Mods change or add to Firefox-Zen without editing its files. The Library's
 **Mods** tab (above Settings) lists them with a switch each; changes apply
 instantly, in every window.
 
+- **Mods store** opens the [mods store](https://ishid4.github.io/Firefox-Zen-Mods/) in a tab.
 - **Install…** → **From Folder…** or **From Zip…** copies a mod into
   `chrome/mods/<id>/`. Or put the folder there yourself and press **Reload**
   (which also reloads every mod's files after you edit them).

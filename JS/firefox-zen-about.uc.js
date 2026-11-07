@@ -27,8 +27,6 @@
   const LINKS = repo => [
     { label: "GitHub repository", url: repo, hint: "Source, README and the installer" },
     { label: "Report a problem", url: `${repo}/issues`, hint: "Bugs and ideas" },
-    { label: "Recent changes", url: `${repo}/commits`, hint: "Every commit" },
-    { label: "Mods store", url: "https://ishid4.github.io/Firefox-Zen-Mods/", hint: "Looks and features made by others" },
     { label: "fx-autoconfig", url: "https://github.com/MrOtherGuy/fx-autoconfig", hint: "The script loader (MPL-2.0)" },
   ];
 
@@ -180,15 +178,20 @@
         ].filter(c => c && typeof c === "object") // parts not shown
       );
 
-      restartBanner.hidden = !s.updated;
-      if (s.updated) {
+      const done = s.updated ?? s.restored;
+      restartBanner.hidden = !done;
+      if (done) {
         restartBanner.replaceChildren(
           h(
             "span",
             { class: "fz-banner-text" },
-            h("strong", { text: `Firefox-Zen ${s.updated.to} is installed.` }),
+            h("strong", {
+              text: s.updated
+                ? `Firefox-Zen ${s.updated.to} is installed.`
+                : `Restored ${plural(s.restored.count, "file")} of Firefox-Zen ${s.restored.version}.`,
+            }),
             " Restart Firefox to load it.",
-            s.updated.backup ? ` Replaced files were saved in ${s.updated.backup}.` : ""
+            done.backup ? ` Replaced files were saved in ${done.backup}.` : ""
           ),
           h("button", { type: "button", class: "fz-reset fz-primary", text: "Restart now", onclick: () => FzUpdate.restart() })
         );
@@ -237,12 +240,20 @@
         h(
           "p",
           { class: "fz-hint fz-about-para" },
-          "Files that aren't as Firefox-Zen shipped them. Updates never overwrite these without asking, and back up what they replace. chrome/mods is never touched."
+          "Files that aren't as Firefox-Zen shipped them. Updates never overwrite these without asking, and back up what they replace. " +
+            "Restore original files puts this version's files back. chrome/mods is never touched."
         ),
         changesList,
         h(
           "div",
           { class: "fz-mods-toolbar fz-about-actions" },
+          h("button", {
+            type: "button",
+            class: "fz-reset",
+            text: "Restore original files…",
+            title: "Put back the files of this version as shipped: edits undone, deleted files back. Your copies are saved first.",
+            onclick: () => reviewUpdate(setStatus, { restore: true }),
+          }),
           h("button", { type: "button", class: "fz-reset", text: "Open chrome folder", onclick: () => FzUpdate.openFolder() }),
           h("button", {
             type: "button",
@@ -454,7 +465,13 @@
           h(
             "div",
             { class: "fz-banner-text" },
-            h("strong", { text: pull ? "git pull stopped." : "Couldn't update with git." }),
+            h("strong", {
+              text: pull
+                ? "git pull stopped."
+                : e.kind === "version-edited" || e.kind === "behind"
+                  ? "Nothing new to pull."
+                  : "Couldn't update with git.",
+            }),
             " ",
             pull
               ? "Usually local changes in the chrome folder are in the way: commit or stash them, then try again. git said:"
@@ -470,17 +487,23 @@
   }
 
 
-  async function reviewUpdate(setStatus) {
+  // The update review, or with `restore` the restore review: every file
+  // that would change, with a checkbox and a diff, before anything does.
+  async function reviewUpdate(setStatus, { restore = false } = {}) {
     const aboutView = view;
     const s = FzUpdate.status();
+    const title = restore ? "Restore Firefox-Zen" : "Update Firefox-Zen";
     const page = h(
       "div",
       { class: "fz-settings-view fz-mods-view fz-update-view" },
       h(
         "header",
         { class: "fz-header" },
-        h("h2", { text: "Update Firefox-Zen" }),
-        h("span", { class: "fz-subtitle", text: `Downloading ${s.latest}…` })
+        h("h2", { text: title }),
+        h("span", {
+          class: "fz-subtitle",
+          text: restore ? `Getting version ${s.version}'s files…` : `Downloading ${s.latest}…`,
+        })
       )
     );
     aboutView.replaceWith(page);
@@ -499,9 +522,12 @@
 
     let pending;
     try {
-      pending = await FzUpdate.prepareUpdate();
+      pending = await (restore ? FzUpdate.prepareRestore() : FzUpdate.prepareUpdate());
     } catch (e) {
-      back({ text: `Couldn't download the update: ${e.message}`, error: true });
+      back({
+        text: `${restore ? "Couldn't restore" : "Couldn't download the update"}: ${e.message}${e.command ? ` ${e.command}` : ""}`,
+        error: true,
+      });
       return;
     }
     if (!page.isConnected) {
@@ -511,25 +537,28 @@
 
     const boxes = new Map();
     const edited = pending.items.filter(i => i.edited);
-    const counts = ["added", "changed", "removed"]
-      .map(st => [st, pending.items.filter(i => i.status === st).length])
+    const counts = (restore ? ["Edited", "Missing"] : ["added", "changed", "removed"])
+      .map(st => [st.toLowerCase(), pending.items.filter(i => (restore ? i.label : i.status) === st).length])
       .filter(([, n]) => n)
       .map(([st, n]) => `${n} ${st}`)
       .join(", ");
 
-    const applyButton = h("button", { type: "button", class: "fz-reset fz-primary", text: "Update" });
+    const verb = restore ? "Restore" : "Update";
+    const applyButton = h("button", { type: "button", class: "fz-reset fz-primary", text: verb });
     const syncCount = () => {
       const n = [...boxes.values()].filter(b => b.checked).length;
-      applyButton.textContent = `Update (${plural(n, "file")})`;
+      applyButton.textContent = `${verb} (${plural(n, "file")})`;
+      applyButton.disabled = restore && !n;
     };
     applyButton.onclick = async () => {
       applyButton.disabled = true;
       const paths = [...boxes].filter(([, b]) => b.checked).map(([p]) => p);
       try {
         const backup = await pending.commit(paths);
-        back({ text: `Updated to ${pending.to}. Restart Firefox to load it.${backup ? ` Replaced files: ${backup}` : ""}` });
+        const what = restore ? `Restored ${plural(paths.length, "file")}` : `Updated to ${pending.to}`;
+        back({ text: `${what}. Restart Firefox to load it.${backup ? ` Replaced files: ${backup}` : ""}` });
       } catch (e) {
-        back({ text: `Couldn't update: ${e.message}`, error: true });
+        back({ text: `Couldn't ${verb.toLowerCase()}: ${e.message}`, error: true });
       }
     };
 
@@ -538,8 +567,11 @@
       const box = h("input", { type: "checkbox", class: "fz-about-apply", onchange: syncCount });
       box.checked = item.apply;
       boxes.set(item.path, box);
-      const title =
-        item.status === "removed"
+      const title = restore
+        ? item.edited
+          ? "Put the original back (your version is saved)"
+          : "Bring it back"
+        : item.status === "removed"
           ? item.edited
             ? "Remove (you edited it; a copy is saved)"
             : "Remove"
@@ -561,11 +593,17 @@
       section.classList.add("fz-about-file");
       const head = section.querySelector(".fz-diff-head");
       head.prepend(h("label", { class: "fz-about-apply-label", title }, box));
-      if (item.edited) {
+      if (restore) {
+        const badge = head.querySelector(".fz-diff-status");
+        if (badge) {
+          badge.textContent = item.label;
+        }
+      } else if (item.edited) {
         head.querySelector(".fz-diff-path")?.after(h("span", { class: "fz-badge fz-about-edited", text: "Edited by you" }));
       }
-      // Only edited files start unfolded: they need a look.
-      section.toggleAttribute("data-collapsed", !item.edited);
+      // Updates: only edited files start unfolded, they need a look.
+      // Restores: all folded (every one is an edit).
+      section.toggleAttribute("data-collapsed", restore || !item.edited);
       head.addEventListener("click", e => {
         if (!e.target.closest(".fz-about-apply-label")) {
           section.toggleAttribute("data-collapsed");
@@ -574,27 +612,28 @@
       return section;
     };
 
+    const facts = restore
+      ? [
+          ["Version", pending.version],
+          ["From", pending.source],
+          ["Files", counts || "Nothing to restore: every file is as shipped."],
+        ]
+      : [
+          ["Installed version", pending.from ?? "—"],
+          ["New version", pending.to],
+          ["From", pending.url],
+          ["Changes", counts || "Only the version number is new."],
+        ];
     page.replaceChildren(
       h(
         "header",
         { class: "fz-header" },
-        h("h2", { text: "Update Firefox-Zen" }),
-        h("span", { class: "fz-subtitle", text: `${pending.from ?? "?"} → ${pending.to}` })
+        h("h2", { text: title }),
+        h("span", { class: "fz-subtitle", text: restore ? `Version ${pending.version}` : `${pending.from ?? "?"} → ${pending.to}` })
       ),
-      h(
-        "dl",
-        { class: "fz-update-facts" },
-        h("dt", { text: "Installed version" }),
-        h("dd", { text: pending.from ?? "—" }),
-        h("dt", { text: "New version" }),
-        h("dd", { text: pending.to }),
-        h("dt", { text: "From" }),
-        h("dd", { text: pending.url }),
-        h("dt", { text: "Changes" }),
-        h("dd", { text: counts || "Only the version number is new." })
-      ),
-      pending.newer.length ? buildReleases(pending.newer, { title: "What's new" }) : "",
-      edited.length
+      h("dl", { class: "fz-update-facts" }, ...facts.flatMap(([k, v]) => [h("dt", { text: k }), h("dd", { text: v })])),
+      !restore && pending.newer.length ? buildReleases(pending.newer, { title: "What's new" }) : "",
+      !restore && edited.length
         ? h(
             "div",
             { class: "fz-banner fz-banner-warning", role: "alert" },
@@ -607,11 +646,14 @@
             )
           )
         : "",
-      pending.loader ? loaderBanner(FzUpdate.status().repository) : "",
+      !restore && pending.loader ? loaderBanner(FzUpdate.status().repository) : "",
       h(
         "p",
         { class: "fz-hint fz-about-para" },
-        "Your mods and settings stay. version.json keeps your repository and branch if you changed them. Scripts load at the next restart."
+        restore
+          ? "Checked files get their original back; your versions are saved in chrome/.firefox-zen/backups first. " +
+              "Files you added, your mods and your settings stay. version.json keeps your repository and branch. Scripts load at the next restart."
+          : "Your mods and settings stay. version.json keeps your repository and branch if you changed them. Scripts load at the next restart."
       ),
       h(
         "div",
@@ -633,7 +675,7 @@
         h("h3", { class: "fz-category-title", id: "fz-update-changes", text: "Files" }),
         ...(pending.items.length
           ? pending.items.map(fileRow)
-          : [h("p", { class: "fz-hint", text: "No files change." })])
+          : [h("p", { class: "fz-hint", text: restore ? "Nothing to restore." : "No files change." })])
       )
     );
     syncCount();
