@@ -83,10 +83,29 @@ if [ -z "$profile" ]; then
     if [ -n "$default" ] && [ "${profiles[$i]##*/}" = "${default##*/}" ]; then pick=$i; fi
   done
   if [ ${#profiles[@]} -gt 1 ]; then
+    # Folder name -> the name Firefox shows, one "folder<TAB>name" per line.
+    # Firefox's profile manager keeps names in "Profile Groups/<StoreID>.sqlite"
+    # (needs the sqlite3 tool; macOS has it); older profiles only have Name= in
+    # profiles.ini. Later lines win. Best effort: missing names show the folder.
+    names=""
+    if [ -f "$data/profiles.ini" ]; then
+      names="$(awk -F= '/^\[/{n="";p=""} $1=="Name"{n=substr($0,6)} $1=="Path"{p=substr($0,6)} n!=""&&p!=""{sub(/.*\//,"",p);print p"\t"n;n="";p=""}' "$data/profiles.ini")"
+      if command -v sqlite3 > /dev/null; then
+        for id in $(awk -F= '$1=="StoreID"{print $2}' "$data/profiles.ini" | sort -u); do
+          db="$data/Profile Groups/$id.sqlite"
+          [ -f "$db" ] || continue
+          rows="$(sqlite3 -readonly -separator "$(printf '\t')" "$db" 'SELECT path, name FROM Profiles' 2> /dev/null)" || continue
+          names="$names"$'\n'"$(printf '%s\n' "$rows" | awk -F'\t' '$1!=""&&$2!=""{p=$1;sub(/.*[\/\\]/,"",p);print p"\t"$2}')"
+        done
+      fi
+    fi
     say "Firefox profiles:"
     for i in "${!profiles[@]}"; do
       mark=""; [ "$i" -eq "$pick" ] && mark="  (default)"
-      say "  [$((i + 1))] ${profiles[$i]##*/}$mark"
+      label="${profiles[$i]##*/}"
+      name="$(printf '%s\n' "$names" | awk -F'\t' -v d="$label" '$1==d{n=$2} END{print n}')"
+      [ -n "$name" ] && [ "$name" != "$label" ] && label="$name ($label)"
+      say "  [$((i + 1))] $label$mark"
     done
     answer="$(ask "Install into which profile? [$((pick + 1))] ")" || answer=""
     if [ -n "$answer" ]; then
