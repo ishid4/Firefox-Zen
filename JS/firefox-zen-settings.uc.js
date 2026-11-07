@@ -2301,10 +2301,38 @@
     document.documentElement.style.setProperty("--fz-window-border-width", `${width}px`);
   }
 
+  // First start: the required prefs only take effect after a restart, and the
+  // Settings tab's banner is easy to miss (the Library isn't open, and the
+  // toolbar icon may not render yet). Ask in Firefox's own notification bar.
+  async function showRestartNotification() {
+    await window.delayedStartupPromise;
+    if (!restartNeeded() || window.closed) {
+      return;
+    }
+    const box = window.gNotificationBox;
+    const value = "firefox-zen-restart-needed";
+    if (!box || box.getNotificationWithValue(value)) {
+      return;
+    }
+    try {
+      await box.appendNotification(
+        value,
+        {
+          label: "Firefox-Zen needs a restart to finish setting up. The theme's styles and icons load from the next start.",
+          priority: box.PRIORITY_INFO_HIGH,
+        },
+        [{ label: "Restart now", accessKey: "R", callback: () => restartFirefox() }]
+      );
+    } catch (e) {
+      console.error("Firefox-Zen: restart notification failed", e);
+    }
+  }
+
   // ---- per-window setup ----
   applyDefaults();
   syncSidebarVisibility();
   applyBorderWidth();
+  showRestartNotification();
 
   const observer = {
     observe(_subject, _topic, name) {

@@ -15,8 +15,9 @@ Settings, so it works on first startup, before Spaces and its footer are on.
   just that one.
 - **Reset to defaults** and **Import…** show **Undo** next to the result.
 - On first startup the settings script has to turn on two Firefox prefs the
-  theme needs, which only take effect after a restart; the tab shows a
-  **Restart now** banner until then.
+  theme needs, which only take effect after a restart; a notification bar at
+  the top of the window and the tab both show a **Restart now** button until
+  then.
 
 **Export…** / **Import…** at the bottom save and load every setting on that tab
 as a small JSON file (`"format": "firefox-zen-settings"`), to share a setup or
@@ -94,6 +95,15 @@ Pinned tabs are global "Pins" and show in every space.
   give it a default container: new tabs in that space (Ctrl+T, +) open in it.
   Existing tabs keep theirs (Firefox can't move a tab into a container without
   reopening it). The space's icon gets a bar in the container's color.
+- Right-click a space → **Download Folder** → **Choose Folder…** gives it its
+  own download folder: downloads from its tabs (even ones in the background)
+  go there, Save Link/Page As starts there, and the Library's **Open
+  downloads folder** opens it while you're in that space. **Firefox's
+  Download Folder** goes back to Firefox's setting, which is also used when
+  the folder doesn't exist. When Firefox asks where to save, its dialog starts
+  in the space's folder (that also becomes Firefox's last-used folder). A
+  private space's folder is kept in its encrypted data, so it can only be
+  changed while it's unlocked. The folder isn't part of an exported normal space.
 - Double-click a space's name or icon to rename it inline. Hover the space's
   name above its tabs for a **…** button with the space's menu.
 - Right-click a space → **Export…** saves it as a `.fzspace` file (plain

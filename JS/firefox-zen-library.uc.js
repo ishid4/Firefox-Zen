@@ -2593,7 +2593,15 @@
       class: "fz-lib-button",
       text: "Open downloads folder",
       onclick: async () => {
-        const dir = await Downloads.getPreferredDownloadsDirectory();
+        // The shown private space's download folder, else the current space's
+        // (JS/firefox-zen-download-folders.sys.mjs); Firefox's if neither has one.
+        let dir = null;
+        if (spacesOn()) {
+          dir = dlSource ? api().downloadDir?.(dlSource) : api().downloadDirFor?.(null);
+        }
+        if (!dir || !(await IOUtils.exists(dir))) {
+          dir = await Downloads.getPreferredDownloadsDirectory();
+        }
         const file = Cc["@mozilla.org/file/local;1"].createInstance(Ci.nsIFile);
         file.initWithPath(dir);
         file.launch();

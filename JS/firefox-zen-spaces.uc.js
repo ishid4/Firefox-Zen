@@ -10,6 +10,8 @@
 //   session restore. container = userContextId new tabs in the space open in
 //   (0/missing = no container). scheme = color scheme id shown while the space
 //   is active (missing = the default one; JS/firefox-zen-colors.uc.js).
+//   downloadDir = folder its tabs download to (missing = Firefox's;
+//   JS/firefox-zen-download-folders.sys.mjs). A private space keeps it encrypted.
 // - Tab's space: SessionStore custom tab value (survives restarts/restore).
 // - Window's active space: SessionStore custom window value.
 // - Pinned tabs are global "Pins": never assigned, never hidden
@@ -38,6 +40,7 @@
   const PRIVATE_ICON = "🕶️";
   const PRIVATE_MODULE = "chrome://userscripts/content/firefox-zen-private-spaces.sys.mjs";
   const { FzColors } = ChromeUtils.importESModule("chrome://userscripts/content/firefox-zen-colors.sys.mjs");
+  const DOWNLOAD_FOLDERS_MODULE = "chrome://userscripts/content/firefox-zen-download-folders.sys.mjs";
   const FLUSHER_MODULE = "moz-src:///browser/components/sessionstore/TabStateFlusher.sys.mjs";
   // A private space's window changed its tabs; other windows get FzPrivateTabsChanged.
   const PRIVATE_TABS_TOPIC = "firefox-zen-private-tabs-changed";
@@ -467,6 +470,41 @@
     }
   }
 
+  // A space's download folder (null = Firefox's).
+  function downloadDirOf(id) {
+    const space = readSpaces().find(s => s.id === id);
+    return (space?.private ? privateSpaces()?.downloadDir(id) : space?.downloadDir) || null;
+  }
+
+  function setSpaceDownloadDir(id, path) {
+    const list = readSpaces();
+    const space = list.find(s => s.id === id);
+    if (space?.private) {
+      setPrivateMeta(id, { downloadDir: path || null }).catch(e => console.error("firefox-zen-spaces:", e));
+      return;
+    }
+    if (space && (space.downloadDir || null) !== (path || null)) {
+      if (path) {
+        space.downloadDir = path;
+      } else {
+        delete space.downloadDir;
+      }
+      writeSpaces(list);
+    }
+  }
+
+  // The folder a download from `browser` goes to: its tab's space's.
+  function downloadDirFor(browser) {
+    if (!enabled()) {
+      return null;
+    }
+    if (ownPrivateId) {
+      return downloadDirOf(ownPrivateId);
+    }
+    const tab = (browser && gBrowser.getTabForBrowser(browser)) || gBrowser.selectedTab;
+    return tab ? downloadDirOf(spaceOf(tab)) : null;
+  }
+
   function changeIcon(id) {
     const space = readSpaces().find(s => s.id === id);
     if (space?.locked) {
@@ -817,6 +855,27 @@
     return new Promise(resolve =>
       fp.open(rv => resolve(rv === Ci.nsIFilePicker.returnCancel ? null : fp.file.path))
     );
+  }
+
+  async function chooseDownloadDir(id) {
+    const fp = Cc["@mozilla.org/filepicker;1"].createInstance(Ci.nsIFilePicker);
+    fp.init(window.browsingContext, "Download Folder", Ci.nsIFilePicker.modeGetFolder);
+    const current = downloadDirOf(id);
+    if (current) {
+      try {
+        const dir = Cc["@mozilla.org/file/local;1"].createInstance(Ci.nsIFile);
+        dir.initWithPath(current);
+        fp.displayDirectory = dir;
+      } catch (e) {
+        // Gone: the picker's default.
+      }
+    }
+    const path = await new Promise(resolve =>
+      fp.open(rv => resolve(rv === Ci.nsIFilePicker.returnCancel ? null : fp.file.path))
+    );
+    if (path) {
+      setSpaceDownloadDir(id, path);
+    }
   }
 
   async function exportPrivateSpace(id) {
@@ -1594,11 +1653,50 @@
       }
     });
 
+    // Download Folder ▸ : Firefox's, the space's own, or pick one
+    const downloadMenu = document.createXULElement("menu");
+    downloadMenu.setAttribute("label", "Download Folder");
+    downloadMenu.dataset.action = "download-dir";
+    const downloadPopup = document.createXULElement("menupopup");
+    downloadMenu.append(downloadPopup);
+    downloadPopup.addEventListener("popupshowing", e => {
+      if (e.target !== downloadPopup) {
+        return;
+      }
+      const current = downloadDirOf(menu.dataset.spaceId) || "";
+      const radio = (label, value) => {
+        const mi = document.createXULElement("menuitem");
+        mi.setAttribute("label", label);
+        mi.setAttribute("type", "radio");
+        mi.dataset.dir = value;
+        mi.toggleAttribute("checked", value === current);
+        return mi;
+      };
+      const choose = document.createXULElement("menuitem");
+      choose.setAttribute("label", "Choose Folder…");
+      choose.dataset.choose = "true";
+      downloadPopup.replaceChildren(
+        radio("Firefox's Download Folder", ""),
+        ...(current ? [radio(current, current)] : []),
+        document.createXULElement("menuseparator"),
+        choose
+      );
+    });
+    downloadPopup.addEventListener("command", e => {
+      e.stopPropagation();
+      if (e.target.dataset.choose) {
+        chooseDownloadDir(menu.dataset.spaceId);
+      } else if (e.target.dataset.dir != null) {
+        setSpaceDownloadDir(menu.dataset.spaceId, e.target.dataset.dir || null);
+      }
+    });
+
     menu.append(
       item("Rename Space…", "rename"),
       item("Change Icon…", "icon"),
       schemeMenu,
       containerMenu,
+      downloadMenu,
       item("Unload Space", "unload"),
       item("Unlock…", "unlock"),
       item("Lock Space", "lock"),
@@ -1656,6 +1754,8 @@
     set("unload", "disabled", !unloadableTabs(id).length);
     // A private window can't hold container tabs.
     set("container", "hidden", isPrivate || !Services.prefs.getBoolPref("privacy.userContext.enabled", false));
+    // A private space's is kept in its encrypted data, so only while it's unlocked.
+    set("download-dir", "hidden", isPrivate && !open);
     set("unlock", "hidden", !isPrivate || open);
     set("lock", "hidden", !open);
     set("password", "hidden", !isPrivate);
@@ -1930,6 +2030,10 @@
     setIcon: setSpaceIcon,
     // A color scheme id, or null for the default one
     setScheme: setSpaceScheme,
+    // A folder path, or null for Firefox's (JS/firefox-zen-download-folders.sys.mjs)
+    downloadDir: downloadDirOf,
+    setDownloadDir: setSpaceDownloadDir,
+    downloadDirFor,
     reorder: reorderSpaces,
     remove: deleteSpace,
     // Into any space, private ones included (asks for its password if locked).
@@ -1943,6 +2047,11 @@
     ownPrivateId = privateSpaces()?.spaceOfWindow(window) ?? null;
     if (ownPrivateId) {
       document.documentElement.setAttribute("fz-private-space", "");
+    }
+    try {
+      ChromeUtils.importESModule(DOWNLOAD_FOLDERS_MODULE).FzDownloadFolders.attach(window);
+    } catch (e) {
+      console.error("firefox-zen-spaces:", e);
     }
     await window.delayedStartupPromise;
     await SessionStore.promiseInitialized;

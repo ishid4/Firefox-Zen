@@ -31,6 +31,8 @@
 // - It keeps its own history (pages its tabs visited) and download list,
 //   encrypted with it; Firefox's private ones are dropped when its window
 //   closes. Downloaded files themselves stay on disk, unencrypted.
+// - It can have its own download folder (meta.downloadDir, so encrypted too):
+//   firefox-zen-download-folders sends its window's downloads there.
 // - After AUTOLOCK_PREF minutes of no input (0 = off) every private space locks
 //   and they're hidden.
 // - Export writes its encrypted file (with its id) for import elsewhere.
@@ -541,6 +543,10 @@ export const FzPrivateSpaces = {
       await saveLogged(id);
     }
   },
+
+  // Its own download folder's path while unlocked, or null (Firefox's folder).
+  // Set with setMeta(id, { downloadDir }).
+  downloadDir: id => unlocked.get(id)?.meta?.downloadDir || null,
 
   // Deletes the files its downloads saved; resolves with how many.
   async deleteDownloadedFiles(id) {
