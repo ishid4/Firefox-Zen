@@ -164,6 +164,15 @@ if [ ${#copy[@]} -gt 0 ]; then
   done
 fi
 
+# A profile that ran another userChromeJS setup may have the loader switched
+# off, which hides every script. Drop the pref: the loader turns it back on.
+prefs="$profile/prefs.js"
+if [ -f "$prefs" ] && grep -Eq '^user_pref\("userChromeJS\.enabled", *false\);' "$prefs"; then
+  grep -Ev '^user_pref\("userChromeJS\.enabled", *false\);' "$prefs" > "$prefs.fz-tmp" || true
+  mv "$prefs.fz-tmp" "$prefs"
+  say "Turned the script loader back on (userChromeJS.enabled was off)."
+fi
+
 # Clear the startup cache so Firefox loads the new scripts
 rm -rf "$cache/Profiles/${profile##*/}/startupCache" "$cache/${profile##*/}/startupCache"
 

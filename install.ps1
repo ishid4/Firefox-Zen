@@ -206,6 +206,18 @@ try { & {
     if ($p.ExitCode) { Say 'Copying the loader failed.' Red; return }
   }
 
+  # A profile that ran another userChromeJS setup may have the loader switched
+  # off, which hides every script. Drop the pref: the loader turns it back on.
+  $prefs = Join-Path $profileDir 'prefs.js'
+  if (Test-Path $prefs) {
+    $text = [IO.File]::ReadAllText($prefs)
+    $fixed = $text -replace '(?m)^user_pref\("userChromeJS\.enabled",\s*false\);\r?\n?', ''
+    if ($fixed -ne $text) {
+      [IO.File]::WriteAllText($prefs, $fixed, (New-Object Text.UTF8Encoding $false))
+      Say 'Turned the script loader back on (userChromeJS.enabled was off).' Yellow
+    }
+  }
+
   # Clear the startup cache so Firefox loads the new scripts
   $local = Join-Path $env:LOCALAPPDATA ('Mozilla\Firefox\Profiles\' + (Split-Path $profileDir -Leaf))
   Remove-Item (Join-Path $local 'startupCache') -Recurse -Force -ErrorAction SilentlyContinue
