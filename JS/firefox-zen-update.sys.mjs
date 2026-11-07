@@ -13,7 +13,8 @@
 // and "branch" say where updates come from, so a fork only edits this file;
 // updating keeps the local ones (see mergeVersionFile).
 //
-// Checks: GitHub's version.json on that branch (raw.githubusercontent.com).
+// Checks: GitHub's version.json on that branch (through GitHub's API, which
+// is current right after a push; raw.githubusercontent.com if that fails).
 // While AUTO_CHECK_PREF is on (Check at startup): once per Firefox start,
 // after the browser has settled. Off: only when asked (Check for updates).
 // What it found is kept in prefs (LATEST_PREF, NOTES_PREF: the releases
@@ -209,6 +210,24 @@ const rawURL = l => {
   const [, owner, repo] = l.repository.match(REPO_RE);
   return `https://raw.githubusercontent.com/${owner}/${repo}/${l.branch}/${VERSION_FILE}`;
 };
+// The same file through GitHub's API: always current, where raw's CDN keeps
+// a copy for 5 minutes after a push. Limited to 60 requests an hour per
+// address, so raw (made unique, past the CDN's copy) is the fallback.
+const apiURL = l => {
+  const [, owner, repo] = l.repository.match(REPO_RE);
+  return `https://api.github.com/repos/${owner}/${repo}/contents/${VERSION_FILE}?ref=${encodeURIComponent(l.branch)}`;
+};
+
+async function fetchRemoteVersion(l) {
+  if (devURL) {
+    return request(rawURL(l), "json");
+  }
+  try {
+    return await request(apiURL(l), "json", { Accept: "application/vnd.github.raw+json" });
+  } catch {
+    return request(`${rawURL(l)}?t=${Date.now()}`, "json");
+  }
+}
 const zipURL = l => (devURL ? `${devURL}/main.zip` : `${l.repository}/archive/refs/heads/${l.branch}.zip`);
 
 // ---- state ----
@@ -257,14 +276,14 @@ function markSeen() {
 
 // ---- network ----
 
-async function request(url, type) {
+async function request(url, type, headers = {}) {
   if (!url.startsWith("https://") && !(devURL && url.startsWith(devURL))) {
     throw new Error(`not an https URL: ${url}`);
   }
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 30000);
   try {
-    const response = await fetch(url, { cache: "no-cache", credentials: "omit", signal: controller.signal });
+    const response = await fetch(url, { cache: "no-cache", credentials: "omit", headers, signal: controller.signal });
     if (!response.ok) {
       throw new Error(`${[response.status, response.statusText].filter(Boolean).join(" ")} from ${url}`);
     }
@@ -289,7 +308,7 @@ async function check() {
   notify();
   try {
     local = await readLocal();
-    const remote = parseVersionFile(await request(rawURL(local), "json"));
+    const remote = parseVersionFile(await fetchRemoteVersion(local));
     if (!remote.version) {
       throw new Error(`no version in ${rawURL(local)}`);
     }
