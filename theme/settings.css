@@ -254,6 +254,26 @@
   gap: 6px;
 }
 
+.fz-text {
+  flex: 1;
+  min-width: 160px;
+  max-width: 340px;
+  height: 26px;
+  box-sizing: border-box;
+  padding: 0 8px;
+  border: 1px solid var(--fz-line);
+  border-radius: 6px;
+  background: var(--fz-surface);
+  color: inherit;
+  font: inherit;
+  user-select: text;
+
+  &:focus {
+    border-color: var(--fz-accent);
+    outline: none;
+  }
+}
+
 .fz-number {
   width: 64px;
   height: 26px;
@@ -1486,4 +1506,91 @@
   justify-content: flex-end;
   gap: 8px;
   align-self: stretch;
+}
+
+/* Retry failed downloads: a failed bar starts over and fills */
+.fz-preview-retry,
+.fz-preview-virustotal {
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 10px;
+
+  & .fz-mock-icon {
+    border-radius: 3px;
+    background-color: var(--fz-line);
+  }
+}
+
+.fz-mock-dl {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  & .fz-mock-icon {
+    width: 18px;
+    height: 18px;
+  }
+}
+
+.fz-mock-dl-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 5px;
+
+  & .fz-mock-line {
+    flex: none;
+    width: 70%;
+  }
+}
+
+.fz-mock-dl-bar {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--fz-line);
+
+  & > i {
+    display: block;
+    width: 55%;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--fz-attention);
+  }
+}
+
+.fz-setting[data-on] .fz-preview-retry .fz-mock-dl-bar > i {
+  animation: fz-mock-retry 3s ease-in-out infinite;
+}
+
+@keyframes fz-mock-retry {
+  0%, 25% { width: 55%; background: var(--fz-attention); }
+  30% { width: 0; background: var(--fz-accent); }
+  85%, 100% { width: 100%; background: var(--fz-accent); }
+}
+
+/* VirusTotal: verdict chips appear on the rows */
+.fz-mock-vt {
+  flex: none;
+  width: 18px;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--fz-line);
+  transition: background-color 0.3s ease;
+}
+
+.fz-setting[data-on] .fz-preview-virustotal .fz-mock-vt {
+  background: light-dark(#1a7f37, #57d17a);
+
+  &[data-verdict="bad"] {
+    background: var(--fz-danger);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fz-setting[data-on] .fz-preview-retry .fz-mock-dl-bar > i {
+    animation: none;
+    width: 100%;
+    background: var(--fz-accent);
+  }
 }

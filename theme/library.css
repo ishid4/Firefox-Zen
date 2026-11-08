@@ -1151,6 +1151,75 @@
   font-size: 12px !important;
 }
 
+/* A day's heading with its Clear button */
+.fz-lib-dl-day {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fz-lib-day-clear {
+  appearance: none;
+  margin: 0;
+  padding: 1px 8px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 500;
+  opacity: 0.55;
+  cursor: pointer;
+
+  &:hover,
+  &:focus-visible {
+    background: var(--fz-lib-hover);
+    opacity: 1;
+  }
+}
+
+/* VirusTotal verdict (JS/firefox-zen-download-tools.sys.mjs) */
+.fz-lib-dl-vt {
+  --fz-lib-vt: currentColor;
+
+  flex: none;
+  height: 24px;
+  padding: 0 8px !important;
+  font-size: 11px !important;
+  font-variant-numeric: tabular-nums;
+  color: var(--fz-lib-vt) !important;
+  border-color: color-mix(in srgb, var(--fz-lib-vt) 45%, transparent) !important;
+
+  &[data-verdict="none"],
+  &[data-verdict="busy"] {
+    opacity: 0.7;
+  }
+  &[data-verdict="unknown"] {
+    --fz-lib-vt: var(--fz-attention);
+  }
+  /* Verdicts: just N/total, the color says which (green, yellow, red) */
+  &:is([data-verdict="clean"], [data-verdict="warn"], [data-verdict="bad"]) {
+    font-weight: 600 !important;
+    background: color-mix(in srgb, var(--fz-lib-vt) 14%, transparent) !important;
+
+    &:hover {
+      background: color-mix(in srgb, var(--fz-lib-vt) 24%, transparent) !important;
+    }
+  }
+  &[data-verdict="clean"] {
+    --fz-lib-vt: light-dark(#1a7f37, #57d17a);
+  }
+  &[data-verdict="warn"] {
+    --fz-lib-vt: var(--fz-attention);
+  }
+  &[data-verdict="bad"] {
+    --fz-lib-vt: var(--fz-danger);
+  }
+  &:disabled {
+    cursor: default;
+  }
+}
+
 .fz-lib-dl-retry {
   border-color: var(--fz-lib-attention) !important;
   color: var(--fz-lib-attention) !important;

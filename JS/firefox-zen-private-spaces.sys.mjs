@@ -49,6 +49,7 @@ ChromeUtils.defineESModuleGetters(lazy, {
   TabStateFlusher: "moz-src:///browser/components/sessionstore/TabStateFlusher.sys.mjs",
   BrowserWindowTracker: "resource:///modules/BrowserWindowTracker.sys.mjs",
   Downloads: "resource://gre/modules/Downloads.sys.mjs",
+  PrivateBrowsingUtils: "resource://gre/modules/PrivateBrowsingUtils.sys.mjs",
 });
 
 const VERSION = 1;
@@ -528,6 +529,50 @@ export const FzPrivateSpaces = {
   // Firefox's Download for a record, while it still has it.
   liveDownload: key => liveDownloads.get(key) ?? null,
 
+  // Starts a stopped download again from where it stopped (its kept partial
+  // file, asking the server for the rest), like Firefox's own Retry.
+  // Resolves false when that can't be done (no partial file, or the server
+  // gave no resume id): then only downloading it again from its link works.
+  async resumeDownload(id, key) {
+    const entry = unlocked.get(id);
+    const record = entry?.downloads.find(d => d.key === key);
+    if (!record || liveDownloads.has(key) || record.state === "done") {
+      return false;
+    }
+    if (!record.path || !record.partPath || !record.entityID || !(await IOUtils.exists(record.partPath))) {
+      return false;
+    }
+    const source = { url: record.url, isPrivate: true };
+    if (record.referrer) {
+      try {
+        const ReferrerInfo = Components.Constructor("@mozilla.org/referrer-info;1", "nsIReferrerInfo", "init");
+        source.referrerInfo = new ReferrerInfo(
+          Ci.nsIReferrerInfo.STRICT_ORIGIN_WHEN_CROSS_ORIGIN,
+          true,
+          Services.io.newURI(record.referrer)
+        );
+      } catch (e) {
+        // Not a URL anymore: go without.
+      }
+    }
+    const download = await lazy.Downloads.createDownload({
+      source,
+      target: { path: record.path, partFilePath: record.partPath },
+      saver: { type: "copy", entityID: record.entityID },
+      tryToKeepPartialData: true,
+      hasPartialData: true,
+      totalBytes: record.totalBytes,
+      startTime: new Date(record.startTime),
+    });
+    downloadKeys.set(download, { id, key });
+    keepPartialData(download);
+    const list = await lazy.Downloads.getList(lazy.Downloads.PRIVATE);
+    await list.add(download);
+    // Failures show on its row (Retry again).
+    download.start().catch(() => {});
+    return true;
+  },
+
   async removeDownload(id, key) {
     const live = liveDownloads.get(key);
     if (live?.stopped) {
@@ -829,15 +874,30 @@ function spaceOfDownload(download) {
   return null;
 }
 
-// { key, url, path, startTime, totalBytes, currentBytes, state }
+// { key, url, referrer, path, partPath, entityID, startTime, totalBytes,
+//   currentBytes, state }
+// referrer: the page it started from ("" when not known).
+// partPath, entityID: its partial file and the server's resume id, so a
+// stopped download can continue where it stopped (resumeDownload).
 // state: "downloading" | "done" | "failed" | "canceled" | "interrupted"
 // ("interrupted": it was still running when Firefox dropped it, e.g. its
 // private window closed or the space locked).
+function referrerOf(download) {
+  try {
+    return download.source.referrerInfo?.originalReferrer?.spec ?? "";
+  } catch (e) {
+    return "";
+  }
+}
+
 function downloadRecord(download, key) {
   return {
     key,
     url: download.source.url,
+    referrer: referrerOf(download),
     path: download.target?.path ?? "",
+    partPath: download.target?.partFilePath ?? "",
+    entityID: download.saver?.entityID ?? "",
     startTime: download.startTime?.getTime?.() ?? Date.now(),
     totalBytes: download.totalBytes || 0,
     currentBytes: download.currentBytes || 0,
@@ -860,6 +920,7 @@ function updateDownload(download) {
     }
     tracked = { id, key: crypto.randomUUID() };
     downloadKeys.set(download, tracked);
+    keepPartialData(download);
   }
   liveDownloads.set(tracked.key, download);
   const entry = unlocked.get(tracked.id);
@@ -877,6 +938,31 @@ function updateDownload(download) {
   if (record.state !== "downloading") {
     saveLogged(tracked.id);
   }
+}
+
+// When the last private window closes, Firefox drops its private downloads
+// and deletes their partial files (finalize(true)). A private space's
+// download keeps its partial file then, so Retry can resume it; removing it
+// from the Library deletes the file.
+// (While a private window is open, finalize(true) is a deliberate delete.)
+function privateWindowOpen() {
+  for (const win of Services.wm.getEnumerator("navigator:browser")) {
+    if (!win.closed && lazy.PrivateBrowsingUtils.isWindowPrivate(win)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function keepPartialData(download) {
+  // Firefox's own downloads keep it whenever they write a .part file.
+  if (download.target?.partFilePath) {
+    download.tryToKeepPartialData = true;
+  }
+  const finalize = download.finalize;
+  download.finalize = function (removePartialData) {
+    return finalize.call(this, removePartialData && privateWindowOpen());
+  };
 }
 
 // Records still "downloading" with no download behind them anymore.

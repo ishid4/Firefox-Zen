@@ -56,6 +56,29 @@
     hint: "The Library button turns into a downloads icon after one starts. 0 keeps the Library icon.",
   };
 
+  // JS/firefox-zen-download-tools.sys.mjs
+  const RETRY_ATTEMPTS = {
+    type: "number",
+    pref: "download-retry.attempts",
+    default: 3,
+    min: 1,
+    max: 10,
+    unit: "times",
+    label: "Retry up to",
+    hint: "Waits a few seconds before each try, longer each time.",
+  };
+
+  // Secret: left out of settings files, Reset and Undo.
+  const VT_KEY = {
+    type: "text",
+    secret: true,
+    pref: "virustotal.api-key",
+    default: "",
+    label: "API key",
+    placeholder: "Optional",
+    hint: "Free from your virustotal.com account (API key in your profile menu). With one, finished downloads are checked automatically and the verdict shows on the download. Without one, Check opens the file's report in a tab.",
+  };
+
   // Applied here (applyBorderWidth), read by theme/general.css.
   const BORDER_WIDTH = {
     type: "number",
@@ -319,6 +342,34 @@
           options: [DOWNLOAD_ICON],
         },
         {
+          pref: "download-retry",
+          default: true,
+          label: "Retry failed downloads",
+          description: "A download that fails because of the network or the server starts again by itself.",
+          preview: "retry",
+          keywords: "download error retry resume network failed",
+          tips: [
+            "Not for downloads that were blocked, canceled, or couldn't be saved (disk full, no permission).",
+            "The download shows Retrying while it waits.",
+          ],
+          options: [RETRY_ATTEMPTS],
+        },
+        {
+          pref: "virustotal",
+          default: false,
+          label: "VirusTotal check",
+          description: "Look finished downloads up on VirusTotal. Only the file's fingerprint (SHA-256) is sent, a few KB.",
+          preview: "virustotal",
+          keywords: "virus malware scan antivirus virustotal security download hash",
+          tips: [
+            "The verdict shows on each download in the Library; click it for the full report.",
+            "A file VirusTotal doesn't know can be uploaded, or its link sent for VirusTotal to download, from the download's right-click menu.",
+            "Uploaded files and sent links are shared with VirusTotal's security partners. Don't send private files.",
+            "The free API key allows 4 lookups a minute and 500 a day.",
+          ],
+          options: [VT_KEY],
+        },
+        {
           pref: "show-menu-icons",
           default: true,
           label: "Context menu icons",
@@ -333,7 +384,7 @@
   const OPTIONS = CATEGORIES.flatMap(c => c.settings).flatMap(s => s.options ?? []);
   // Everything a settings file, Reset and Undo cover.
   // Saved schemes first, so a file's picked scheme exists when it's applied.
-  const ALL = [SAVED_SCHEMES, ...SETTINGS, ...OPTIONS];
+  const ALL = [SAVED_SCHEMES, ...SETTINGS, ...OPTIONS].filter(o => !o.secret);
 
   // Renamed prefs: old name -> new name, and whether the meaning flipped.
   const MIGRATIONS = [
@@ -414,6 +465,8 @@
         return FzColors.schemeById(getString(o)) ? getString(o) : o.default;
       case "schemes":
         return FzColors.savedSchemes();
+      case "text":
+        return getString(o);
       default:
         return getInt(o);
     }
@@ -447,6 +500,11 @@
         return false;
       }
       FzColors.saveSchemes(value);
+    } else if (o.type === "text") {
+      if (typeof value !== "string") {
+        return false;
+      }
+      setString(o, value.trim());
     } else {
       if (!Number.isFinite(value)) {
         return false;
@@ -459,10 +517,11 @@
   const isDefault = o => JSON.stringify(readValue(o)) === JSON.stringify(o.default);
 
   // A setting differs from its default, the feature or any of its options.
-  const isModified = s => (!s.core && !isDefault(s)) || (s.options ?? []).some(o => !isDefault(o));
+  const isModified = s =>
+    (!s.core && !isDefault(s)) || (s.options ?? []).some(o => !o.secret && !isDefault(o));
 
   function resetSetting(s) {
-    for (const o of [...(s.core ? [] : [s]), ...(s.options ?? [])]) {
+    for (const o of [...(s.core ? [] : [s]), ...(s.options ?? []).filter(o => !o.secret)]) {
       writeValue(o, o.default);
     }
   }
@@ -712,6 +771,31 @@
           h("i", { class: "fz-mock-download" })
         );
         break;
+      case "retry": {
+        // A failed download whose bar starts over and fills.
+        mock.append(
+          h(
+            "div",
+            { class: "fz-mock-dl" },
+            h("span", { class: "fz-mock-icon" }),
+            h("div", { class: "fz-mock-dl-text" }, h("span", { class: "fz-mock-line" }), h("div", { class: "fz-mock-dl-bar" }, h("i")))
+          )
+        );
+        break;
+      }
+      case "virustotal":
+        for (const verdict of ["clean", "clean", "bad"]) {
+          mock.append(
+            h(
+              "div",
+              { class: "fz-mock-row" },
+              h("span", { class: "fz-mock-icon" }),
+              h("span", { class: "fz-mock-line" }),
+              h("span", { class: "fz-mock-vt", "data-verdict": verdict })
+            )
+          );
+        }
+        break;
       case "websites":
         mock.append(
           h("div", { class: "fz-mock-toolbar" }, h("div", { class: "fz-mock-urlbar" })),
@@ -882,7 +966,47 @@
     return { el, sync };
   }
 
-  const OPTION_BUILDERS = { number: buildNumber, range: buildRange, modifiers: buildModifiers, choice: buildChoice };
+  // A line of text, saved on change. Secret ones show as dots (with Firefox's reveal button).
+  function buildText(o) {
+    const input = h("input", {
+      type: o.secret ? "password" : "text",
+      class: "fz-text",
+      placeholder: o.placeholder ?? "",
+      spellcheck: "false",
+      autocomplete: "off",
+      "aria-label": o.label,
+    });
+    const sync = () => {
+      if (document.activeElement !== input) {
+        input.value = getString(o);
+      }
+    };
+    input.addEventListener("change", () => {
+      setString(o, input.value.trim());
+      sync();
+    });
+    input.addEventListener("keydown", e => {
+      if (e.key === "Enter") {
+        input.blur();
+      }
+    });
+    const el = h(
+      "div",
+      { class: "fz-option" },
+      h("label", { class: "fz-option-label", text: o.label, onclick: () => input.focus() }),
+      input,
+      o.hint && h("p", { class: "fz-option-hint", text: o.hint })
+    );
+    return { el, sync };
+  }
+
+  const OPTION_BUILDERS = {
+    number: buildNumber,
+    range: buildRange,
+    modifiers: buildModifiers,
+    choice: buildChoice,
+    text: buildText,
+  };
 
   function buildOptions(options) {
     const built = options.map(o => OPTION_BUILDERS[o.type](o));

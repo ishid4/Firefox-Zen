@@ -1,8 +1,13 @@
 {
-  "version": "1.3.2",
+  "version": "1.4.0",
   "repository": "https://github.com/ishid4/Firefox-Zen",
   "branch": "main",
   "history": [
+    {
+      "version": "1.4.0",
+      "date": "2026-11-08",
+      "notes": "Downloads in the Library: each day has its own Clear, and right-clicking a download copies its link or opens the page it came from. Failed downloads retry by themselves after network errors (Settings → Browsing). VirusTotal check (off by default) looks finished downloads up by their fingerprint and shows the result in green, yellow or red. Retry on a private space's download continues where it stopped instead of starting over."
+    },
     {
       "version": "1.3.2",
       "date": "2026-11-08",

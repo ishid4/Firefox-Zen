@@ -16,7 +16,9 @@
 //   footer, or onto "New space".
 // - History: places history by last visit, grouped by day, searchable. Drag an
 //   entry onto a space to open it there.
-// - Downloads: Firefox's downloads (or a private space's).
+// - Downloads: Firefox's downloads (or a private space's), grouped by day, each
+//   day with its own Clear. Right-click a download for its link and page.
+//   Auto-retry and VirusTotal: JS/firefox-zen-download-tools.sys.mjs.
 // - Mods: built by JS/firefox-zen-mods.uc.js (window.FirefoxZenMods).
 // - Settings: built by JS/firefox-zen-settings.uc.js (window.FirefoxZenSettings).
 // - About: built by JS/firefox-zen-about.uc.js (window.FirefoxZenAbout). While
@@ -2164,6 +2166,11 @@
   // Firefox's own lists (theme/downloads.css).
 
   const { Downloads } = ChromeUtils.importESModule("resource://gre/modules/Downloads.sys.mjs");
+  // Retry on error and VirusTotal checks (shared by every window).
+  const { FzDownloadTools } = ChromeUtils.importESModule(
+    "chrome://userscripts/content/firefox-zen-download-tools.sys.mjs"
+  );
+  FzDownloadTools.init();
 
   let dlList = null;
   let dlView = null;
@@ -2198,7 +2205,11 @@
       return "Blocked";
     }
     if (dlFailed(d)) {
-      return "Failed · Retry to try again";
+      const retry = FzDownloadTools.retryInfo(d);
+      if (retry?.waiting) {
+        return `Failed · Retrying (${retry.tries} of ${retry.max})…`;
+      }
+      return retry ? `Failed after ${retry.tries} retries · Retry to try again` : "Failed · Retry to try again";
     }
     const progress = d.hasProgress
       ? `${formatBytes(d.currentBytes)} of ${formatBytes(d.totalBytes)}`
@@ -2245,6 +2256,8 @@
       d.succeeded,
       d.target?.exists !== false,
       d.target?.path,
+      FzDownloadTools.retryInfo(d),
+      FzDownloadTools.vtEnabled() && d.succeeded ? (FzDownloadTools.vtState(d) ?? "unchecked") : null,
     ]);
   let dlRowCache = new WeakMap();
 
@@ -2278,6 +2291,198 @@
     const scroll = dlListEl.scrollTop;
     dlListEl.replaceChildren(...children);
     dlListEl.scrollTop = scroll;
+  }
+
+  // ---- VirusTotal (JS/firefox-zen-download-tools.sys.mjs) ----
+
+  // Checks the download; without an API key that opens its report page.
+  function vtCheck(d) {
+    FzDownloadTools.check(d)
+      .then(url => url && openUrl(url, { spaceId: dlSource || null }))
+      .catch(ex => console.error("firefox-zen-library:", ex));
+  }
+
+  function vtOpenReport(d) {
+    const hash = FzDownloadTools.vtState(d)?.hash;
+    if (hash) {
+      openUrl(FzDownloadTools.reportUrl(hash), { spaceId: dlSource || null });
+    } else {
+      vtCheck(d);
+    }
+  }
+
+  // The chip on a finished download: its verdict, or a button to check it.
+  function vtChip(d) {
+    if (!FzDownloadTools.vtEnabled() || !d.succeeded || d.target?.exists === false) {
+      return null;
+    }
+    const state = FzDownloadTools.vtState(d);
+    const v = state?.verdict;
+    let text = "VirusTotal";
+    let verdict = "none";
+    let title = FzDownloadTools.hasApiKey()
+      ? "Look this file up on VirusTotal (sends only its hash)"
+      : "Open this file's VirusTotal report (no API key: checked in a tab)";
+    let onclick = () => vtCheck(d);
+    switch (state?.status) {
+      case "hashing":
+      case "checking":
+        text = "Checking…";
+        verdict = "busy";
+        onclick = null;
+        break;
+      case "uploading":
+        text = "Uploading…";
+        verdict = "busy";
+        onclick = null;
+        break;
+      case "scanning":
+        text = "Scanning…";
+        verdict = "busy";
+        title = state.note || "VirusTotal is scanning it; the verdict shows here when it's done.";
+        onclick = () => vtOpenReport(d);
+        break;
+      case "unknown":
+        text = "Not on VirusTotal";
+        verdict = "unknown";
+        title = state.note || "VirusTotal hasn't seen this file. Upload it or let VirusTotal scan its link.";
+        onclick = e => openDownloadMenu(e, d);
+        break;
+      case "error":
+        text = "VirusTotal: try again";
+        verdict = "unknown";
+        title = state.note || "";
+        break;
+      case "done":
+        // Just the count; the color says which: red flagged, yellow
+        // suspicious, green clean.
+        if (v.malicious) {
+          text = `${v.malicious}/${v.total}`;
+          verdict = "bad";
+          title = `${v.malicious} of ${v.total} scanners flag it as malicious`;
+        } else if (v.suspicious) {
+          text = `${v.suspicious}/${v.total}`;
+          verdict = "warn";
+          title = `${v.suspicious} of ${v.total} scanners find it suspicious`;
+        } else {
+          text = `0/${v.total}`;
+          verdict = "clean";
+          title = `Clean: none of ${v.total} scanners flag it`;
+        }
+        title += ". Click for the VirusTotal report.";
+        onclick = () => vtOpenReport(d);
+        break;
+    }
+    return h("button", {
+      type: "button",
+      class: "fz-lib-button fz-lib-dl-vt",
+      "data-verdict": verdict,
+      text,
+      title,
+      disabled: !onclick,
+      onclick: onclick
+        ? e => {
+            e.stopPropagation();
+            onclick(e);
+          }
+        : null,
+    });
+  }
+
+  // ---- right-click menu ----
+
+  const DL_MENU_ID = "fz-lib-dl-menu";
+
+  const copyText = text =>
+    Cc["@mozilla.org/widget/clipboardhelper;1"].getService(Ci.nsIClipboardHelper).copyString(text);
+
+  // The page a download started from, else its own link.
+  const dlPage = d => {
+    try {
+      return d.source.referrerInfo?.originalReferrer?.spec || d.source.url;
+    } catch (ex) {
+      return d.source.url;
+    }
+  };
+
+  // `d`: a live Download, or { url, page?, file?, remove } for a private
+  // space's saved record.
+  function openDownloadMenu(e, d, remove = null) {
+    e.preventDefault();
+    e.stopPropagation();
+    let menu = document.getElementById(DL_MENU_ID);
+    if (!menu) {
+      menu = document.createXULElement("menupopup");
+      menu.id = DL_MENU_ID;
+      document.getElementById("mainPopupSet").append(menu);
+    }
+    const item = (label, command, { disabled = false } = {}) => {
+      const mi = document.createXULElement("menuitem");
+      mi.setAttribute("label", label);
+      mi.disabled = disabled;
+      mi.addEventListener("command", () => {
+        try {
+          const result = command();
+          result?.catch?.(ex => console.error("firefox-zen-library:", ex));
+        } catch (ex) {
+          console.error("firefox-zen-library:", ex);
+        }
+      });
+      return mi;
+    };
+    const sep = () => document.createXULElement("menuseparator");
+    const spaceId = dlSource || null;
+    const items = [];
+
+    if (d.source) {
+      const exists = d.succeeded && d.target?.exists !== false;
+      if (exists) {
+        items.push(item("Open", () => d.launch()), item("Show in Folder", () => d.showContainingDirectory()), sep());
+      }
+      if (dlFailed(d) && !dlBlocked(d)) {
+        items.push(item("Retry", () => d.start()), sep());
+      }
+      items.push(
+        item("Go to Download Page", () => openUrl(dlPage(d), { spaceId })),
+        item("Copy Download Link", () => copyText(d.source.url))
+      );
+      if (exists && FzDownloadTools.vtEnabled()) {
+        const state = FzDownloadTools.vtState(d);
+        const busy = ["hashing", "checking", "uploading"].includes(state?.status);
+        const keyed = FzDownloadTools.hasApiKey();
+        items.push(sep());
+        if (state?.hash && state.status !== "unknown") {
+          items.push(item("Open VirusTotal Report", () => vtOpenReport(d)));
+        }
+        items.push(item(keyed ? "Check on VirusTotal" : "Check on VirusTotal (opens a tab)", () => vtCheck(d), { disabled: busy }));
+        if (keyed) {
+          items.push(
+            item("Upload File to VirusTotal", () => FzDownloadTools.upload(d), { disabled: busy }),
+            item("Let VirusTotal Scan the Link", () => FzDownloadTools.scanLink(d), { disabled: busy })
+          );
+        }
+      }
+      if (d.stopped) {
+        items.push(sep(), item("Remove from List", () => (remove ?? (() => dlList?.remove(d)))()));
+      }
+    } else {
+      // A private space's saved record.
+      if (d.file) {
+        items.push(
+          item("Open", () => d.file().launch()),
+          item("Show in Folder", () => d.file().reveal()),
+          sep()
+        );
+      }
+      items.push(
+        item("Go to Download Page", () => openUrl(d.page || d.url, { spaceId })),
+        item("Copy Download Link", () => copyText(d.url)),
+        sep(),
+        item("Remove from List", () => d.remove())
+      );
+    }
+    menu.replaceChildren(...items);
+    menu.openPopupAtScreen(e.screenX, e.screenY, true, e);
   }
 
   // `remove`: takes it off its list (Firefox's, or a private space's).
@@ -2322,6 +2527,7 @@
             d.launch().catch(ex => console.error("firefox-zen-library:", ex));
           }
         },
+        oncontextmenu: e => openDownloadMenu(e, d, remove),
         onkeydown: e => {
           if (e.key === "Enter" && d.succeeded) {
             d.launch().catch(() => {});
@@ -2343,6 +2549,7 @@
         progress
       ),
       h("span", { class: "fz-lib-history-time", text: timeFormat.format(d.startTime) }),
+      vtChip(d),
       ...actions,
       d.stopped
         ? h("button", {
@@ -2389,9 +2596,9 @@
       ? `Interrupted · ${d.totalBytes ? `${formatBytes(d.currentBytes)} of ${formatBytes(d.totalBytes)}` : formatBytes(d.currentBytes)}`
       : status;
     const remove = () => {
-      // An interrupted download's leftover partial file is useless.
-      if (interrupted && d.path) {
-        IOUtils.remove(`${d.path}.part`, { ignoreAbsent: true }).catch(() => {});
+      // Its partial file (kept for Retry) goes with it.
+      if (d.state !== "done" && (d.partPath || d.path)) {
+        IOUtils.remove(d.partPath || `${d.path}.part`, { ignoreAbsent: true }).catch(() => {});
       }
       api().removePrivateDownload(spaceId, d.key);
     };
@@ -2413,6 +2620,13 @@
             }
           }
         },
+        oncontextmenu: e =>
+          openDownloadMenu(e, {
+            url: d.url,
+            page: d.referrer || null,
+            file: d.state === "done" && d.path ? file : null,
+            remove,
+          }),
       },
       h("img", { class: "fz-lib-dl-icon", src: fileUrl ? `moz-icon://${fileUrl}?size=32` : DEFAULT_FAVICON, alt: "" }),
       h(
@@ -2425,9 +2639,14 @@
       d.state === "done" && d.path
         ? dlAction("Show in folder", "", () => file().reveal())
         : null,
-      // Starts it again from its link, in the private space (the old entry goes).
+      // Continues from where it stopped, like Firefox's Retry. Without a
+      // partial file to continue (or a server that allows it), downloads it
+      // again from its link in the private space (the old entry goes).
       interrupted || d.state === "failed" || d.state === "canceled"
-        ? dlAction("Retry", "fz-lib-dl-retry", () => {
+        ? dlAction("Retry", "fz-lib-dl-retry", async () => {
+            if (await api().resumePrivateDownload?.(spaceId, d.key)) {
+              return;
+            }
             remove();
             openUrl(d.url, { spaceId });
           })
@@ -2445,6 +2664,36 @@
     );
   }
 
+  // A day's heading, with Clear: removes that day's finished downloads
+  // (running and paused ones stay, like Clear finished).
+  function dlDayHead(day) {
+    return h(
+      "h3",
+      { class: "fz-lib-day fz-lib-dl-day" },
+      h("span", { text: day }),
+      h("button", {
+        type: "button",
+        class: "fz-lib-day-clear",
+        text: "Clear",
+        title: `Remove ${day === "Today" || day === "Yesterday" ? day.toLowerCase() : day}'s finished downloads from the list`,
+        onclick: () => clearDay(day),
+      })
+    );
+  }
+
+  function clearDay(day) {
+    if (dlSource) {
+      for (const d of api().privateDownloads(dlSource)) {
+        if (d.state !== "downloading" && dayLabel(d.startTime) === day) {
+          api().removePrivateDownload(dlSource, d.key);
+        }
+      }
+    } else {
+      // Its filter: same test as Clear finished, for that day only.
+      dlList?.removeFinished(d => dayLabel(d.startTime.getTime()) === day);
+    }
+  }
+
   function renderPrivateDownloads() {
     const items = api()
       .privateDownloads(dlSource)
@@ -2455,7 +2704,7 @@
       const day = dayLabel(d.startTime);
       if (day !== lastDay) {
         lastDay = day;
-        children.push(h("h3", { class: "fz-lib-day", text: day }));
+        children.push(dlDayHead(day));
       }
       // Still in Firefox's list: the same live row as other downloads.
       const live = api().privateLiveDownload?.(d.key);
@@ -2488,7 +2737,7 @@
       const day = dayLabel(d.startTime.getTime());
       if (day !== lastDay) {
         lastDay = day;
-        children.push(h("h3", { class: "fz-lib-day", text: day }));
+        children.push(dlDayHead(day));
       }
       const row = downloadRow(d);
       dlRows.set(d, row);
@@ -2514,7 +2763,20 @@
     }
   }
 
+  // Retry or VirusTotal state changed (JS/firefox-zen-download-tools.sys.mjs).
+  function onDownloadToolsChanged(d) {
+    if (!dlListEl?.isConnected) {
+      return;
+    }
+    if (dlView && dlRows.has(d)) {
+      dlView.onDownloadChanged(d);
+    } else {
+      queueDownloadsRender();
+    }
+  }
+
   async function startDownloads() {
+    FzDownloadTools.addListener(onDownloadToolsChanged);
     if (dlSource) {
       renderDownloads();
       return;
@@ -2554,6 +2816,7 @@
   }
 
   function stopDownloads() {
+    FzDownloadTools.removeListener(onDownloadToolsChanged);
     if (dlList && dlView) {
       // Synchronous in current Firefox, a promise in older ones.
       try {

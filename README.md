@@ -9,7 +9,7 @@ a floating address bar, Glance previews and a built-in Library.
 
 - **Spaces**: separate sets of tabs, switched from a footer under the sidebar.
 - **Private spaces**: password-protected spaces, encrypted on disk.
-- **Library**: every space, history and downloads in one panel; drag tabs between spaces.
+- **Library**: every space, history and downloads in one panel; drag tabs between spaces. Downloads can retry by themselves after network errors and be checked on VirusTotal.
 - **Floating address bar**: Ctrl+T opens a centered command bar instead of a New Tab page.
 - **Glance**: Alt+click a link to preview it in a floating window.
 - **Tab sections**: folders above a line, new tabs below it, one click to clear them.
