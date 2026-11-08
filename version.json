@@ -1,8 +1,13 @@
 {
-  "version": "1.3.1",
+  "version": "1.3.2",
   "repository": "https://github.com/ishid4/Firefox-Zen",
   "branch": "main",
   "history": [
+    {
+      "version": "1.3.2",
+      "date": "2026-11-08",
+      "notes": "With Expand on hover, hovering the sidebar no longer pushes the page aside after Firefox starts, and the New Tab + icon stays in place when the sidebar closes. The installers turn scripts back on in profiles where they had been turned off."
+    },
     {
       "version": "1.3.1",
       "date": "2026-11-07",

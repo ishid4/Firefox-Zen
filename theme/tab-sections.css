@@ -33,9 +33,15 @@
     }
 
     /* Firefox gives it width: 100% plus inline margins, which overflowed the
-     * column; stretching fills the row inside the margins instead */
-    & > #tabbrowser-arrowscrollbox-periphery > #tabs-newtab-button {
+     * column; stretching fills the row inside the margins instead. Expanded
+     * only: collapsed, it keeps Firefox's icon-sized width, or while the
+     * expand-on-hover sidebar animates closed (still wide, label already
+     * hidden) the icon centers in the wide button and jumps right. */
+    #tabbrowser-tabs[expanded] & > #tabbrowser-arrowscrollbox-periphery > #tabs-newtab-button {
       width: auto !important;
+    }
+
+    & > #tabbrowser-arrowscrollbox-periphery > #tabs-newtab-button {
       align-items: center;
 
       /* Keyboard shortcut (set by the script), shown at the end while hovered */

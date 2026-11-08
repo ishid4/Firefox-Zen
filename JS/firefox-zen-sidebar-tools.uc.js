@@ -79,7 +79,12 @@
     root.adoptedStyleSheets = [...sheets, hoverMode ? pinnedGridSheet : pinnedColumnsSheet];
   }
 
-  const visibilityObserver = { observe: () => applyPinnedGrid() };
+  const visibilityObserver = {
+    observe: () => {
+      applyPinnedGrid();
+      queueCollapsedWidthCheck();
+    },
+  };
 
   // Rows the expanded grid needs (3 tiles per row). general.css sizes the
   // container to exactly that in both sidebar states, so the tabs below don't
@@ -96,6 +101,61 @@
 
   // TabClose fires before the tab leaves the strip.
   const queuePinnedRows = () => setTimeout(updatePinnedRows, 0);
+
+  // ---- keep the expand-on-hover collapsed width right ----
+
+  // With expand-on-hover, Firefox records the collapsed launcher's width in
+  // --sidebar-launcher-collapsed-width once when the window opens, and keeps
+  // the page in place with a margin that wide while the sidebar is
+  // hover-expanded. That first measurement can run before the sidebar has
+  // settled (120px against a 50px strip), so hovering pushed the page aside
+  // until expanding and collapsing the sidebar made Firefox measure again.
+  // Whenever the collapsed sidebar's width and the recorded one disagree, ask
+  // Firefox to measure again.
+  let collapsedWidthCheck = 0;
+
+  function checkCollapsedWidth() {
+    collapsedWidthCheck = 0;
+    const sc = window.SidebarController;
+    const box = sc?.sidebarContainer;
+    if (
+      !box ||
+      !sc._state ||
+      !document.documentElement.hasAttribute("sidebar-expand-on-hover") ||
+      sc.getUIState()?.launcherExpanded ||
+      box.hidden ||
+      box.hasAttribute("sidebar-ongoing-animations")
+    ) {
+      return;
+    }
+    const recorded = parseFloat(
+      document.getElementById("browser").style.getPropertyValue("--sidebar-launcher-collapsed-width")
+    );
+    const actual = box.getBoundingClientRect().width;
+    if (actual > 0 && !(Math.abs(actual - recorded) < 0.5)) {
+      sc.setLauncherCollapsedWidth();
+    }
+  }
+
+  // Wait for animations and the hover state to settle first.
+  function queueCollapsedWidthCheck() {
+    clearTimeout(collapsedWidthCheck);
+    collapsedWidthCheck = setTimeout(checkCollapsedWidth, 300);
+  }
+
+  function watchCollapsedWidth() {
+    const box = window.SidebarController?.sidebarContainer;
+    if (!box) {
+      return;
+    }
+    new ResizeObserver(queueCollapsedWidthCheck).observe(box);
+    // Firefox writing the variable (its own late startup measurement included)
+    new MutationObserver(queueCollapsedWidthCheck).observe(document.getElementById("browser"), {
+      attributes: true,
+      attributeFilter: ["style"],
+    });
+    queueCollapsedWidthCheck();
+  }
 
   // ---- at most maxPins() pinned tabs ----
 
@@ -756,6 +816,7 @@
     window.addEventListener("popupshowing", onPopupShowing, true);
     window.addEventListener("popuphidden", onPopupHidden, true);
     updatePinnedRows();
+    watchCollapsedWidth();
     limitPinTab();
     document.getElementById("tabContextMenu")?.addEventListener("popupshowing", onTabMenuShowing);
     for (const type of ["TabPinned", "TabUnpinned", "TabOpen", "TabClose"]) {
