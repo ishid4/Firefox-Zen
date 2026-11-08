@@ -1,8 +1,13 @@
 {
-  "version": "1.4.0",
+  "version": "1.4.1",
   "repository": "https://github.com/ishid4/Firefox-Zen",
   "branch": "main",
   "history": [
+    {
+      "version": "1.4.1",
+      "date": "2026-11-08",
+      "notes": "A private space's downloads keep going in the background when its window closes or it locks after idle time, instead of stopping. Turn this off with Keep downloading when locked (Settings → Spaces); then they stop and Retry continues them."
+    },
     {
       "version": "1.4.0",
       "date": "2026-11-08",

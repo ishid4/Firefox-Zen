@@ -61,6 +61,11 @@ const PRIVATE_OA = { privateBrowsingId: 1 };
 const HISTORY_TOPIC = "firefox-zen-private-history-changed";
 const DOWNLOADS_TOPIC = "firefox-zen-private-downloads-changed";
 const AUTOLOCK_PREF = "firefox-zen.private-spaces.autolock-minutes";
+// Downloads keep going after the space's window closes or it locks (see
+// keepPartialData). Off: they stop there, like Firefox's own private
+// downloads, and Retry resumes them.
+const BACKGROUND_DOWNLOADS_PREF = "firefox-zen.private-spaces.background-downloads";
+const backgroundDownloads = () => Services.prefs.getBoolPref(BACKGROUND_DOWNLOADS_PREF, true);
 const AUTOLOCK_DEFAULT = 1;
 const HISTORY_MAX = 5000;
 const EXPORT_FORMAT = "firefox-zen-private-space";
@@ -647,9 +652,15 @@ export const FzPrivateSpaces = {
     }
     const { keyInfo, snapshot } = await open(id, file, password);
     watchDownloads();
-    // Nothing can still be running from before it was locked.
-    for (const d of snapshot.downloads ?? []) {
-      if (d.state === "downloading" && !liveDownloads.has(d.key)) {
+    // Downloads that kept going while it was locked (see keepPartialData)
+    // get their current state; others still marked running were stopped.
+    let refreshed = false;
+    for (const [i, d] of (snapshot.downloads ?? []).entries()) {
+      const live = liveDownloads.get(d.key);
+      if (live) {
+        snapshot.downloads[i] = downloadRecord(live, d.key);
+        refreshed = true;
+      } else if (d.state === "downloading") {
         d.state = "interrupted";
       }
     }
@@ -665,6 +676,11 @@ export const FzPrivateSpaces = {
       lastJson: JSON.stringify(snapshot),
       closing: false,
     });
+    if (refreshed) {
+      // lastJson already has them: save explicitly.
+      unlocked.get(id).lastJson = "";
+      saveLogged(id);
+    }
     notifyChanged();
   },
 
@@ -923,6 +939,9 @@ function updateDownload(download) {
     keepPartialData(download);
   }
   liveDownloads.set(tracked.key, download);
+  if (backgroundDownloads() && abortedInBackground(download)) {
+    restartInBackground(download);
+  }
   const entry = unlocked.get(tracked.id);
   if (!entry) {
     return;
@@ -940,10 +959,17 @@ function updateDownload(download) {
   }
 }
 
-// When the last private window closes, Firefox drops its private downloads
-// and deletes their partial files (finalize(true)). A private space's
-// download keeps its partial file then, so Retry can resume it; removing it
-// from the Library deletes the file.
+// When the last private window closes (closed by hand, or the space locked
+// after idle time), Firefox ends private browsing: its network cleanup aborts
+// running private transfers, and it drops its private downloads, canceling
+// them and deleting their partial files (finalize(true)). A private space's
+// download that was running keeps going in the background instead: it's put
+// back in the private list (so the Library still shows and controls it once
+// the space is unlocked) and, when the transfer was aborted, started again
+// from its partial file (the server is asked for the rest; one that can't
+// resume sends it all again). With BACKGROUND_DOWNLOADS_PREF off it stops
+// instead. Either way a stopped one keeps its partial file, so Retry can
+// resume it. Removing it from the Library deletes the file.
 // (While a private window is open, finalize(true) is a deliberate delete.)
 function privateWindowOpen() {
   for (const win of Services.wm.getEnumerator("navigator:browser")) {
@@ -961,9 +987,46 @@ function keepPartialData(download) {
   }
   const finalize = download.finalize;
   download.finalize = function (removePartialData) {
-    return finalize.call(this, removePartialData && privateWindowOpen());
+    if (privateWindowOpen()) {
+      return finalize.call(this, removePartialData);
+    }
+    if (backgroundDownloads() && (!this.stopped || abortedInBackground(this))) {
+      // Firefox removed it from the list just before this. Back in it,
+      // updateDownload restarts it if its transfer was aborted.
+      lazy.Downloads.getList(lazy.Downloads.PRIVATE)
+        .then(list => list.add(this))
+        .catch(e => console.error("firefox-zen-private-spaces: keeping download", e));
+      return Promise.resolve();
+    }
+    return finalize.call(this, false);
   };
 }
+
+// A private space's download whose transfer Firefox aborted because private
+// browsing ended (no private window left). Not a cancel by you: that sets
+// `canceled`, without an error.
+function abortedInBackground(download) {
+  return (
+    download.stopped &&
+    !download.canceled &&
+    !download.succeeded &&
+    download.error?.result === Cr.NS_ERROR_ABORT &&
+    !privateWindowOpen()
+  );
+}
+
+// Starts it again (bounded: the space's data clearing on lock can abort the
+// restarted transfer once more).
+const MAX_BACKGROUND_RESTARTS = 5;
+function restartInBackground(download) {
+  const restarts = backgroundRestarts.get(download) ?? 0;
+  if (restarts >= MAX_BACKGROUND_RESTARTS) {
+    return;
+  }
+  backgroundRestarts.set(download, restarts + 1);
+  download.start().catch(() => {});
+}
+const backgroundRestarts = new WeakMap();
 
 // Records still "downloading" with no download behind them anymore.
 function markInterrupted(entry) {

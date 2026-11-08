@@ -32,6 +32,15 @@
     hint: "Without input, anywhere on the computer. Also hides them. 0 never locks.",
   };
 
+  // JS/firefox-zen-private-spaces.sys.mjs
+  const BACKGROUND_DOWNLOADS = {
+    type: "switch",
+    pref: "private-spaces.background-downloads",
+    default: true,
+    label: "Keep downloading when locked",
+    hint: "A private space's downloads continue after its window closes or it locks. Off, they stop there and Retry continues them.",
+  };
+
   // JS/firefox-zen-sidebar-tools.uc.js
   const PIN_LIMIT = {
     type: "number",
@@ -204,7 +213,7 @@
             "Right-click a space to rename it, set its icon or container, unload, export or delete it.",
             "+ in the footer creates spaces, folders and password-protected private spaces.",
           ],
-          options: [AUTOLOCK],
+          options: [AUTOLOCK, BACKGROUND_DOWNLOADS],
         },
         {
           pref: "tab-sections",
@@ -399,6 +408,8 @@
   const RETIRED = ["library", "saved-sidebar-visibility"];
 
   const isOn = s => s.core || (!s.type && Services.prefs.getBoolPref(PREF_BRANCH + s.pref, false));
+  // A switch option: unset means its default.
+  const getBool = o => Services.prefs.getBoolPref(PREF_BRANCH + o.pref, o.default);
 
   function setOn(s, on) {
     const name = PREF_BRANCH + s.pref;
@@ -467,6 +478,8 @@
         return FzColors.savedSchemes();
       case "text":
         return getString(o);
+      case "switch":
+        return getBool(o);
       default:
         return getInt(o);
     }
@@ -500,6 +513,11 @@
         return false;
       }
       FzColors.saveSchemes(value);
+    } else if (o.type === "switch") {
+      if (typeof value !== "boolean") {
+        return false;
+      }
+      setOn(o, value);
     } else if (o.type === "text") {
       if (typeof value !== "string") {
         return false;
@@ -1000,12 +1018,32 @@
     return { el, sync };
   }
 
+  // On/off, as a small switch with its label.
+  function buildSwitch(o) {
+    const input = h("input", {
+      type: "checkbox",
+      role: "switch",
+      class: "fz-switch fz-option-switch",
+      "aria-label": o.label,
+      onchange: e => setOn(o, e.target.checked),
+    });
+    const el = h(
+      "div",
+      { class: "fz-option" },
+      h("label", { class: "fz-option-label", text: o.label, onclick: () => input.click() }),
+      input,
+      o.hint && h("p", { class: "fz-option-hint", text: o.hint })
+    );
+    return { el, sync: () => (input.checked = getBool(o)) };
+  }
+
   const OPTION_BUILDERS = {
     number: buildNumber,
     range: buildRange,
     modifiers: buildModifiers,
     choice: buildChoice,
     text: buildText,
+    switch: buildSwitch,
   };
 
   function buildOptions(options) {
