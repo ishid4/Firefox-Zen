@@ -1,8 +1,13 @@
 {
-  "version": "1.4.1",
+  "version": "1.4.2",
   "repository": "https://github.com/ishid4/Firefox-Zen",
   "branch": "main",
   "history": [
+    {
+      "version": "1.4.2",
+      "date": "2026-11-08",
+      "notes": "VirusTotal check works on a private space's downloads too. Only the file's fingerprint is looked up, the result is kept in the space's encrypted data, and the report opens inside the space. Uploading the file or scanning its link says (Shares It), since those share it with VirusTotal."
+    },
     {
       "version": "1.4.1",
       "date": "2026-11-08",

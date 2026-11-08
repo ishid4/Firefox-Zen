@@ -2002,6 +2002,8 @@
     removePrivateHistory: (id, url) => privateSpaces()?.removeHistory(id, url),
     privateDownloads: id => privateSpaces()?.downloads(id) ?? [],
     removePrivateDownload: (id, key) => privateSpaces()?.removeDownload(id, key),
+    // VirusTotal stand-in for a finished saved download (or null).
+    privateVtSubject: (id, key) => privateSpaces()?.vtSubject?.(id, key) ?? null,
     // Resumes a stopped one from its partial file; false when it can't.
     resumePrivateDownload: (id, key) => privateSpaces()?.resumeDownload(id, key) ?? Promise.resolve(false),
     lockPrivate: lockPrivateSpace,

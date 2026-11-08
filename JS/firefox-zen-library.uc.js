@@ -2433,6 +2433,33 @@
     const sep = () => document.createXULElement("menuseparator");
     const spaceId = dlSource || null;
     const items = [];
+    // Upload and link scans share the file or link with VirusTotal's
+    // partners: said in the label for a private space's download.
+    const shares = dlSource ? " (Shares It)" : "";
+    const vtItems = subject => {
+      if (!FzDownloadTools.vtEnabled()) {
+        return [];
+      }
+      const state = FzDownloadTools.vtState(subject);
+      const busy = ["hashing", "checking", "uploading"].includes(state?.status);
+      const keyed = FzDownloadTools.hasApiKey();
+      const out = [sep()];
+      if (state?.hash && state.status !== "unknown") {
+        out.push(item("Open VirusTotal Report", () => vtOpenReport(subject)));
+      }
+      out.push(
+        item(keyed ? "Check on VirusTotal" : "Check on VirusTotal (opens a tab)", () => vtCheck(subject), {
+          disabled: busy,
+        })
+      );
+      if (keyed) {
+        out.push(
+          item(`Upload File to VirusTotal${shares}`, () => FzDownloadTools.upload(subject), { disabled: busy }),
+          item(`Let VirusTotal Scan the Link${shares}`, () => FzDownloadTools.scanLink(subject), { disabled: busy })
+        );
+      }
+      return out;
+    };
 
     if (d.source) {
       const exists = d.succeeded && d.target?.exists !== false;
@@ -2446,21 +2473,8 @@
         item("Go to Download Page", () => openUrl(dlPage(d), { spaceId })),
         item("Copy Download Link", () => copyText(d.source.url))
       );
-      if (exists && FzDownloadTools.vtEnabled()) {
-        const state = FzDownloadTools.vtState(d);
-        const busy = ["hashing", "checking", "uploading"].includes(state?.status);
-        const keyed = FzDownloadTools.hasApiKey();
-        items.push(sep());
-        if (state?.hash && state.status !== "unknown") {
-          items.push(item("Open VirusTotal Report", () => vtOpenReport(d)));
-        }
-        items.push(item(keyed ? "Check on VirusTotal" : "Check on VirusTotal (opens a tab)", () => vtCheck(d), { disabled: busy }));
-        if (keyed) {
-          items.push(
-            item("Upload File to VirusTotal", () => FzDownloadTools.upload(d), { disabled: busy }),
-            item("Let VirusTotal Scan the Link", () => FzDownloadTools.scanLink(d), { disabled: busy })
-          );
-        }
+      if (exists) {
+        items.push(...vtItems(d));
       }
       if (d.stopped) {
         items.push(sep(), item("Remove from List", () => (remove ?? (() => dlList?.remove(d)))()));
@@ -2477,6 +2491,7 @@
       items.push(
         item("Go to Download Page", () => openUrl(d.page || d.url, { spaceId })),
         item("Copy Download Link", () => copyText(d.url)),
+        ...(d.vt ? vtItems(d.vt) : []),
         sep(),
         item("Remove from List", () => d.remove())
       );
@@ -2603,6 +2618,9 @@
       api().removePrivateDownload(spaceId, d.key);
     };
     const fileUrl = d.path ? PathUtils.toFileURI(d.path) : "";
+    // VirusTotal: a stand-in for the finished file (its verdict is kept in
+    // the space's encrypted data).
+    const vtSubject = d.state === "done" ? (api().privateVtSubject?.(spaceId, d.key) ?? null) : null;
     return h(
       "div",
       {
@@ -2625,6 +2643,7 @@
             url: d.url,
             page: d.referrer || null,
             file: d.state === "done" && d.path ? file : null,
+            vt: vtSubject,
             remove,
           }),
       },
@@ -2636,6 +2655,7 @@
         h("span", { class: "fz-lib-dl-status", text: shownStatus })
       ),
       h("span", { class: "fz-lib-history-time", text: timeFormat.format(d.startTime) }),
+      vtSubject ? vtChip(vtSubject) : null,
       d.state === "done" && d.path
         ? dlAction("Show in folder", "", () => file().reveal())
         : null,

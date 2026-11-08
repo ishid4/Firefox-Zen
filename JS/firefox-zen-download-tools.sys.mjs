@@ -21,6 +21,9 @@
 //   row; a file VirusTotal doesn't know can then be uploaded, or its link sent
 //   for VirusTotal to download itself. Without a key, the row's VirusTotal
 //   button opens the file's report page in a tab.
+//   Besides Firefox's Downloads, it takes stand-ins for a private space's
+//   saved downloads: { target: { path }, source: { url }, succeeded: true }
+//   (JS/firefox-zen-private-spaces.sys.mjs keeps their verdicts, encrypted).
 
 import { setTimeout, clearTimeout } from "resource://gre/modules/Timer.sys.mjs";
 
@@ -370,6 +373,13 @@ export const FzDownloadTools = {
   //   | "done" | "error", hash?, verdict?: { malicious, suspicious, total },
   //   note? } or null when not checked.
   vtState: d => vt.get(d) ?? null,
+  // A verdict known from before (a private space's saved one), shown
+  // without asking VirusTotal again.
+  seed(d, state) {
+    if (!vt.has(d)) {
+      vt.set(d, state);
+    }
+  },
   reportUrl: hash => `${GUI}/file/${hash}`,
 
   check,

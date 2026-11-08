@@ -50,6 +50,7 @@ ChromeUtils.defineESModuleGetters(lazy, {
   BrowserWindowTracker: "resource:///modules/BrowserWindowTracker.sys.mjs",
   Downloads: "resource://gre/modules/Downloads.sys.mjs",
   PrivateBrowsingUtils: "resource://gre/modules/PrivateBrowsingUtils.sys.mjs",
+  FzDownloadTools: "chrome://userscripts/content/firefox-zen-download-tools.sys.mjs",
 });
 
 const VERSION = 1;
@@ -336,6 +337,10 @@ function stopTracking(id) {
   }
   clearInterval(entry.timer);
   unlocked.delete(id);
+  // Its verdicts leave memory with it.
+  for (const d of entry.downloads ?? []) {
+    vtSubjects.delete(d.key);
+  }
   return entry;
 }
 
@@ -534,6 +539,26 @@ export const FzPrivateSpaces = {
   // Firefox's Download for a record, while it still has it.
   liveDownload: key => liveDownloads.get(key) ?? null,
 
+  // What the VirusTotal check (JS/firefox-zen-download-tools.sys.mjs) works
+  // on for a finished download Firefox no longer has: a stand-in with its
+  // file and link, showing its saved verdict. Null while locked or not done.
+  vtSubject(id, key) {
+    const record = unlocked.get(id)?.downloads.find(d => d.key === key);
+    if (!record || record.state !== "done" || !record.path) {
+      return null;
+    }
+    let subject = vtSubjects.get(key);
+    if (!subject || subject.target.path !== record.path) {
+      subject = { target: { path: record.path }, source: { url: record.url }, succeeded: true, stopped: true };
+      vtSubjects.set(key, subject);
+      downloadKeys.set(subject, { id, key });
+    }
+    if (record.vt?.hash && record.vt.verdict) {
+      lazy.FzDownloadTools.seed(subject, { status: "done", hash: record.vt.hash, verdict: record.vt.verdict });
+    }
+    return subject;
+  },
+
   // Starts a stopped download again from where it stopped (its kept partial
   // file, asking the server for the rest), like Firefox's own Retry.
   // Resolves false when that can't be done (no partial file, or the server
@@ -658,7 +683,7 @@ export const FzPrivateSpaces = {
     for (const [i, d] of (snapshot.downloads ?? []).entries()) {
       const live = liveDownloads.get(d.key);
       if (live) {
-        snapshot.downloads[i] = downloadRecord(live, d.key);
+        snapshot.downloads[i] = { ...downloadRecord(live, d.key), ...(d.vt ? { vt: d.vt } : {}) };
         refreshed = true;
       } else if (d.state === "downloading") {
         d.state = "interrupted";
@@ -891,7 +916,8 @@ function spaceOfDownload(download) {
 }
 
 // { key, url, referrer, path, partPath, entityID, startTime, totalBytes,
-//   currentBytes, state }
+//   currentBytes, state, vt? }
+// vt: { hash, verdict } once VirusTotal knows the file (onVtChanged).
 // referrer: the page it started from ("" when not known).
 // partPath, entityID: its partial file and the server's resume id, so a
 // stopped download can continue where it stopped (resumeDownload).
@@ -948,6 +974,10 @@ function updateDownload(download) {
   }
   const record = downloadRecord(download, tracked.key);
   const index = entry.downloads.findIndex(d => d.key === tracked.key);
+  // Its verdict, if checked (onVtChanged).
+  if (index >= 0 && entry.downloads[index].vt) {
+    record.vt = entry.downloads[index].vt;
+  }
   if (index < 0) {
     entry.downloads.push(record);
   } else {
@@ -1028,6 +1058,31 @@ function restartInBackground(download) {
 }
 const backgroundRestarts = new WeakMap();
 
+// ---- VirusTotal verdicts ----
+// A private space's download keeps its VirusTotal verdict in its record, so
+// in the space's encrypted data only; only the file's hash was asked about.
+// Record key -> stand-in (see vtSubject), while its space is unlocked.
+const vtSubjects = new Map();
+
+function onVtChanged(subject) {
+  const tracked = downloadKeys.get(subject);
+  const state = lazy.FzDownloadTools.vtState(subject);
+  const entry = tracked && unlocked.get(tracked.id);
+  if (!entry || state?.status !== "done") {
+    return;
+  }
+  const record = entry.downloads.find(d => d.key === tracked.key);
+  if (
+    !record ||
+    (record.vt?.hash === state.hash && JSON.stringify(record.vt.verdict) === JSON.stringify(state.verdict))
+  ) {
+    return;
+  }
+  record.vt = { hash: state.hash, verdict: state.verdict };
+  Services.obs.notifyObservers(null, DOWNLOADS_TOPIC, tracked.id);
+  saveLogged(tracked.id);
+}
+
 // Records still "downloading" with no download behind them anymore.
 function markInterrupted(entry) {
   for (const d of entry?.downloads ?? []) {
@@ -1042,6 +1097,11 @@ function watchDownloads() {
     return;
   }
   downloadsWatched = true;
+  try {
+    lazy.FzDownloadTools.addListener(onVtChanged);
+  } catch (e) {
+    console.error("firefox-zen-private-spaces: VirusTotal", e);
+  }
   lazy.Downloads.getList(lazy.Downloads.PRIVATE)
     .then(list =>
       list.addView({
