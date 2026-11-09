@@ -1,8 +1,13 @@
 {
-  "version": "1.4.2",
+  "version": "1.5.0",
   "repository": "https://github.com/ishid4/Firefox-Zen",
   "branch": "main",
   "history": [
+    {
+      "version": "1.5.0",
+      "date": "2026-11-09",
+      "notes": "Color schemes get a bigger preview in Settings (Show preview): hover a scheme to try it, in light and dark. Film grain is drawn from small cached tiles, so it's smoother and stays crisp at any zoom. New Hide sidebar tools setting (Settings → Sidebar) hides Firefox's tool buttons row; the Customize sidebar button setting is gone and the button always shows."
+    },
     {
       "version": "1.4.2",
       "date": "2026-11-08",
