@@ -52,6 +52,7 @@ Then open `about:support`, click **Clear startup cache…**, and restart.
 | `firefox-zen.glance` | true | Alt+click a link to open it in a floating Glance window (see below) |
 | `firefox-zen.glance.modifiers` | alt | Keys held while clicking a link to open Glance: `ctrl`, `alt`, `shift`, joined with `+` |
 | `firefox-zen.glance.width` / `.height` | 700 / 940 | Glance size in thousandths of the content area (Settings sliders, or drag its edges) |
+| `firefox-zen.touches` | true | [Touches](#touches): your own CSS for websites, from a button in the address bar |
 | `firefox-zen.pins.max` | 9 | Most pinned tabs (1-36) |
 | `firefox-zen.private-spaces.autolock-minutes` | 1 | Lock and hide every private space after this many idle minutes (0 = never) |
 | `firefox-zen.show-folder-icons` | true | Arc folder icons on tab groups |
@@ -519,6 +520,55 @@ skipped; other clicks behave as usual.
 - A plain Alt shortcut is off while `browser.altClickSave` is on (Alt+click
   saves the link instead).
 - Pages that handle the click themselves (rare) keep their own behavior.
+
+### Touches
+
+Your own CSS for websites, like Arc's Boosts. Click the sparkle button in the
+address bar (with the address bar in the sidebar: the page actions panel)
+to see the page's touches.
+
+- A site can have any number of touches, each with its own switch. The button
+  is filled while one is on for the page.
+- **New touch** opens the editor: a name, where it applies, its elements and
+  its CSS. The page changes as you type; a new touch left empty is dropped.
+- **Pick** (or right-click → **Touch up this element…**): hover the page (the
+  rest of it dims) and click an element; Shift+click takes all elements like
+  it, ↑ / ↓ make the pick bigger (its parent) or smaller, Esc cancels.
+- The panel then changes it, live:
+  - **Applies to**: only this element or all like it (matches are outlined
+    on the page and counted); **Selector** to edit it by hand; **Pick
+    again** to point at another element.
+  - **Hide this element**.
+  - **Colors** (text, background), **Text** (font, size), **Box** (max width,
+    padding, corners). Empty fields show the element's current value; a
+    changed one is highlighted and has a reset button. Colors take any CSS
+    color typed in, or click the swatch for a color picker (shade, hue,
+    opacity; arrow keys move them too) and preset colors.
+  - **Change its text or add HTML** (before, after or inside it).
+  - Left unchanged, the element is dropped from the touch.
+- Picking skips class names a build generates (styled-components'
+  `Layout-sc-1xcs6mc-0`, `esivyI`, emotion's `css-1a2b3c`, CSS modules), which
+  change with the site's next update; test ids (`data-testid`,
+  `data-a-target`…), ids and real class names come first.
+- **Zap**: click things on the page to hide them, one after another, until
+  Esc.
+- While Pick or Zap is on, the page is in **Touché mode**: a spinning
+  gradient frame around it (cool colors for Pick, warm for Zap) and a
+  "Touché · Pick" / "Touché · Zap" badge at the top, until it ends.
+- Picking adds to the touch that's open, else the page's first touch that's
+  on, else a new one.
+- Added HTML is cleaned: no scripts, event handlers, forms, frames, or links
+  other than http(s)/mailto. New text and HTML are applied again when the
+  page adds or redraws matching elements, and undone when you remove them.
+- **Applies to**: the whole site and its subdomains, the wider domain
+  (gist.github.com → all of github.com), the folder the page is in, or only
+  this page (the query and `#…` don't count).
+- Touches are added before the page is drawn, so they don't flash in, and the
+  page's Content-Security-Policy doesn't block them. Single-page apps that
+  change their address without loading are followed.
+- They apply to the page itself, not to frames inside it.
+- Kept in `chrome/.firefox-zen/touches.json` (updates leave it alone).
+  Settings → Touches turns them all off.
 
 ### Address bar in sidebar
 

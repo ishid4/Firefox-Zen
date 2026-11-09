@@ -337,6 +337,20 @@
           options: [GLANCE_MODIFIERS, ...GLANCE_SIZE],
         },
         {
+          pref: "touches",
+          default: true,
+          label: "Touches",
+          description: "Restyle any website: pick elements to change, zap clutter, or write CSS. From the sparkle button in the address bar.",
+          preview: "touches",
+          keywords: "css style custom website boost restyle hide zap picker element",
+          tips: [
+            "A site can have several touches, each with its own switch.",
+            "Right-click an element → Touch up this element… to change it directly.",
+            "A touch applies to the whole site, a part of it, or one page. Edits show as you type.",
+            "With the address bar in the sidebar, the button is in the page actions panel.",
+          ],
+        },
+        {
           pref: "download-cue",
           default: true,
           label: "Download animation",
@@ -818,6 +832,13 @@
         mock.append(
           h("div", { class: "fz-mock-toolbar" }, h("div", { class: "fz-mock-urlbar" })),
           h("div", { class: "fz-mock-page" }, h("i"), h("i"), h("i"))
+        );
+        break;
+      case "touches":
+        // A page whose header block takes the accent once restyled.
+        mock.append(
+          h("div", { class: "fz-mock-toolbar" }, h("div", { class: "fz-mock-urlbar" })),
+          h("div", { class: "fz-mock-page" }, h("b"), h("i"), h("i"))
         );
         break;
       case "folders":

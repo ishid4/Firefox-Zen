@@ -20,6 +20,7 @@ Better unloaded tabs styling from github.com/Felkazz/zen-browser-better-unloaded
 @import url("theme/library.css");
 @import url("theme/downloads.css");
 @import url("theme/mods.css");
+@import url("theme/touches.css");
 @import url("theme/about.css");
 
 /* All the previous userChrome.css' content */

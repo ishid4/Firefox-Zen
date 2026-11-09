@@ -1697,6 +1697,38 @@
   }
 }
 
+/* Touches: a page's header block restyles (rounder, in the accent) */
+.fz-preview-touches .fz-mock-page {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  padding-inline: 10px;
+
+  & > b {
+    width: 40%;
+    height: 9px;
+    border-radius: 1px;
+    background: var(--fz-line);
+    transition: background 0.2s ease, border-radius 0.2s ease, width 0.2s ease;
+  }
+
+  & > i {
+    width: 70%;
+    height: 3px;
+    border-radius: 2px;
+    background: var(--fz-line);
+
+    &:last-child { width: 55%; }
+  }
+}
+
+.fz-setting[data-on] .fz-preview-touches .fz-mock-page > b {
+  width: 50%;
+  border-radius: 5px;
+  background: var(--fz-accent);
+}
+
 /* ---- share card popup (over the Library) ---- */
 .fz-card-overlay {
   position: absolute;

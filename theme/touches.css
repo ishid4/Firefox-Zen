@@ -1,0 +1,872 @@
+/* Firefox-Zen Touches: the address bar button and its panel
+   (built by JS/firefox-zen-touches.uc.js) */
+
+#fz-touches-button > .urlbar-icon {
+  list-style-image: url("icons/touches.svg") !important;
+}
+
+#fz-touches-button[fz-active] > .urlbar-icon {
+  list-style-image: url("icons/touches-filled.svg") !important;
+  fill: var(--fz-accent) !important;
+}
+
+/* general.css fades page actions out until the URL bar is hovered; keep the
+   button there while its panel is open */
+#page-action-buttons:has(> #fz-touches-button[open]) {
+  opacity: 1 !important;
+  scale: 1 !important;
+}
+
+#fz-touches-panel {
+  --fz-muted: color-mix(in srgb, currentColor 62%, transparent);
+  --fz-surface: color-mix(in srgb, currentColor 5%, transparent);
+  --fz-surface-hover: color-mix(in srgb, currentColor 9%, transparent);
+  --fz-line: color-mix(in srgb, currentColor 12%, transparent);
+  --panel-padding: 0;
+
+  font: menu;
+  font-size: 13px;
+}
+
+.fz-touches-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 350px;
+  max-height: min(640px, 80vh);
+  box-sizing: border-box;
+  padding: 12px;
+  overflow-y: auto;
+}
+
+.fz-touches-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+}
+
+.fz-touches-title {
+  font-weight: 600;
+}
+
+.fz-touches-host {
+  margin-inline-start: auto;
+  overflow: hidden;
+  color: var(--fz-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fz-touches-empty {
+  margin: 0;
+  padding: 12px 4px;
+  color: var(--fz-muted);
+  line-height: 1.45;
+  text-align: center;
+}
+
+.fz-touches-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 320px;
+  margin: 0 -4px;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.fz-touch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-inline-end: 6px;
+  border-radius: 8px;
+
+  &:hover {
+    background: var(--fz-surface-hover);
+  }
+
+  &[data-off] .fz-touch-name {
+    color: var(--fz-muted);
+  }
+}
+
+.fz-touch-main {
+  appearance: none;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  min-width: 0;
+  margin: 0;
+  padding: 6px 8px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+
+  & > span {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &:focus-visible {
+    border-radius: 8px;
+    outline: var(--focus-outline, 2px solid var(--fz-accent));
+  }
+}
+
+.fz-touch-scope {
+  color: var(--fz-muted);
+  font-size: 11.5px;
+}
+
+.fz-touches-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.fz-touches-btn {
+  appearance: none;
+  min-height: 26px;
+  margin: 0;
+  padding: 0 12px;
+  border: 1px solid var(--fz-line);
+  border-radius: 7px;
+  background: var(--fz-surface);
+  color: inherit;
+  font: inherit;
+
+  &:hover {
+    background: var(--fz-surface-hover);
+  }
+
+  &:focus-visible {
+    outline: var(--focus-outline, 2px solid var(--fz-accent));
+    outline-offset: 1px;
+  }
+}
+
+.fz-touches-primary {
+  border-color: transparent;
+  background: var(--fz-accent);
+  color: var(--fz-accent-text, white);
+
+  &:hover {
+    background: color-mix(in srgb, var(--fz-accent) 88%, black);
+  }
+}
+
+.fz-touches-danger {
+  margin-inline-end: auto;
+  color: var(--fz-danger, #c50042);
+}
+
+.fz-touches-icon {
+  appearance: none;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: center / 16px no-repeat;
+  -moz-context-properties: fill;
+  fill: currentColor;
+
+  &:hover {
+    background-color: var(--fz-surface-hover);
+  }
+}
+
+.fz-touches-back {
+  background-image: url("icons/arrow-left.svg");
+}
+
+/* ---- fields ----
+   Firefox's own sheets style html|input/select/textarea in the browser
+   window and outrank this one, hence the !important on what they set. */
+
+.fz-touches-name,
+.fz-touches-select,
+.fz-touches-css,
+.fz-touches-text,
+.fz-touches-input {
+  appearance: none !important;
+  box-sizing: border-box;
+  margin: 0 !important;
+  border: 1px solid var(--fz-line) !important;
+  border-radius: 7px !important;
+  background-color: var(--fz-surface) !important;
+  color: var(--fz-text, CanvasText) !important;
+  font: inherit !important;
+  transition: border-color 0.12s ease, background-color 0.12s ease;
+
+  &:hover {
+    background-color: var(--fz-surface-hover) !important;
+  }
+
+  &:focus-visible {
+    border-color: var(--fz-accent) !important;
+    outline: none !important;
+  }
+
+  &[data-invalid] {
+    border-color: var(--fz-danger, #c50042) !important;
+  }
+
+  &::placeholder {
+    color: var(--fz-muted);
+    opacity: 1;
+  }
+}
+
+.fz-touches-name {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px !important;
+  font-weight: 600 !important;
+}
+
+.fz-touches-input {
+  height: 28px;
+  padding: 0 8px !important;
+}
+
+/* Number fields: no spinner, the value lines up with the unit */
+.fz-touches-input[type="number"] {
+  -moz-appearance: textfield !important;
+}
+
+/* No hover change or transition on selects: Firefox's dropdown copies the
+   select's colors and rebuilds its list on every transitionend
+   (SelectChild), so a hover transition made the open list flicker. */
+.fz-touches-select {
+  transition: none !important;
+
+  &:hover {
+    background-color: var(--fz-surface) !important;
+  }
+}
+
+.fz-touches-select {
+  height: 28px;
+  padding: 0 26px 0 8px !important;
+  background-image: url("icons/arrow-down.svg") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 8px center !important;
+  background-size: 12px !important;
+  -moz-context-properties: fill;
+  fill: var(--fz-muted);
+  text-overflow: ellipsis;
+}
+
+.fz-touches-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--fz-muted);
+
+  & > span:first-child {
+    flex: none;
+    width: 82px;
+  }
+
+  & > :not(span:first-child) {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+.fz-touches-css {
+  flex: none;
+  height: 180px;
+  padding: 8px !important;
+  resize: vertical;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace !important;
+  font-size: 12px !important;
+  line-height: 1.5 !important;
+  tab-size: 2;
+  white-space: pre;
+}
+
+.fz-touches-code-input {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace !important;
+  font-size: 12px !important;
+}
+
+.fz-touches-text {
+  width: 100%;
+  padding: 6px 8px !important;
+  resize: vertical;
+}
+
+/* ---- touch view: element edits ---- */
+
+.fz-touches-section {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: -4px;
+  color: var(--fz-muted);
+  font-size: 12px;
+  font-weight: 600;
+
+  & > span {
+    margin-inline-end: auto;
+  }
+}
+
+.fz-touches-small {
+  min-height: 22px;
+  padding: 0 9px;
+  font-size: 12px;
+  font-weight: normal;
+}
+
+.fz-touches-zap::before {
+  content: "";
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-inline-end: 5px;
+  vertical-align: -1px;
+  background: url("icons/touches.svg") center / contain no-repeat;
+  -moz-context-properties: fill;
+  fill: currentColor;
+}
+
+.fz-touches-hint {
+  margin: 0;
+  color: var(--fz-muted);
+  font-size: 12px;
+}
+
+.fz-edits {
+  max-height: 180px;
+}
+
+.fz-edit {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-inline-end: 4px;
+  border-radius: 8px;
+
+  &:hover {
+    background: var(--fz-surface-hover);
+  }
+
+  & .fz-touch-main {
+    padding-block: 4px;
+  }
+}
+
+.fz-edit-sel {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 12px;
+}
+
+.fz-touches-remove {
+  background-image: url("icons/close.svg");
+  background-size: 12px;
+  opacity: 0.6;
+
+  &:hover {
+    opacity: 1;
+  }
+}
+
+/* ---- element view ---- */
+
+/* What's picked: name, how many, Pick again, Applies to, Selector */
+.fz-el-target {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 10px;
+  background: var(--fz-surface);
+}
+
+.fz-el-target-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.fz-el-name {
+  overflow: hidden;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fz-el-name {
+  flex: none;
+  max-width: 45%;
+}
+
+.fz-el-snippet {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--fz-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fz-el-count {
+  flex: none;
+  color: var(--fz-muted);
+  font-size: 12px;
+
+  &[data-none] {
+    color: var(--fz-danger, #c50042);
+  }
+}
+
+.fz-el-repick {
+  flex: none;
+  margin-inline-start: auto;
+}
+
+.fz-el-selector,
+.fz-el-more {
+  & > summary {
+    width: fit-content;
+    color: var(--fz-muted);
+    font-size: 12px;
+    cursor: pointer;
+
+    &:hover {
+      color: inherit;
+    }
+  }
+}
+
+.fz-el-selector[open] > summary {
+  margin-bottom: 6px;
+}
+
+.fz-el-selector > input {
+  width: 100%;
+}
+
+.fz-el-hide {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0 0;
+  font-weight: 600;
+
+  /* Lined up with the fields' right edge (past it: the reset column) */
+  & > .fz-switch {
+    margin-inline: auto 30px !important;
+  }
+}
+
+.fz-el-styles {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: opacity 0.15s ease;
+}
+
+/* Hidden: nothing else about it matters */
+:is(.fz-el-styles, .fz-el-more)[data-hidden] {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.fz-el-group {
+  margin-top: 6px;
+  color: var(--fz-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* Every row on one grid: label | control | reset, so controls start and
+   end at the same place whether or not the row has a unit or a reset. */
+.fz-el-field {
+  display: grid;
+  grid-template-columns: 86px minmax(0, 1fr) 22px;
+  align-items: center;
+  column-gap: 8px;
+  min-height: 28px;
+
+  & > .fz-el-label {
+    grid-column: 1;
+  }
+
+  & > :not(.fz-el-label, .fz-el-reset) {
+    grid-column: 2;
+    min-width: 0;
+  }
+
+  & > .fz-el-reset {
+    grid-column: 3;
+  }
+
+  /* Changed: the label says so and Reset shows */
+  &[data-set] > .fz-el-label {
+    color: var(--fz-accent);
+    font-weight: 600;
+  }
+
+  &:not([data-set]) > .fz-el-reset {
+    visibility: hidden;
+  }
+}
+
+.fz-el-label {
+  color: var(--fz-muted);
+}
+
+.fz-el-reset {
+  width: 22px;
+  height: 22px;
+  background-image: url("icons/edit-undo.svg");
+  background-size: 12px;
+  opacity: 0.7;
+
+  &:hover {
+    opacity: 1;
+  }
+}
+
+.fz-el-color {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  & > input {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+/* The unit sits inside the field, at its end */
+.fz-el-number {
+  position: relative;
+  display: flex;
+
+  & > input {
+    flex: 1;
+    min-width: 0;
+    padding-inline-end: 28px !important;
+    text-align: start !important;
+  }
+
+  & > span {
+    position: absolute;
+    inset-inline-end: 9px;
+    top: 50%;
+    translate: 0 -50%;
+    color: var(--fz-muted);
+    font-size: 12px;
+    pointer-events: none;
+  }
+}
+
+/* Color swatches: the color over a checkerboard, a slash for none */
+.fz-el-swatch,
+.fz-el-chip {
+  appearance: none;
+  flex: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--fz-line);
+  border-radius: 50%;
+  background:
+    linear-gradient(var(--swatch, transparent), var(--swatch, transparent)),
+    repeating-conic-gradient(rgb(128 128 128 / 0.35) 0 25%, transparent 0 50%) 0 0 / 8px 8px;
+  cursor: pointer;
+
+  &[data-none] {
+    background: linear-gradient(135deg, transparent 46%, var(--fz-danger, #c50042) 46% 54%, transparent 54%);
+  }
+
+  &:hover {
+    border-color: var(--fz-muted);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--fz-accent);
+    outline-offset: 1px;
+  }
+}
+
+.fz-el-swatch {
+  width: 28px;
+  height: 28px;
+}
+
+.fz-el-palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px;
+  margin-inline-start: 0;
+  border-radius: 8px;
+  background: var(--fz-surface);
+
+  &[hidden] {
+    display: none;
+  }
+}
+
+.fz-el-chip {
+  width: 20px;
+  height: 20px;
+}
+
+.fz-el-palette {
+  flex-direction: column;
+  gap: 10px;
+}
+
+.fz-el-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.fz-el-swatch[data-open] {
+  outline: 2px solid var(--fz-accent);
+  outline-offset: 1px;
+}
+
+/* ---- color picker ---- */
+
+.fz-cp {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fz-cp-sv {
+  position: relative;
+  height: 120px;
+  border-radius: 6px;
+  background:
+    linear-gradient(to top, black, transparent),
+    linear-gradient(to right, white, var(--hue, red));
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.fz-cp-thumb {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  box-sizing: border-box;
+  border: 2px solid white;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.4), 0 1px 3px rgb(0 0 0 / 0.4);
+  translate: -50% -50%;
+  pointer-events: none;
+}
+
+.fz-cp-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fz-cp-preview {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--fz-line);
+  border-radius: 50%;
+  background:
+    linear-gradient(var(--swatch, transparent), var(--swatch, transparent)),
+    repeating-conic-gradient(rgb(128 128 128 / 0.35) 0 25%, transparent 0 50%) 0 0 / 8px 8px;
+}
+
+.fz-cp-bars {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fz-cp-bar {
+  position: relative;
+  height: 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  touch-action: none;
+
+  & > .fz-cp-thumb {
+    top: 50%;
+  }
+}
+
+.fz-cp-hue {
+  background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+}
+
+.fz-cp-alpha {
+  background: repeating-conic-gradient(rgb(128 128 128 / 0.4) 0 25%, transparent 0 50%) 0 0 / 8px 8px;
+}
+
+.fz-cp-alpha-fill {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.fz-cp-sv,
+.fz-cp-bar {
+  &:focus-visible {
+    outline: 2px solid var(--fz-accent);
+    outline-offset: 2px;
+  }
+}
+
+/* (details doesn't lay its content out as flex: margins instead of gap) */
+.fz-el-more > :not(summary) {
+  margin-top: 8px;
+}
+
+.fz-el-more > .fz-el-label {
+  display: block;
+}
+
+/* Text and HTML: stacked, full width */
+.fz-el-more > :is(select, textarea) {
+  width: 100%;
+}
+
+.fz-el-more > select {
+  margin-top: 6px !important;
+}
+
+/* ---- Touché mode: the page's frame while Pick or Zap is on ---- */
+
+@property --fz-touch-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.browserStack:has(> .fz-touch-mode) {
+  position: relative;
+}
+
+.fz-touch-mode {
+  --fz-touch-a: var(--fz-accent);
+  --fz-touch-b: #a855f7;
+  --fz-touch-c: #3b82f6;
+  --fz-touch-d: #22d3ee;
+
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  animation: fz-touch-in 0.3s ease-out;
+
+  &[data-mode="zap"] {
+    --fz-touch-a: #ef4444;
+    --fz-touch-b: #f97316;
+    --fz-touch-c: #ec4899;
+    --fz-touch-d: #eab308;
+  }
+}
+
+/* A spinning gradient ring: the gradient fills the box, the mask keeps
+   only its padding */
+.fz-touch-frame {
+  position: absolute;
+  inset: 0;
+  padding: 3px;
+  border-radius: var(--border-radius-medium, 8px);
+  background: conic-gradient(
+    from var(--fz-touch-angle),
+    var(--fz-touch-a),
+    var(--fz-touch-b),
+    var(--fz-touch-c),
+    var(--fz-touch-d),
+    var(--fz-touch-a)
+  );
+  mask:
+    linear-gradient(#000 0 0) content-box exclude,
+    linear-gradient(#000 0 0);
+  animation: fz-touch-spin 3s linear infinite;
+}
+
+/* A soft glow inside the ring (outside the mask, which would cut it) */
+.fz-touch-mode::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--border-radius-medium, 8px);
+  box-shadow: inset 0 0 24px color-mix(in srgb, var(--fz-touch-a) 45%, transparent);
+}
+
+.fz-touch-badge {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  translate: -50% 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px 4px 9px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--fz-touch-a), var(--fz-touch-b));
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.3);
+  color: white;
+  font: 600 12px/1.4 system-ui, sans-serif;
+  white-space: nowrap;
+}
+
+.fz-touch-badge-icon {
+  width: 14px;
+  height: 14px;
+  background: url("icons/touches-filled.svg") center / contain no-repeat;
+  -moz-context-properties: fill;
+  fill: white;
+}
+
+@keyframes fz-touch-spin {
+  to {
+    --fz-touch-angle: 360deg;
+  }
+}
+
+@keyframes fz-touch-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fz-touch-mode,
+  .fz-touch-frame {
+    animation: none;
+  }
+}
+
+/* ---- context menu ---- */
+
+#fz-touches-context {
+  list-style-image: url("icons/touches.svg");
+}
