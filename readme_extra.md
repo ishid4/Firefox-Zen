@@ -45,7 +45,7 @@ Then open `about:support`, click **Clear startup cache…**, and restart.
 | `firefox-zen.window-border.width` | 6 | The window border's width in pixels (1-24) |
 | `firefox-zen.spaces` | false | Zen-style Spaces (see below) |
 | `firefox-zen.tab-sections` | true | Folders (and tabs you drag there) above a line, New Tab and new tabs below it; hover the sidebar for **Clear** (see below) |
-| `firefox-zen.show-customize-button` | true | Firefox's "Customize sidebar" gear in the sidebar tools (toggle it under Customize Sidebar → Tools) |
+| `firefox-zen.hide-sidebar-tools` | false | Hide Firefox's tools row at the bottom of the sidebar (Customize sidebar stays in the sidebar's right-click menu) |
 | `firefox-zen.sidebar-urlbar` | false | Toolbar + address bar at the top of the sidebar. With "Expand sidebar on hover" it stays there and shows when the sidebar expands; otherwise it goes back to the top while the sidebar is collapsed. Also back on top while customizing the toolbar |
 | `firefox-zen.floating-urlbar` | true | Open the address bar centered, like a command bar |
 | `firefox-zen.urlbar-newtab` | true | No New Tab page, like Arc/Zen: Ctrl+T and the + buttons open the address bar (floating, if that's on) and what you pick opens in a new tab. Esc or clicking away cancels without creating a tab. Shift+click (new window), middle-click paste and the tab Spaces needs for an empty space still make a real tab |

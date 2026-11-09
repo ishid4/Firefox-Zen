@@ -267,12 +267,12 @@
           ],
         },
         {
-          pref: "show-customize-button",
-          default: true,
-          label: "Customize sidebar button",
-          description: "Firefox's gear in the sidebar tools.",
-          preview: "gear",
-          tips: ["Turned off, Customize sidebar is still in the sidebar's right-click menu."],
+          pref: "hide-sidebar-tools",
+          default: false,
+          label: "Hide sidebar tools",
+          description: "Hide Firefox's row of tool buttons at the bottom of the sidebar.",
+          preview: "tools",
+          tips: ["Customize sidebar is still in the sidebar's right-click menu."],
         },
       ],
     },
@@ -726,7 +726,7 @@
       case "border":
         mock.append(h("div", { class: "fz-mock-page" }));
         break;
-      case "gear":
+      case "tools":
         mock.append(
           h(
             "div",
@@ -736,7 +736,7 @@
               { class: "fz-mock-side fz-mock-tools-side" },
               h("span"),
               h("span"),
-              h("div", { class: "fz-mock-tools" }, h("i"), h("i"), h("i", { class: "fz-mock-gear" }))
+              h("div", { class: "fz-mock-tools" }, h("i"), h("i"), h("i"))
             ),
             h("div", { class: "fz-mock-page" })
           )
