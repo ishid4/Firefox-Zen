@@ -225,6 +225,10 @@
     if (!panel) {
       return;
     }
+    if (state.view === "preview") {
+      renderPreview();
+      return;
+    }
     const t = state.id ? FzTouches.get(state.id) : null;
     if (state.view === "element" && t && FzTouches.getEdit(t.id, state.editId)) {
       renderElement(t, FzTouches.getEdit(t.id, state.editId));
@@ -288,7 +292,8 @@
         "div",
         { class: "fz-touches-head" },
         h("span", { class: "fz-touches-title", text: "Touches" }),
-        h("span", { class: "fz-touches-host", text: host(uri) })
+        h("span", { class: "fz-touches-host", text: host(uri) }),
+        menuButton("More", listMenu)
       ),
       rows.length
         ? h("ul", { class: "fz-touches-list" }, ...rows)
@@ -383,7 +388,8 @@
           "aria-label": "On",
           checked: t.enabled,
           onchange: e => FzTouches.setEnabled(t.id, e.target.checked),
-        })
+        }),
+        menuButton("Share or export", anchor => touchMenu(anchor, t))
       ),
       h("label", { class: "fz-touches-field" }, h("span", { text: "Applies to" }), scopeSelect),
       h(
@@ -1111,6 +1117,11 @@
 
   window.FzTouchesUI = {
     onPageMessage(browser, name, data) {
+      if (name === "try") {
+        // Try it on the store's touch page (FzTouchParent checked the page).
+        readShare(data?.data).then(shared => shared && tryShared(shared, { from: browser }));
+        return;
+      }
       if (!picking || browser !== picking.browser) {
         return;
       }
@@ -1139,6 +1150,657 @@
       }
     },
   };
+
+  // ---- sharing ----
+  //
+  // A share link is the store's touch page with the touch in its #fragment
+  // (never sent to the server): `${SHARE_PAGE}#1.<data>`, data being the
+  // touch's shareable JSON (FzTouches.exportable), deflated and base64url'd.
+  // The page shows what it is, and Try it (through the FzTouch actor) brings
+  // it here as a preview. Copied links can be pasted from the panel too.
+  //
+  // Anything that comes in (link, file) is cleaned (cleanCSS, cleanHTML on
+  // top of FzTouches.fromShared): nothing in it loads from another site.
+
+  const { FzStore } = ChromeUtils.importESModule("chrome://userscripts/content/firefox-zen-store.sys.mjs");
+  const { matchesScope } = ChromeUtils.importESModule("chrome://userscripts/content/FzTouch/FzTouchScope.sys.mjs");
+  const SHARE_PAGE = `${FzStore.STORE_URL}touch/`;
+  const MAX_SHARE_CHARS = 600000;
+  const MAX_SHARE_BYTES = 2 * 1024 * 1024;
+
+  function toBase64Url(bytes) {
+    let bin = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) {
+      bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    }
+    return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+
+  const fromBase64Url = str => Uint8Array.from(atob(str.replace(/-/g, "+").replace(/_/g, "/")), c => c.charCodeAt(0));
+
+  async function shareLink(t) {
+    const json = JSON.stringify(FzTouches.exportable(t));
+    const stream = new Blob([json]).stream().pipeThrough(new CompressionStream("deflate-raw"));
+    const bytes = new Uint8Array(await new Response(stream).arrayBuffer());
+    return `${SHARE_PAGE}#1.${toBase64Url(bytes)}`;
+  }
+
+  // The shared data in a link (or its "#1.…" part, or that alone), or null.
+  async function readShare(textIn) {
+    const m = /(?:#|^)1\.([A-Za-z0-9_-]{8,})/.exec(String(textIn ?? "").trim());
+    if (!m || m[1].length > MAX_SHARE_CHARS) {
+      return null;
+    }
+    try {
+      const reader = new Blob([fromBase64Url(m[1])]).stream().pipeThrough(new DecompressionStream("deflate-raw")).getReader();
+      const chunks = [];
+      let size = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) {
+          break;
+        }
+        size += value.length;
+        if (size > MAX_SHARE_BYTES) {
+          reader.cancel();
+          return null;
+        }
+        chunks.push(value);
+      }
+      return JSON.parse(await new Blob(chunks).text());
+    } catch {
+      return null;
+    }
+  }
+
+  // ---- cleaning what comes in ----
+
+  // Values that can make the page load something.
+  const LOADERS = /image-set\(|cross-fade\(|\bsrc\(|\bimage\(|element\(/i;
+
+  function loadsRemote(prop, value) {
+    for (const m of value.matchAll(/url\(\s*(["']?)(.*?)\1\s*\)/gi)) {
+      if (!/^data:/i.test(m[2].trim())) {
+        return true;
+      }
+    }
+    // A custom property keeps its value as written, CSS escapes and all: it
+    // could spell url( so that only var() reads it. Any escape, url or
+    // address in one goes.
+    return LOADERS.test(value) || (prop.startsWith("--") && /\\|url|\/\//i.test(value));
+  }
+
+  // The CSS as Firefox reads it, without what would load from elsewhere.
+  // Parsing resolves CSS escapes (\75 rl( is url(); @import is dropped by
+  // replaceSync.
+  function cleanCSS(css, removed) {
+    if (!css.trim()) {
+      return css;
+    }
+    const sheet = new CSSStyleSheet();
+    try {
+      sheet.replaceSync(css);
+    } catch {
+      removed.count++;
+      return "";
+    }
+    const walk = rules => {
+      for (const rule of rules) {
+        if (rule.style) {
+          for (const prop of [...rule.style]) {
+            if (loadsRemote(prop, rule.style.getPropertyValue(prop))) {
+              rule.style.removeProperty(prop);
+              removed.count++;
+            }
+          }
+        }
+        if (rule.cssRules) {
+          walk(rule.cssRules);
+        }
+      }
+    };
+    walk(sheet.cssRules);
+    return [...sheet.cssRules].map(r => r.cssText).join("\n");
+  }
+
+  // Attributes that load something.
+  const LOADING_ATTRS = new Set(["src", "srcset", "poster", "background", "data", "lowsrc", "dynsrc", "ping", "action", "formaction"]);
+
+  // The HTML as Firefox parses it (entities resolved), without what would
+  // load from elsewhere. The page side cleans it again when adding it.
+  function cleanHTML(html, removed) {
+    const doc = new DOMParser().parseFromString(`<body>${html}`, "text/html");
+    for (const el of doc.body.querySelectorAll("*")) {
+      for (const { name, value } of [...el.attributes]) {
+        const n = name.toLowerCase();
+        if ((LOADING_ATTRS.has(n) && !/^data:/i.test(value.trim())) || (n === "style" && (loadsRemote("style", value) || value.includes("\\")))) {
+          el.removeAttribute(name);
+          removed.count++;
+        }
+      }
+    }
+    return doc.body.innerHTML;
+  }
+
+  const fromShared = (data, kind) => FzTouches.fromShared(data, kind, { css: cleanCSS, html: cleanHTML });
+
+  // The page a touch is for (where Try it goes).
+  function siteOf(scope) {
+    return scope.type === "prefix" ? scope.value : `https://${scope.value}/`;
+  }
+
+  const plural = (n, word) => `${n} ${word}${n === 1 ? "" : word.endsWith("ch") ? "es" : "s"}`;
+
+  // ---- preview: a shared touch on one tab, not saved ----
+
+  // browser -> { fields, removed, on, notification }
+  const previews = new Map();
+  const PREVIEW_ID = "fz-touch-preview";
+
+  function sendPreview(browser) {
+    const p = previews.get(browser);
+    if (p) {
+      actorFor(browser)?.sendAsyncMessage(p.on ? "preview" : "endPreview", { touch: FzTouches.pageForm({ id: "preview", ...p.fields }) });
+    }
+  }
+
+  function endPreview(browser) {
+    const p = previews.get(browser);
+    if (!p) {
+      return;
+    }
+    previews.delete(browser);
+    actorFor(browser)?.sendAsyncMessage("endPreview");
+    p.notification?.close();
+    if (state.view === "preview" && state.browser === browser && isOpen()) {
+      panel.hidePopup();
+    }
+  }
+
+  function keepPreview(browser) {
+    const p = previews.get(browser);
+    if (!p) {
+      return;
+    }
+    const t = FzTouches.create(null, { ...p.fields, enabled: true });
+    endPreview(browser);
+    if (browser === gBrowser.selectedBrowser && t) {
+      state = { view: "touch", id: t.id };
+      openPanel();
+    }
+  }
+
+  function startPreview(browser, fields, removed) {
+    endPreview(browser);
+    const p = { fields, removed, on: true, notification: null, bar: false };
+    previews.set(browser, p);
+    sendPreview(browser);
+    // A new tab gets its bar once it's on the touch's page (onLocationChange):
+    // before, the navigation would sweep it away.
+    if (browser.currentURI.spec !== "about:blank") {
+      showPreviewBar(browser, p);
+    }
+  }
+
+  async function showPreviewBar(browser, p) {
+    p.bar = true;
+    const { fields, removed } = p;
+    const box = gBrowser.getNotificationBox(browser);
+    const by = fields.source?.author ? ` by ${fields.source.author}` : "";
+    const label =
+      `Trying “${fields.name}”${by}, a shared touch (${FzTouches.scopeLabel(fields.scope).replace(/^./, c => c.toLowerCase())}), on this tab only.` +
+      (removed ? ` ${plural(removed, "outside load")} removed from it.` : "");
+    const notification = await box.appendNotification(
+      PREVIEW_ID,
+      {
+        label,
+        priority: box.PRIORITY_INFO_HIGH,
+        eventCallback: event => {
+          if (event === "removed" && previews.get(browser) === p) {
+            p.notification = null;
+            endPreview(browser);
+          }
+        },
+      },
+      [
+        { label: "Keep it", accessKey: "K", callback: () => keepPreview(browser) },
+        {
+          label: "Before / after",
+          accessKey: "B",
+          callback: () => {
+            p.on = !p.on;
+            sendPreview(browser);
+            return true;
+          },
+        },
+        {
+          label: "Show what it does",
+          accessKey: "S",
+          callback: () => {
+            state = { view: "preview", browser };
+            openPanel();
+            return true;
+          },
+        },
+        { label: "Discard", accessKey: "D", callback: () => {} },
+      ]
+    );
+    if (previews.get(browser) === p) {
+      // Firefox drops a tab's notifications when it navigates; this one
+      // stays while the tab stays on the touch's pages (onLocationChange
+      // ends it otherwise), including the page a new tab is opening.
+      if (notification) {
+        notification.persistence = Number.MAX_SAFE_INTEGER;
+      }
+      p.notification = notification;
+    } else {
+      notification?.close();
+    }
+  }
+
+  // A shared touch to try: here if it's for this page, else in a new tab on
+  // its site.
+  async function tryShared(data, { from = gBrowser.selectedBrowser } = {}) {
+    const result = fromShared(data, "link");
+    if (!result) {
+      return false;
+    }
+    const { fields, removed } = result;
+    let browser = from;
+    if (!matchesScope(fields.scope, from.currentURI.spec)) {
+      const tab = gBrowser.addTab(siteOf(fields.scope), {
+        triggeringPrincipal: Services.scriptSecurityManager.createNullPrincipal({}),
+        relatedToCurrent: true,
+        ownerTab: gBrowser.getTabForBrowser(from),
+      });
+      gBrowser.selectedTab = tab;
+      browser = tab.linkedBrowser;
+    }
+    startPreview(browser, fields, removed);
+    return true;
+  }
+
+  // The panel's view of a preview: what it changes, Keep / Discard.
+  function renderPreview() {
+    const p = previews.get(state.browser);
+    if (!p) {
+      state = { view: "list" };
+      renderList();
+      return;
+    }
+    const { fields, removed } = p;
+    const edits = fields.edits.map(e =>
+      h(
+        "li",
+        { class: "fz-edit" },
+        h("div", { class: "fz-touch-main" }, h("span", { class: "fz-edit-sel", text: e.sel }), h("span", { class: "fz-touch-scope", text: FzTouches.editSummary(e) }))
+      )
+    );
+    const css = h("textarea", { class: "fz-touches-css", readonly: true, spellcheck: "false", wrap: "off", "aria-label": "CSS" });
+    css.value = fields.css.trim() || "/* No CSS of its own */";
+    body().replaceChildren(
+      h(
+        "div",
+        { class: "fz-touches-head" },
+        h("span", { class: "fz-touches-title", text: fields.name }),
+        h("span", { class: "fz-touches-host", text: fields.source?.author ? `by ${fields.source.author}` : "Shared touch" })
+      ),
+      h("label", { class: "fz-touches-field" }, h("span", { text: "Applies to" }), h("span", { class: "fz-touches-value", text: FzTouches.scopeLabel(fields.scope) })),
+      ...(removed
+        ? [h("p", { class: "fz-touches-note", text: `${plural(removed, "outside load")} removed: images or fonts from other sites, which could also tell them what you do on the page.` })]
+        : []),
+      h("div", { class: "fz-touches-section" }, h("span", { text: "Elements" })),
+      edits.length ? h("ul", { class: "fz-touches-list fz-edits" }, ...edits) : h("p", { class: "fz-touches-hint", text: "None." }),
+      h("div", { class: "fz-touches-section" }, h("span", { text: "CSS" })),
+      css,
+      h(
+        "div",
+        { class: "fz-touches-foot" },
+        h("button", { class: "fz-touches-btn fz-touches-danger", text: "Discard", onclick: () => endPreview(state.browser) }),
+        h("button", { class: "fz-touches-btn fz-touches-primary", text: "Keep it", onclick: () => keepPreview(state.browser) })
+      )
+    );
+  }
+
+  // ---- files, clipboard, menus ----
+
+  function pickFile(mode, title, { defaultName } = {}) {
+    const fp = Cc["@mozilla.org/filepicker;1"].createInstance(Ci.nsIFilePicker);
+    fp.init(window.browsingContext, title, mode);
+    fp.appendFilter("Touches", "*.json");
+    fp.appendFilters(Ci.nsIFilePicker.filterAll);
+    if (defaultName) {
+      fp.defaultString = defaultName;
+      fp.defaultExtension = "json";
+    }
+    return new Promise(resolve => fp.open(rv => resolve(rv === Ci.nsIFilePicker.returnCancel ? null : fp.file.path)));
+  }
+
+  const fileName = name => `${name.replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "-").toLowerCase() || "touch"}.touch.json`;
+
+  async function exportTouches(list) {
+    if (!list.length) {
+      return "No touches to export.";
+    }
+    const path = await pickFile(Ci.nsIFilePicker.modeSave, list.length === 1 ? `Export “${list[0].name}”` : "Export touches", {
+      defaultName: list.length === 1 ? fileName(list[0].name) : "touches.json",
+    });
+    if (!path) {
+      return null;
+    }
+    const data =
+      list.length === 1
+        ? FzTouches.exportable(list[0])
+        : { format: "firefox-zen-touches", version: 1, touches: list.map(t => FzTouches.exportable(t)) };
+    await IOUtils.writeUTF8(path, JSON.stringify(data, null, 2));
+    return `Exported ${plural(list.length, "touch")}.`;
+  }
+
+  async function importFile() {
+    const path = await pickFile(Ci.nsIFilePicker.modeOpen, "Import touches");
+    if (!path) {
+      return null;
+    }
+    let data;
+    try {
+      data = JSON.parse(await IOUtils.readUTF8(path));
+    } catch {
+      return "That file isn't a touch.";
+    }
+    const items = Array.isArray(data?.touches) ? data.touches : Array.isArray(data) ? data : [data];
+    let added = 0;
+    let removed = 0;
+    for (const item of items.slice(0, 500)) {
+      const r = fromShared(item, "file");
+      if (r) {
+        FzTouches.create(null, r.fields);
+        added++;
+        removed += r.removed;
+      }
+    }
+    if (!added) {
+      return "No touches in that file.";
+    }
+    return `Imported ${plural(added, "touch")}.${removed ? ` ${plural(removed, "outside load")} removed.` : ""}`;
+  }
+
+  async function copyLink(t) {
+    const link = await shareLink(t);
+    Cc["@mozilla.org/widget/clipboardhelper;1"].getService(Ci.nsIClipboardHelper).copyString(link);
+    return link.length > 8000 ? "Link copied. It's long: some apps cut links that long, a file is safer." : "Link copied.";
+  }
+
+  async function pasteLink() {
+    let textIn = "";
+    try {
+      textIn = await navigator.clipboard.readText();
+    } catch {}
+    const data = await readShare(textIn);
+    if (!data || !(await tryShared(data))) {
+      return "No touch link on the clipboard. Copy one first.";
+    }
+    return null;
+  }
+
+  // A small menu (XUL, so it can leave the panel's bounds).
+  function showMenu(anchor, items) {
+    let menu = document.getElementById("fz-touches-menu");
+    if (!menu) {
+      menu = document.createXULElement("menupopup");
+      menu.id = "fz-touches-menu";
+      document.getElementById("mainPopupSet").append(menu);
+    }
+    menu.replaceChildren(
+      ...items.filter(Boolean).map(item => {
+        if (item === "-") {
+          return document.createXULElement("menuseparator");
+        }
+        const mi = document.createXULElement("menuitem");
+        mi.setAttribute("label", item.label);
+        mi.addEventListener("command", () => item.run());
+        return mi;
+      })
+    );
+    menu.openPopup(anchor, "after_end");
+  }
+
+  // A line in the panel saying how an action went.
+  function flash(message) {
+    if (!message || !isOpen()) {
+      return;
+    }
+    let note = body().querySelector(".fz-touches-flash");
+    if (!note) {
+      note = h("p", { class: "fz-touches-flash", role: "status" });
+      body().querySelector(".fz-touches-head")?.after(note);
+    }
+    note.textContent = message;
+    clearTimeout(note.fzTimer);
+    note.fzTimer = setTimeout(() => note.remove(), 5000);
+  }
+
+  async function runFlash(action) {
+    try {
+      flash(await action());
+    } catch (e) {
+      console.error("Firefox-Zen Touches:", e);
+      flash(`That didn't work: ${e.message || e}`);
+    }
+  }
+
+  function listMenu(anchor) {
+    showMenu(anchor, [
+      { label: "Try a copied link", run: () => runFlash(pasteLink) },
+      { label: "Import from a file…", run: () => runFlash(importFile) },
+      "-",
+      {
+        label: "All touches…",
+        run: () => {
+          panel.hidePopup();
+          window.FirefoxZenLibrary?.open("touches");
+        },
+      },
+    ]);
+  }
+
+  function touchMenu(anchor, t) {
+    showMenu(anchor, [
+      { label: "Copy share link", run: () => runFlash(() => copyLink(FzTouches.get(t.id) ?? t)) },
+      { label: "Export to a file…", run: () => runFlash(() => exportTouches([FzTouches.get(t.id) ?? t])) },
+    ]);
+  }
+
+  const menuButton = (label, open) =>
+    h("button", {
+      class: "fz-touches-icon fz-touches-more-btn",
+      title: label,
+      "aria-label": label,
+      "aria-haspopup": "menu",
+      onclick: e => open(e.currentTarget),
+    });
+
+  // ---- the Library's Touches view ----
+
+  let libraryView = null;
+  let librarySearch = null;
+
+  function siteKey(scope) {
+    try {
+      return scope.type === "prefix" ? new URL(scope.value).hostname.replace(/^www\./, "") : scope.value;
+    } catch {
+      return scope.value;
+    }
+  }
+
+  function librarySummary(t) {
+    const n = t.edits.filter(e => !FzTouches.editIsEmpty(e)).length;
+    const parts = [n ? plural(n, "element") : null, t.css.trim() ? "CSS" : null].filter(Boolean);
+    return parts.length ? parts.join(" · ") : "Empty";
+  }
+
+  function libraryStatus(message) {
+    const status = libraryView?.querySelector(".fz-status");
+    if (status && message) {
+      status.textContent = message;
+      status.removeAttribute("data-empty");
+    }
+  }
+
+  async function libraryRun(action) {
+    try {
+      libraryStatus(await action());
+    } catch (e) {
+      libraryStatus(`That didn't work: ${e.message || e}`);
+    }
+  }
+
+  function libraryRow(t) {
+    const site = siteKey(t.scope);
+    const action = (text, fn) =>
+      h("button", {
+        type: "button",
+        class: "fz-option-reset",
+        text,
+        onclick: e => {
+          e.preventDefault();
+          libraryRun(fn);
+        },
+      });
+    return h(
+      "div",
+      { class: "fz-setting fz-touch-row", "data-on": t.enabled || null },
+      h(
+        "div",
+        { class: "fz-setting-main" },
+        h("div", { class: "fz-mock fz-touch-site", "aria-hidden": "true" }, h("img", { src: `page-icon:https://${site}/`, alt: "", onerror: e => (e.target.hidden = true) }), h("span", { text: site[0] ?? "?" })),
+        h(
+          "div",
+          { class: "fz-setting-body" },
+          h(
+            "span",
+            { class: "fz-setting-head" },
+            h("span", { class: "fz-setting-title", text: t.name }),
+            t.source?.kind !== "local" && h("span", { class: "fz-badge", text: t.source.kind === "link" ? "Shared" : "Imported" }),
+            t.source?.author && h("span", { class: "fz-hint", text: `by ${t.source.author}` })
+          ),
+          h("p", { class: "fz-setting-desc", text: `${FzTouches.scopeLabel(t.scope)} · ${librarySummary(t)}` }),
+          h(
+            "span",
+            { class: "fz-mod-actions" },
+            action("Open site", () => {
+              window.FirefoxZenLibrary?.close();
+              openWebLinkIn(siteOf(t.scope), "tab");
+              return null;
+            }),
+            action("Copy link", () => copyLink(t)),
+            action("Export…", () => exportTouches([t])),
+            action("Delete…", () => {
+              const p = Services.prompt;
+              const flags = p.BUTTON_POS_0 * p.BUTTON_TITLE_IS_STRING + p.BUTTON_POS_1 * p.BUTTON_TITLE_CANCEL + p.BUTTON_POS_1_DEFAULT;
+              if (p.confirmEx(window, `Delete “${t.name}”?`, "It can't be undone (export it first to keep a copy).", flags, "Delete", null, null, null, {}) !== 0) {
+                return null;
+              }
+              FzTouches.remove(t.id);
+              return `Deleted ${t.name}.`;
+            })
+          )
+        ),
+        h("input", {
+          type: "checkbox",
+          role: "switch",
+          class: "fz-switch",
+          "aria-label": `${t.name} on`,
+          checked: t.enabled,
+          onchange: e => FzTouches.setEnabled(t.id, e.target.checked),
+        })
+      )
+    );
+  }
+
+  function renderLibrary() {
+    const list = libraryView?.querySelector(".fz-touches-library");
+    if (!list) {
+      return;
+    }
+    const q = (librarySearch?.value ?? "").trim().toLowerCase();
+    const all = FzTouches.list().filter(t => !q || `${t.name} ${siteKey(t.scope)}`.toLowerCase().includes(q));
+    const bySite = new Map();
+    for (const t of all) {
+      const site = siteKey(t.scope);
+      bySite.set(site, [...(bySite.get(site) ?? []), t]);
+    }
+    const sites = [...bySite.keys()].sort((a, b) => a.localeCompare(b));
+    list.replaceChildren(
+      ...sites.map(site =>
+        h(
+          "section",
+          { class: "fz-category" },
+          h("h3", { class: "fz-category-title", text: site }),
+          h("div", { class: "fz-list" }, ...bySite.get(site).map(libraryRow))
+        )
+      )
+    );
+    libraryView.querySelector(".fz-touches-library-empty").hidden = FzTouches.list().length > 0;
+    libraryView.querySelector(".fz-no-results").hidden = !(FzTouches.list().length && !all.length);
+  }
+
+  function buildView() {
+    const button = (text, fn, title) => h("button", { type: "button", class: "fz-reset", text, title, onclick: () => libraryRun(fn) });
+    librarySearch = h("input", {
+      type: "search",
+      class: "fz-lib-search fz-settings-search",
+      placeholder: "Search touches",
+      "aria-label": "Search touches",
+      oninput: renderLibrary,
+      onkeydown: e => {
+        if (e.key === "Escape" && librarySearch.value) {
+          e.stopPropagation();
+          librarySearch.value = "";
+          renderLibrary();
+        }
+      },
+    });
+    libraryView = h(
+      "div",
+      { class: "fz-settings-view fz-touches-view" },
+      h("header", { class: "fz-header" }, h("h2", { text: "Touches" }), h("span", { class: "fz-subtitle", text: "Your restyles of websites, by site" }), librarySearch),
+      h(
+        "div",
+        { class: "fz-mods-toolbar" },
+        button("Import…", importFile, "Touches exported to a file"),
+        button("Try a copied link", async () => {
+          const message = await pasteLink();
+          if (!message) {
+            window.FirefoxZenLibrary?.close();
+          }
+          return message;
+        }),
+        button("Export all…", () => exportTouches(FzTouches.list()))
+      ),
+      h("div", { class: "fz-touches-library" }),
+      h(
+        "p",
+        { class: "fz-touches-library-empty fz-hint", hidden: true },
+        "No touches yet. On a website, click the sparkle button in the address bar (or right-click something → Touch up this element…)."
+      ),
+      h("p", { class: "fz-no-results fz-hint", text: "No touches match.", hidden: true }),
+      h(
+        "footer",
+        { class: "fz-footer" },
+        h(
+          "div",
+          { class: "fz-footer-text" },
+          h("span", { class: "fz-hint", text: "Kept in chrome/.firefox-zen/touches.json. Shared and imported touches never load anything from other sites." }),
+          h("span", { class: "fz-hint fz-status", role: "status", "data-empty": true })
+        )
+      )
+    );
+    Promise.resolve().then(renderLibrary);
+    FzTouches.ready.then(renderLibrary);
+    return libraryView;
+  }
+
+  window.FirefoxZenTouches = { buildView };
 
   // ---- context menu ----
 
@@ -1198,6 +1860,9 @@
   const observer = {
     observe() {
       updateButton();
+      if (libraryView?.isConnected) {
+        renderLibrary();
+      }
       // Lists follow changes (from here or other windows); the element view
       // keeps its fields (they'd lose the caret), unless its edit is gone.
       if (!isOpen()) {
@@ -1219,6 +1884,23 @@
     onLocationChange(browser, webProgress, request, location, flags) {
       if (!webProgress?.isTopLevel) {
         return;
+      }
+      const preview = previews.get(browser);
+      // (A new tab says about:blank before its page: that isn't leaving.)
+      if (preview && location.spec !== "about:blank") {
+        if (!matchesScope(preview.fields.scope, location.spec)) {
+          endPreview(browser);
+        } else {
+          if (!(flags & SAME_DOCUMENT)) {
+            // The new page's actor is there once its location is.
+            setTimeout(() => sendPreview(browser), 0);
+          }
+          if (!preview.bar) {
+            preview.bar = true;
+            // After Firefox has swept this navigation's notifications.
+            setTimeout(() => previews.get(browser) === preview && showPreviewBar(browser, preview), 0);
+          }
+        }
       }
       if (flags & SAME_DOCUMENT) {
         actorFor(browser)?.sendAsyncMessage("recheck");
@@ -1244,6 +1926,8 @@
     panel?.hidePopup();
   };
   gBrowser.tabContainer.addEventListener("TabSelect", onTabSelect);
+  const onTabClose = e => previews.delete(e.target.linkedBrowser);
+  gBrowser.tabContainer.addEventListener("TabClose", onTabClose);
 
   FzTouches.ready.then(updateButton);
   updateButton();
@@ -1253,6 +1937,11 @@
     () => {
       flushTyping();
       delete window.FzTouchesUI;
+      delete window.FirefoxZenTouches;
+      for (const browser of [...previews.keys()]) {
+        endPreview(browser);
+      }
+      gBrowser.tabContainer.removeEventListener("TabClose", onTabClose);
       Services.obs.removeObserver(observer, FzTouches.CHANGED_TOPIC);
       contextMenu?.removeEventListener("popupshowing", onContextShowing);
       gBrowser.removeTabsProgressListener(tabsListener);

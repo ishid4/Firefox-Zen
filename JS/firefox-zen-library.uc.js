@@ -59,7 +59,7 @@
 
   let root = null;
   let main = null;
-  const VIEWS = ["spaces", "history", "downloads", "mods", "settings", "about"];
+  const VIEWS = ["spaces", "history", "downloads", "touches", "mods", "settings", "about"];
   let view = Services.prefs.getStringPref(VIEW_PREF, "spaces");
   let filterText = "";
   let renderQueued = false;
@@ -178,7 +178,7 @@
 
   const holdsSidebar = name => name !== "settings";
   // Detours: the footer button opens the last of the other views.
-  const isDetour = name => name === "mods" || name === "settings" || name === "about";
+  const isDetour = name => name === "touches" || name === "mods" || name === "settings" || name === "about";
 
   function holdSidebar() {
     if (sidebarHeld) {
@@ -332,7 +332,7 @@
 
   function setView(name, { render = true } = {}) {
     view = VIEWS.includes(name) ? name : "spaces";
-    // Mods, Settings and About are detours: the footer button opens the last content view.
+    // Touches, Mods, Settings and About are detours: the footer button opens the last content view.
     if (!isDetour(view)) {
       Services.prefs.setStringPref(VIEW_PREF, view);
     }
@@ -385,6 +385,7 @@
         nav("history", "History"),
         nav("downloads", "Downloads"),
         h("div", { class: "fz-lib-rail-spacer" }),
+        window.FirefoxZenTouches && nav("touches", "Touches"),
         window.FirefoxZenMods && nav("mods", "Mods"),
         window.FirefoxZenSettings && nav("settings", "Settings"),
         window.FirefoxZenAbout && nav("about", "About"),
@@ -434,6 +435,8 @@
       main.replaceChildren(...buildDownloadsView());
       startDownloads();
       window.FirefoxZenDownloadCue?.seen();
+    } else if (view === "touches" && window.FirefoxZenTouches) {
+      main.replaceChildren(window.FirefoxZenTouches.buildView());
     } else if (view === "mods" && window.FirefoxZenMods) {
       main.replaceChildren(window.FirefoxZenMods.buildView());
     } else if (view === "settings" && window.FirefoxZenSettings) {

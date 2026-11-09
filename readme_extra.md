@@ -569,6 +569,32 @@ to see the page's touches.
 - They apply to the page itself, not to frames inside it.
 - Kept in `chrome/.firefox-zen/touches.json` (updates leave it alone).
   Settings → Touches turns them all off.
+- The Library's **Touches** tab lists every touch by site, with a switch each,
+  **Open site**, **Copy link**, **Export…** and **Delete…**, plus **Import…**,
+  **Try a copied link** and **Export all…**.
+
+#### Sharing touches
+
+- In a touch, **⋯ → Copy share link** (or the Library's **Copy link**). The
+  link opens the store's touch page
+  (`https://ishid4.github.io/Firefox-Zen-Mods/touch/#1.…`); the touch is in the
+  part after `#`, which browsers never send to the server.
+- The page shows what the touch changes and its CSS. In Firefox-Zen it has
+  **Try it**: the site opens in a new tab with the touch on, for that tab
+  only, and a bar: **Keep it**, **Before / after**, **Show what it does**,
+  **Discard**. The preview stays while the tab stays on the touch's pages.
+  Without Firefox-Zen, the page offers the touch as a file.
+- A copied link can be tried straight from the panel (**⋯ → Try a copied
+  link**) or the Library.
+- **Export…** saves a `.touch.json` file (Export all: one file with every
+  touch); **Import…** adds the touches in such a file.
+- A touch from a link or a file can't load anything from other sites: before
+  it's tried or added, `url(…)`, `@import`, `image-set()`, fonts and the like
+  in its CSS, and `src`/`style` loads in its HTML, are removed (Firefox's own
+  CSS and HTML parsers read it, so escapes don't get past). Otherwise a touch
+  could show you someone's images, or send them what you type
+  (`input[value^="a"] { background: url(…) }`). The bar says how many were
+  removed.
 
 ### Address bar in sidebar
 

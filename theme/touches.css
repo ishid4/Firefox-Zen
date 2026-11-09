@@ -870,3 +870,83 @@
 #fz-touches-context {
   list-style-image: url("icons/touches.svg");
 }
+
+/* ---- menus, notes ---- */
+
+.fz-touches-more-btn {
+  flex: none;
+  background-image: url("chrome://global/skin/icons/more.svg");
+}
+
+.fz-touches-head > .fz-switch {
+  flex: none;
+}
+
+/* How an action went (Link copied, Imported 2 touches) */
+.fz-touches-flash {
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--fz-accent) 16%, transparent);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.fz-touches-note {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--fz-attention, #d18b00) 18%, transparent);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.fz-touches-value {
+  color: var(--fz-text, CanvasText);
+}
+
+.fz-touches-css[readonly] {
+  color: var(--fz-muted) !important;
+}
+
+/* ---- the Library's Touches view ---- */
+
+.fz-lib-nav-touches {
+  --fz-lib-nav-icon: url("icons/touches.svg");
+}
+
+.fz-touches-library {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.fz-touch-site {
+  width: var(--fz-preview-width);
+  align-items: center;
+  justify-content: center;
+
+  & > img {
+    position: relative;
+    z-index: 1;
+    width: 28px;
+    height: 28px;
+  }
+
+  /* The site's initial, under its icon (shows when there's none) */
+  & > span {
+    position: absolute;
+    color: var(--fz-muted);
+    font-size: 22px;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+
+  & > img:not([hidden]) + span {
+    visibility: hidden;
+  }
+}
+
+.fz-touch-row:not([data-on]) .fz-setting-title {
+  color: var(--fz-muted);
+}

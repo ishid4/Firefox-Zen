@@ -206,8 +206,104 @@ function cleanTouch(t) {
     scope,
     edits,
     css: text(t.css, MAX_CSS),
+    source: cleanSource(t.source),
     created: Number.isFinite(t.created) ? t.created : now,
     updated: Number.isFinite(t.updated) ? t.updated : now,
+  };
+}
+
+// Where a touch came from: made here, a share link, a file.
+function cleanSource(source) {
+  const kind = ["link", "file"].includes(source?.kind) ? source.kind : "local";
+  return kind === "local" ? { kind } : { kind, author: text(source.author, MAX_NAME).trim() || null };
+}
+
+// ---- sharing ----
+//
+// A touch leaves as { format, version, name, author, scope, edits, css }
+// (share links, files). One that comes in is cleaned like any other, and
+// also loses everything that would load from another site: a touch made by
+// someone else could otherwise tell them what you do on the page (CSS like
+// input[value^="a"] { background: url(their-server/a) } sends what you
+// type, a letter at a time) or show you their images.
+
+export const SHARE_FORMAT = "firefox-zen-touch";
+const REMOTE_URL = /url\(\s*(['"]?)(?!data:|#)([^'")]*)\1\s*\)/gi;
+const CSS_IMPORT = /@import\b[^;]*;?/gi;
+const HTML_SRC = /\s(src|srcset|background|poster)\s*=\s*("(?!data:)[^"]*"|'(?!data:)[^']*'|(?!data:|["'])[^\s>]+)/gi;
+
+function stripRemote(textIn, removed) {
+  return textIn
+    .replace(CSS_IMPORT, () => {
+      removed.count++;
+      return "";
+    })
+    .replace(REMOTE_URL, () => {
+      removed.count++;
+      return 'url("data:,")';
+    });
+}
+
+// The shareable form of a touch.
+function exportable(t, author = null) {
+  return {
+    format: SHARE_FORMAT,
+    version: 1,
+    name: t.name,
+    author: author || undefined,
+    scope: t.scope,
+    edits: t.edits.map(({ id, ...e }) => e),
+    css: t.css,
+  };
+}
+
+// A touch from elsewhere (a link, a file), cleaned and with remote loads
+// removed: { fields, removed } (removed: how many loads went), or null if
+// it isn't one. The patterns here are a first pass; clean.css / clean.html
+// (the window's, which parse with Firefox's own parsers and so see through
+// CSS escapes and HTML entities) do the real work.
+function fromShared(data, kind = "link", clean = {}) {
+  if (data?.format !== SHARE_FORMAT || !cleanScope(data.scope)) {
+    return null;
+  }
+  const removed = { count: 0 };
+  const edits = (Array.isArray(data.edits) ? data.edits : []).slice(0, MAX_EDITS).map(e => {
+    const insert = e?.insert && typeof e.insert.html === "string"
+      ? {
+          ...e.insert,
+          html: (clean.html ?? (h => h))(
+            stripRemote(e.insert.html, removed).replace(HTML_SRC, () => {
+              removed.count++;
+              return "";
+            }),
+            removed
+          ),
+        }
+      : null;
+    return { ...e, insert, id: undefined };
+  });
+  const t = cleanTouch({
+    name: data.name,
+    scope: data.scope,
+    edits,
+    css: (clean.css ?? (c => c))(stripRemote(text(data.css, MAX_CSS), removed), removed),
+    enabled: true,
+    source: { kind, author: data.author },
+  });
+  if (!t) {
+    return null;
+  }
+  const { id, created, updated, ...fields } = t;
+  return { fields, removed: removed.count };
+}
+
+// What a touch puts on a page, as FzTouchChild takes it.
+function pageForm({ id, scope, css, edits }) {
+  return {
+    id,
+    scope,
+    css: [editCSS(edits), css].filter(s => s.trim()).join("\n"),
+    dom: edits.filter(e => e.text != null || e.insert).map(({ id: eid, sel, text: t, insert }) => ({ id: eid, sel, text: t, insert })),
   };
 }
 
@@ -258,14 +354,7 @@ Services.obs.addObserver(() => saveTimer && save(), "quit-application-granted");
 
 function publish() {
   const list = isOn()
-    ? [...touches.values()]
-        .filter(t => t.enabled && hasContent(t))
-        .map(({ id, scope, css, edits }) => ({
-          id,
-          scope,
-          css: [editCSS(edits), css].filter(s => s.trim()).join("\n"),
-          dom: edits.filter(e => e.text != null || e.insert).map(({ id: eid, sel, text: t, insert }) => ({ id: eid, sel, text: t, insert })),
-        }))
+    ? [...touches.values()].filter(t => t.enabled && hasContent(t)).map(pageForm)
     : [];
   Services.ppmm.sharedData.set(SHARED_KEY, list);
   // Without it, content processes only see the change when the parent is idle.
@@ -360,6 +449,12 @@ export const FzTouches = {
   },
 
   hasContent,
+  exportable,
+  fromShared,
+  // What a touch (or a preview's fields, with an id) puts on a page.
+  pageForm,
+  SHARE_FORMAT,
+  editCSS,
   scopesFor,
   scopeLabel,
   sameScope,
@@ -425,7 +520,7 @@ export const FzTouches = {
 
   // A new, empty touch for the page, on, covering its site.
   create(uri, fields = {}) {
-    const scope = cleanScope(fields.scope) ?? scopesFor(uri)[0];
+    const scope = cleanScope(fields.scope) ?? (uri ? scopesFor(uri)[0] : null);
     if (!scope) {
       throw new Error("Touches only work on websites");
     }
@@ -474,6 +569,8 @@ try {
         DOMContentLoaded: {},
         // The element "Touch up this element" is about.
         contextmenu: { capture: true, mozSystemGroup: true },
+        // Try it on the store's touch page (only acted on there).
+        "fz-touch-try": { wantUntrusted: true },
       },
     },
     matches: ["http://*/*", "https://*/*"],

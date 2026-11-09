@@ -13,9 +13,16 @@
 // - from the window: "recheck", "pick" { mode }, "stopPick",
 //   "highlight" { sel } (→ how many match; sel null hides it),
 //   "styles" { sel } (→ the first match's current colors, font, sizes),
-//   "contextTarget" (→ describe() of the element last right-clicked, or null)
+//   "contextTarget" (→ describe() of the element last right-clicked, or null),
+//   "preview" { touch } / "endPreview": a touch on this page only, not saved
+//   (a shared one being tried), on top of the others whatever its scope.
 // - to the window (through FzTouchParent): "picked" info, "zapped" { sel },
-//   "pickEnd" { mode, reason }.
+//   "pickEnd" { mode, reason }, "try" { data } (the store's touch page:
+//   Try it, see FzTouchParent).
+//
+// The store's touch page has <meta name="fz-touch-page">; on it (and only
+// there, FzTouchParent checks) <html> gets data-fz-touches, so the page can
+// offer Try it instead of explaining what Firefox-Zen is.
 
 import { SHARED_KEY, matchesScope } from "chrome://userscripts/content/FzTouch/FzTouchScope.sys.mjs";
 import { DomEdits } from "chrome://userscripts/content/FzTouch/FzTouchDOM.sys.mjs";
@@ -36,6 +43,8 @@ export class FzTouchChild extends JSWindowActorChild {
   #highlighter = null;
   // The element last right-clicked, for "Touch up this element".
   #contextTarget = null;
+  // A shared touch being tried here: { id, scope, css, dom }.
+  #preview = null;
 
   #onChange = event => {
     if (event.changedKeys.includes(SHARED_KEY)) {
@@ -56,6 +65,13 @@ export class FzTouchChild extends JSWindowActorChild {
     } else if (event.type === "DOMContentLoaded") {
       // DOM edits need the page's elements.
       this.#apply();
+      this.#markStorePage();
+    } else if (event.type === "fz-touch-try") {
+      // From a click on the store's touch page; the parent checks the page.
+      const data = typeof event.detail === "string" ? event.detail : null;
+      if (data && data.length < 600000 && this.document.hasValidTransientUserGestureActivation) {
+        this.#send("try", { data });
+      }
     }
   }
 
@@ -81,6 +97,14 @@ export class FzTouchChild extends JSWindowActorChild {
       }
       case "styles":
         return typeof data?.sel === "string" ? currentStyles(this.contentWindow, data.sel) : null;
+      case "preview":
+        this.#preview = data?.touch && typeof data.touch.css === "string" ? data.touch : null;
+        this.#apply();
+        return null;
+      case "endPreview":
+        this.#preview = null;
+        this.#apply();
+        return null;
       case "contextTarget": {
         const el = this.#contextTarget?.get();
         return el?.isConnected ? describe(this.contentWindow, el) : null;
@@ -97,6 +121,18 @@ export class FzTouchChild extends JSWindowActorChild {
     this.#dom?.destroy();
     this.#picker = null;
     this.#highlighter = null;
+  }
+
+  async #markStorePage() {
+    if (!this.document.querySelector('meta[name="fz-touch-page"]')) {
+      return;
+    }
+    try {
+      if (await this.sendQuery("isStorePage")) {
+        this.document.documentElement.setAttribute("data-fz-touches", "");
+        this.document.dispatchEvent(new this.contentWindow.Event("fz-touches-ready"));
+      }
+    } catch {}
   }
 
   #send(name, data) {
@@ -130,6 +166,9 @@ export class FzTouchChild extends JSWindowActorChild {
     }
     const list = Services.cpmm.sharedData.get(SHARED_KEY);
     const touches = (Array.isArray(list) ? list : []).filter(t => typeof t?.css === "string" && matchesScope(t.scope, href));
+    if (this.#preview) {
+      touches.push(this.#preview);
+    }
     this.#applySheets(
       utils,
       touches.filter(t => t.css.trim()).map(t => sheetURL(t.id, t.css))
