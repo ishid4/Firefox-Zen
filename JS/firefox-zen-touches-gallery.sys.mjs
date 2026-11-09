@@ -28,7 +28,7 @@ import { matchesScope } from "chrome://userscripts/content/FzTouch/FzTouchScope.
 
 // The GitHub App's client id (github.com → Settings → Developer settings →
 // GitHub Apps → the app). Empty: publishing and likes say they aren't set up.
-const CLIENT_ID = "";
+const CLIENT_ID = "Iv23lixMgd1zK2x2yMWN";
 
 const PREF_BRANCH = "firefox-zen.touches.";
 const pref = (name, fallback) => Services.prefs.getStringPref(PREF_BRANCH + name, fallback);

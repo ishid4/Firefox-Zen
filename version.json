@@ -1,8 +1,13 @@
 {
-  "version": "1.5.0",
+  "version": "1.6.0",
   "repository": "https://github.com/ishid4/Firefox-Zen",
   "branch": "main",
   "history": [
+    {
+      "version": "1.6.0",
+      "date": "2026-11-10",
+      "notes": "New: Touches, your own restyles of websites, from the sparkle button in the address bar. Pick an element to hide it or change its colors, font, size and corners, Zap clutter away, or write CSS; each site can have several touches, each with its own switch. Share one by link or file, or publish it to the gallery in one click: on a site, touches others published show up to try, keep and like. Shared touches can't load anything from other sites. All of them are in the Library's new Touches tab; Settings → Touches turns them off."
+    },
     {
       "version": "1.5.0",
       "date": "2026-11-09",
