@@ -207,15 +207,32 @@ function cleanTouch(t) {
     edits,
     css: text(t.css, MAX_CSS),
     source: cleanSource(t.source),
+    published: cleanPublished(t.published),
     created: Number.isFinite(t.created) ? t.created : now,
     updated: Number.isFinite(t.updated) ? t.updated : now,
   };
 }
 
-// Where a touch came from: made here, a share link, a file.
+// Where a touch came from: made here, a share link, a file, the gallery
+// (id: its issue; updated: the gallery's version it was added at).
 function cleanSource(source) {
-  const kind = ["link", "file"].includes(source?.kind) ? source.kind : "local";
-  return kind === "local" ? { kind } : { kind, author: text(source.author, MAX_NAME).trim() || null };
+  const kind = ["link", "file", "gallery"].includes(source?.kind) ? source.kind : "local";
+  if (kind === "local") {
+    return { kind };
+  }
+  const out = { kind, author: text(source.author, MAX_NAME).trim() || null };
+  if (kind === "gallery" && Number.isInteger(source.id)) {
+    out.id = source.id;
+    out.updated = text(source.updated, 40) || null;
+  }
+  return out;
+}
+
+// Published to the gallery from here: { id (its issue), url, at }.
+function cleanPublished(p) {
+  return Number.isInteger(p?.id) && typeof p.url === "string" && p.url.startsWith("https://")
+    ? { id: p.id, url: p.url.slice(0, 300), at: Number.isFinite(p.at) ? p.at : Date.now() }
+    : null;
 }
 
 // ---- sharing ----
@@ -288,12 +305,12 @@ function fromShared(data, kind = "link", clean = {}) {
     edits,
     css: (clean.css ?? (c => c))(stripRemote(text(data.css, MAX_CSS), removed), removed),
     enabled: true,
-    source: { kind, author: data.author },
+    source: { kind, author: data.author, id: data.id, updated: data.updated },
   });
   if (!t) {
     return null;
   }
-  const { id, created, updated, ...fields } = t;
+  const { id, created, updated, published, ...fields } = t;
   return { fields, removed: removed.count };
 }
 

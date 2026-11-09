@@ -573,6 +573,36 @@ to see the page's touches.
   **Open site**, **Copy link**, **Export…** and **Delete…**, plus **Import…**,
   **Try a copied link** and **Export all…**.
 
+#### Touches gallery
+
+Touches people published, found where they apply.
+
+- On a site with published touches, the sparkle button has a dot and the
+  panel lists them under **Shared by others**, most liked first: **Try**
+  (the preview bar, as with a shared link), the ♡ count to like it, **Added**
+  once you kept it, **Update** when its author published a newer version.
+- **⋯ → Publish to the gallery…** in a touch publishes it in one click (after
+  signing in once); the same item then offers **Update it** (your latest
+  changes), **Unpublish** and **Open on GitHub**.
+- Publishing and liking use a GitHub account. **Sign in with GitHub** shows a
+  code; **Copy code and open GitHub** opens github.com, you paste it there,
+  and you're brought back with what you were doing done. Firefox-Zen never
+  sees your password; the token it gets is kept in Firefox's saved logins and
+  can only touch issues in the gallery's repository.
+- How it works: a published touch is an issue in
+  [Firefox-Zen-Mods](https://github.com/ishid4/Firefox-Zen-Mods); its Touches
+  workflow checks it and lists it within minutes, no pull request. A like is
+  a 👍 on the issue. Firefox-Zen downloads the whole list at most hourly
+  (`chrome/.firefox-zen/gallery.json`), so the gallery never learns which
+  sites you visit. Touches from the gallery are cleaned like shared links.
+- Setup, once, for whoever runs the gallery: see **Setting up the touches
+  gallery** in the Firefox-Zen-Mods readme. Until `CLIENT_ID` in
+  `JS/firefox-zen-touches-gallery.sys.mjs` is set, browsing and trying
+  published touches work, but publishing and likes say they aren't set up.
+- For forks and testing, `firefox-zen.touches.gallery-repo`,
+  `.gallery-url`, `.github-api`, `.github-web` and `.github-client-id`
+  override where all this goes.
+
 #### Sharing touches
 
 - In a touch, **⋯ → Copy share link** (or the Library's **Copy link**). The

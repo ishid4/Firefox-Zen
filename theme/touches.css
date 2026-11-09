@@ -950,3 +950,120 @@
 .fz-touch-row:not([data-on]) .fz-setting-title {
   color: var(--fz-muted);
 }
+
+/* ---- gallery ---- */
+
+/* Others shared touches for this site: a dot on the button */
+#fz-touches-button[fz-community] {
+  position: relative;
+
+  &::after {
+    content: "";
+    position: absolute;
+    top: 3px;
+    inset-inline-end: 3px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--fz-accent);
+    pointer-events: none;
+  }
+}
+
+.fz-community-touch {
+  padding-inline-end: 6px;
+
+  & > .fz-touch-main {
+    cursor: default;
+  }
+}
+
+.fz-like {
+  --fz-heart: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 14s-5.5-3.3-5.5-7.2A3 3 0 0 1 8 4.6a3 3 0 0 1 5.5 2.2C13.5 10.7 8 14 8 14z' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --fz-heart-filled: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 14s-5.5-3.3-5.5-7.2A3 3 0 0 1 8 4.6a3 3 0 0 1 5.5 2.2C13.5 10.7 8 14 8 14z' fill='black' stroke='black' stroke-width='1.4' stroke-linejoin='round'/%3E%3C/svg%3E");
+
+  appearance: none;
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  margin: 0;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--fz-muted);
+  font: inherit;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+
+  &:hover {
+    background: var(--fz-surface-hover);
+    color: inherit;
+  }
+
+  &[aria-pressed="true"] {
+    color: #e5484d;
+
+    & > .fz-like-icon {
+      mask-image: var(--fz-heart-filled);
+    }
+  }
+}
+
+.fz-like-icon {
+  width: 14px;
+  height: 14px;
+  background: currentColor;
+  mask: var(--fz-heart) center / contain no-repeat;
+}
+
+.fz-community-added {
+  flex: none;
+  padding: 0 4px;
+  color: var(--fz-muted);
+  font-size: 12px;
+}
+
+/* The device code to enter on github.com */
+.fz-signin-code {
+  padding: 14px;
+  border: 1px dashed var(--fz-line);
+  border-radius: 10px;
+  background: var(--fz-surface);
+  font: 600 24px/1 ui-monospace, "Cascadia Mono", Consolas, monospace;
+  letter-spacing: 0.12em;
+  text-align: center;
+  user-select: all;
+}
+
+.fz-publish-text {
+  line-height: 1.45;
+}
+
+.fz-publish-account {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 12px;
+
+  & > span {
+    margin-inline-end: auto;
+    font-weight: 600;
+  }
+}
+
+.fz-option-link {
+  appearance: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--fz-accent);
+  font: inherit;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}

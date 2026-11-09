@@ -123,7 +123,13 @@
     button.hidden = !shown;
     const count = shown ? FzTouches.activeCount(uri) : 0;
     button.toggleAttribute("fz-active", count > 0);
-    button.setAttribute("tooltiptext", count ? `Touches (${count} on)` : "Touches");
+    // Others shared touches for this site: a dot on the button.
+    const community = shown ? FzGallery.forPage(uri).filter(e => !addedFromGallery().has(e.id)).length : 0;
+    button.toggleAttribute("fz-community", community > 0);
+    button.setAttribute(
+      "tooltiptext",
+      [count ? `Touches (${count} on)` : "Touches", community ? `${community} shared by others` : null].filter(Boolean).join(" · ")
+    );
   }
 
   // ---- panel state ----
@@ -221,12 +227,28 @@
 
   const body = () => panel.querySelector(".fz-touches-body");
 
+  // Every view, with the last note (flash) kept if it's still fresh.
   function render() {
+    renderView();
+    if (panel && lastFlash && Date.now() < lastFlash.until) {
+      flash(lastFlash.message, lastFlash.until);
+    }
+  }
+
+  function renderView() {
     if (!panel) {
       return;
     }
     if (state.view === "preview") {
       renderPreview();
+      return;
+    }
+    if (state.view === "signin") {
+      renderSignIn();
+      return;
+    }
+    if (state.view === "publish") {
+      renderPublish();
       return;
     }
     const t = state.id ? FzTouches.get(state.id) : null;
@@ -266,6 +288,7 @@
 
   function renderList() {
     const uri = currentURI();
+    FzGallery.refresh();
     const list = FzTouches.forPage(uri);
     const rows = list.map(t =>
       h(
@@ -301,6 +324,7 @@
             class: "fz-touches-empty",
             text: "Restyle this site: pick an element to change, zap what's in the way, or write CSS. Each touch has its own switch.",
           }),
+      ...communitySection(uri),
       h(
         "div",
         { class: "fz-touches-foot" },
@@ -1400,8 +1424,8 @@
 
   // A shared touch to try: here if it's for this page, else in a new tab on
   // its site.
-  async function tryShared(data, { from = gBrowser.selectedBrowser } = {}) {
-    const result = fromShared(data, "link");
+  async function tryShared(data, { from = gBrowser.selectedBrowser, kind = "link" } = {}) {
+    const result = fromShared(data, kind);
     if (!result) {
       return false;
     }
@@ -1564,11 +1588,15 @@
     menu.openPopup(anchor, "after_end");
   }
 
-  // A line in the panel saying how an action went.
-  function flash(message) {
-    if (!message || !isOpen()) {
+  // A line in the panel saying how an action went (for 5 seconds, across
+  // re-renders).
+  let lastFlash = null;
+
+  function flash(message, until = Date.now() + 5000) {
+    if (!message || !panel) {
       return;
     }
+    lastFlash = { message, until };
     let note = body().querySelector(".fz-touches-flash");
     if (!note) {
       note = h("p", { class: "fz-touches-flash", role: "status" });
@@ -1576,7 +1604,7 @@
     }
     note.textContent = message;
     clearTimeout(note.fzTimer);
-    note.fzTimer = setTimeout(() => note.remove(), 5000);
+    note.fzTimer = setTimeout(() => note.remove(), Math.max(0, until - Date.now()));
   }
 
   async function runFlash(action) {
@@ -1604,7 +1632,10 @@
   }
 
   function touchMenu(anchor, t) {
+    const now = FzTouches.get(t.id) ?? t;
     showMenu(anchor, [
+      { label: now.published ? "Published to the gallery…" : "Publish to the gallery…", run: () => openPublish(now) },
+      "-",
       { label: "Copy share link", run: () => runFlash(() => copyLink(FzTouches.get(t.id) ?? t)) },
       { label: "Export to a file…", run: () => runFlash(() => exportTouches([FzTouches.get(t.id) ?? t])) },
     ]);
@@ -1618,6 +1649,325 @@
       "aria-haspopup": "menu",
       onclick: e => open(e.currentTarget),
     });
+
+  // ---- the gallery: touches others published ----
+  //
+  // FzGallery (JS/firefox-zen-touches-gallery.sys.mjs) has the index and the
+  // GitHub side. Here: the page's community touches in the list (Try, Like,
+  // Added / Update), sign-in, and the publish view.
+
+  const { FzGallery } = ChromeUtils.importESModule("chrome://userscripts/content/firefox-zen-touches-gallery.sys.mjs");
+  // Issue bodies are at most this long on GitHub.
+  const MAX_ISSUE = 60000;
+
+  // Local touches added from the gallery, by gallery id.
+  const addedFromGallery = () => new Map(FzTouches.list().filter(t => t.source?.kind === "gallery" && t.source.id).map(t => [t.source.id, t]));
+
+  function communitySection(uri) {
+    const entries = FzGallery.forPage(uri);
+    if (!entries.length) {
+      return [];
+    }
+    const added = addedFromGallery();
+    const mine = new Set(FzTouches.list().map(t => t.published?.id).filter(Boolean));
+    const rows = entries.slice(0, 30).map(entry => {
+      const local = added.get(entry.id);
+      const newer = local && entry.updated && local.source.updated && entry.updated > local.source.updated;
+      const liked = FzGallery.isLiked(entry.id);
+      let action;
+      if (newer) {
+        action = h("button", { class: "fz-touches-btn fz-touches-small", text: "Update", title: "Get its new version", onclick: () => runFlash(() => updateFromGallery(entry, local)) });
+      } else if (local) {
+        action = h("span", { class: "fz-community-added", text: "Added" });
+      } else {
+        action = h("button", { class: "fz-touches-btn fz-touches-small", text: "Try", title: "See it on this page first", onclick: () => runFlash(() => tryGallery(entry)) });
+      }
+      return h(
+        "li",
+        { class: "fz-touch fz-community-touch" },
+        h(
+          "div",
+          { class: "fz-touch-main" },
+          h("span", { class: "fz-touch-name", text: entry.name }),
+          h("span", { class: "fz-touch-scope", text: `by ${entry.author}${mine.has(entry.id) ? " (you)" : ""}` })
+        ),
+        h(
+          "button",
+          {
+            class: "fz-like",
+            "aria-pressed": String(liked),
+            title: liked ? "You like it" : "Like it",
+            "aria-label": `${liked ? "Unlike" : "Like"} ${entry.name}`,
+            onclick: () => runFlash(() => toggleLike(entry)),
+          },
+          h("span", { class: "fz-like-icon" }),
+          h("span", { text: String(FzGallery.likeCount(entry)) })
+        ),
+        action
+      );
+    });
+    return [h("div", { class: "fz-touches-section" }, h("span", { text: "Shared by others" })), h("ul", { class: "fz-touches-list fz-community" }, ...rows)];
+  }
+
+  async function tryGallery(entry) {
+    const data = await FzGallery.fetchTouch(entry.id);
+    if (!(await tryShared(data, { kind: "gallery" }))) {
+      return "That touch couldn't be read.";
+    }
+    return null;
+  }
+
+  async function updateFromGallery(entry, local) {
+    const result = fromShared(await FzGallery.fetchTouch(entry.id), "gallery");
+    if (!result) {
+      return "That touch couldn't be read.";
+    }
+    const { name, scope, edits, css, source } = result.fields;
+    FzTouches.update(local.id, { name, scope, edits, css, source });
+    return `Updated ${name}.${result.removed ? ` ${plural(result.removed, "outside load")} removed.` : ""}`;
+  }
+
+  // ---- account ----
+
+  // What to do once signed in (and where), set while a sign-in runs.
+  let signIn = null; // { flow, then, tab, githubTab }
+
+  function needAccount(then) {
+    if (!FzGallery.configured) {
+      return "Publishing and likes aren't set up in this copy of Firefox-Zen (see the readme's Touches gallery setup).";
+    }
+    if (FzGallery.account) {
+      return null;
+    }
+    state = { view: "signin", then };
+    render();
+    return null;
+  }
+
+  async function toggleLike(entry) {
+    const blocked = needAccount({ like: entry.id });
+    if (blocked || !FzGallery.account) {
+      return blocked;
+    }
+    if (FzGallery.isLiked(entry.id)) {
+      await FzGallery.unlike(entry.id);
+    } else {
+      await FzGallery.like(entry.id);
+    }
+    return null;
+  }
+
+  async function beginSignIn() {
+    signIn?.flow.cancel();
+    const flow = await FzGallery.startSignIn();
+    signIn = { flow, then: state.then, tab: gBrowser.selectedTab, githubTab: null };
+    render();
+    flow.done.then(
+      user => finishSignIn(user),
+      e => {
+        if (e.message !== "cancelled") {
+          signIn = null;
+          state = { view: "signin", then: state.then, error: e.message };
+          if (isOpen()) {
+            render();
+          }
+        }
+      }
+    );
+  }
+
+  // Back to the tab it started on, and on with what it was for.
+  function finishSignIn(user) {
+    const s = signIn;
+    signIn = null;
+    if (!s) {
+      return;
+    }
+    if (s.githubTab && !s.githubTab.closing && s.githubTab.linkedBrowser?.currentURI.spec.startsWith(FzGalleryWeb())) {
+      gBrowser.removeTab(s.githubTab);
+    }
+    if (s.tab && !s.tab.closing && gBrowser.tabs.includes(s.tab)) {
+      gBrowser.selectedTab = s.tab;
+    }
+    state = s.then?.publish ? { view: "publish", id: s.then.publish } : { view: "list" };
+    openPanel();
+    flash(`Signed in as ${user}.`);
+    if (s.then?.like) {
+      const entry = FzGallery.get(s.then.like);
+      if (entry && !FzGallery.isLiked(entry.id)) {
+        runFlash(() => toggleLike(entry));
+      }
+    }
+  }
+
+  const FzGalleryWeb = () => Services.prefs.getStringPref("firefox-zen.touches.github-web", "https://github.com");
+
+  function renderSignIn() {
+    const flow = signIn?.flow;
+    const back = () => {
+      signIn?.flow.cancel();
+      signIn = null;
+      state = state.then?.publish ? { view: "touch", id: state.then.publish } : { view: "list" };
+      render();
+    };
+    const parts = flow
+      ? [
+          h("p", { class: "fz-touches-hint", text: "Enter this code on GitHub. You'll be brought back here once it's done." }),
+          h("div", { class: "fz-signin-code", text: flow.userCode }),
+          h(
+            "div",
+            { class: "fz-touches-foot" },
+            h("button", { class: "fz-touches-btn", text: "Cancel", onclick: back }),
+            h("button", {
+              class: "fz-touches-btn fz-touches-primary",
+              text: "Copy code and open GitHub",
+              onclick: () => {
+                Cc["@mozilla.org/widget/clipboardhelper;1"].getService(Ci.nsIClipboardHelper).copyString(flow.userCode);
+                if (signIn) {
+                  signIn.githubTab = gBrowser.addTab(flow.verificationUri, {
+                    triggeringPrincipal: Services.scriptSecurityManager.createNullPrincipal({}),
+                    relatedToCurrent: true,
+                  });
+                  gBrowser.selectedTab = signIn.githubTab;
+                }
+              },
+            })
+          ),
+        ]
+      : [
+          h("p", {
+            class: "fz-touches-hint",
+            text:
+              (state.then?.like ? "Likes" : "Publishing") +
+              " use your GitHub account: touches are listed from issues in the gallery's repository, likes are 👍 on them. " +
+              "Firefox-Zen gets a code for you to enter on github.com; it never sees your password.",
+          }),
+          state.error ? h("p", { class: "fz-touches-note", text: state.error }) : null,
+          h(
+            "div",
+            { class: "fz-touches-foot" },
+            h("button", { class: "fz-touches-btn", text: "Back", onclick: back }),
+            h("button", { class: "fz-touches-btn fz-touches-primary", text: "Sign in with GitHub", onclick: () => runFlash(beginSignIn) })
+          ),
+        ];
+    body().replaceChildren(
+      h("div", { class: "fz-touches-head" }, h("span", { class: "fz-touches-title", text: "Sign in with GitHub" })),
+      ...parts.filter(Boolean)
+    );
+  }
+
+  // ---- publishing ----
+
+  async function issueFor(t) {
+    const data = FzTouches.exportable(t, FzGallery.account);
+    const site = siteKey(t.scope);
+    const link = await shareLink(t);
+    const body = [
+      `**${t.name}**, a touch for ${site}, published from [Firefox-Zen](https://github.com/ishid4/Firefox-Zen).`,
+      "",
+      `[Try it](${link}) · 👍 this issue to like it.`,
+      "",
+      "<!-- firefox-zen-touch -->",
+      "```json",
+      JSON.stringify(data, null, 2),
+      "```",
+      "",
+    ].join("\n");
+    if (body.length > MAX_ISSUE) {
+      throw new Error("It's too big to publish (GitHub takes issues up to 64 KB). Share it as a file instead.");
+    }
+    return { title: `Touch: ${t.name} · ${site}`, body };
+  }
+
+  function openPublish(t) {
+    const blocked = needAccount({ publish: t.id });
+    if (blocked) {
+      flash(blocked);
+      return;
+    }
+    if (FzGallery.account) {
+      state = { view: "publish", id: t.id };
+      render();
+    }
+  }
+
+  function renderPublish() {
+    const t = FzTouches.get(state.id);
+    if (!t) {
+      state = { view: "list" };
+      renderList();
+      return;
+    }
+    const back = () => {
+      state = { view: "touch", id: t.id };
+      render();
+    };
+    const busy = (button, work) => async () => {
+      button.disabled = true;
+      try {
+        flash(await work());
+      } catch (e) {
+        flash(`That didn't work: ${e.message || e}`);
+      } finally {
+        button.disabled = false;
+      }
+    };
+    const publishBtn = h("button", { class: "fz-touches-btn fz-touches-primary", text: t.published ? "Update it" : "Publish" });
+    publishBtn.addEventListener(
+      "click",
+      busy(publishBtn, async () => {
+        const issue = await issueFor(FzTouches.get(t.id));
+        const done = t.published ? await FzGallery.updatePublished(t.published.id, issue) : await FzGallery.publish(issue);
+        FzTouches.update(t.id, { published: { ...done, at: Date.now() } });
+        back();
+        return t.published ? "Updated. The gallery shows the new version within a few minutes." : "Published. It's listed for everyone within a few minutes.";
+      })
+    );
+    const unpublishBtn = t.published ? h("button", { class: "fz-touches-btn fz-touches-danger", text: "Unpublish" }) : null;
+    unpublishBtn?.addEventListener(
+      "click",
+      busy(unpublishBtn, async () => {
+        await FzGallery.unpublish(t.published.id);
+        FzTouches.update(t.id, { published: null });
+        back();
+        return "Unpublished. It leaves the gallery within a few minutes; copies others kept stay theirs.";
+      })
+    );
+    body().replaceChildren(
+      h(
+        "div",
+        { class: "fz-touches-head" },
+        h("button", { class: "fz-touches-icon fz-touches-back", title: "Back", "aria-label": "Back", onclick: back }),
+        h("span", { class: "fz-touches-title", text: t.published ? "Published" : "Publish" }),
+        h("span", { class: "fz-touches-host", text: t.name })
+      ),
+      h(
+        "p",
+        { class: "fz-touches-hint fz-publish-text" },
+        t.published
+          ? "Everyone on its site can find it under Shared by others. Update it to send your latest changes."
+          : `Everyone on ${siteKey(t.scope)} will find it under Shared by others, and can try it, keep it and like it. It's checked automatically and listed within a few minutes; things that load from other sites aren't allowed.`
+      ),
+      h(
+        "div",
+        { class: "fz-publish-account" },
+        h("span", { text: `As ${FzGallery.account}` }),
+        t.published ? h("button", { class: "fz-option-link", text: "Open on GitHub", onclick: () => openWebLinkIn(t.published.url, "tab") }) : null,
+        h(
+          "button",
+          {
+            class: "fz-option-link",
+            text: "Sign out",
+            onclick: async () => {
+              await FzGallery.signOut();
+              back();
+            },
+          }
+        )
+      ),
+      h("div", { class: "fz-touches-foot" }, unpublishBtn, publishBtn)
+    );
+  }
 
   // ---- the Library's Touches view ----
 
@@ -1680,7 +2030,9 @@
             "span",
             { class: "fz-setting-head" },
             h("span", { class: "fz-setting-title", text: t.name }),
-            t.source?.kind !== "local" && h("span", { class: "fz-badge", text: t.source.kind === "link" ? "Shared" : "Imported" }),
+            t.source?.kind !== "local" &&
+              h("span", { class: "fz-badge", text: { link: "Shared", file: "Imported", gallery: "Gallery" }[t.source.kind] ?? "Shared" }),
+            t.published && h("span", { class: "fz-badge", text: "Published" }),
             t.source?.author && h("span", { class: "fz-hint", text: `by ${t.source.author}` })
           ),
           h("p", { class: "fz-setting-desc", text: `${FzTouches.scopeLabel(t.scope)} · ${librarySummary(t)}` }),
@@ -1878,6 +2230,7 @@
     },
   };
   Services.obs.addObserver(observer, FzTouches.CHANGED_TOPIC);
+  Services.obs.addObserver(observer, FzGallery.CHANGED_TOPIC);
 
   const SAME_DOCUMENT = Ci.nsIWebProgressListener.LOCATION_CHANGE_SAME_DOCUMENT;
   const tabsListener = {
@@ -1943,6 +2296,8 @@
       }
       gBrowser.tabContainer.removeEventListener("TabClose", onTabClose);
       Services.obs.removeObserver(observer, FzTouches.CHANGED_TOPIC);
+      Services.obs.removeObserver(observer, FzGallery.CHANGED_TOPIC);
+      signIn?.flow.cancel();
       contextMenu?.removeEventListener("popupshowing", onContextShowing);
       gBrowser.removeTabsProgressListener(tabsListener);
       gBrowser.tabContainer.removeEventListener("TabSelect", onTabSelect);
