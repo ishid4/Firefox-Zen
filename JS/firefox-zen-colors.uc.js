@@ -44,6 +44,106 @@
 
   const FADE_MS = 350;
 
+  // ---- grain ----
+  // A square of gray noise, repeated over the window from its corner
+  // (theme/colors.css: --fz-grain-tile, keep the two in step). One device
+  // pixel per noise dot, so it stays crisp at any zoom, and a PNG: a raster
+  // tile repeats for free, where an SVG noise filter is redrawn at full
+  // window size on every resize and change.
+  const GRAIN_TILE = 256;
+  // Tiles kept by strength@pixel ratio, as blob: URLs
+  const GRAIN_CACHE = 12;
+  /** @type {Map<string, Promise<string>>} */
+  const grainTiles = new Map();
+  let grainWanted = "";
+
+  const grainKey = amount => `${amount}@${window.devicePixelRatio}`;
+
+  function drawGrain(amount) {
+    const size = Math.round(GRAIN_TILE * window.devicePixelRatio);
+    const canvas = document.createElementNS("http://www.w3.org/1999/xhtml", "canvas");
+    canvas.width = canvas.height = size;
+    const ctx = canvas.getContext("2d");
+    const img = ctx.createImageData(size, size);
+    const data = img.data;
+    const alpha = Math.round(amount * FzColors.GRAIN_OPACITY * 255);
+    for (let i = 0; i < data.length; i += 4) {
+      // Bell-shaped around mid gray: soft film grain, not harsh static
+      const v = 128 + (Math.random() + Math.random() + Math.random() - 1.5) * 64;
+      data[i] = data[i + 1] = data[i + 2] = v;
+      data[i + 3] = alpha;
+    }
+    ctx.putImageData(img, 0, 0);
+    return new Promise((resolve, reject) =>
+      canvas.toBlob(blob => (blob ? resolve(URL.createObjectURL(blob)) : reject(new Error("grain tile"))), "image/png")
+    );
+  }
+
+  /**
+   * The grain tile for a strength (FzColors.grainOf) as a CSS image, "none"
+   * for 0. Made once per strength and pixel ratio.
+   * @returns {Promise<string>}
+   */
+  function grainImage(amount) {
+    if (!amount) {
+      return Promise.resolve("none");
+    }
+    const key = grainKey(amount);
+    let tile = grainTiles.get(key);
+    if (tile) {
+      // Most recently used last
+      grainTiles.delete(key);
+    } else {
+      tile = drawGrain(amount);
+    }
+    grainTiles.set(key, tile);
+    // Drop the oldest, never the one this window shows
+    for (const [old, url] of grainTiles) {
+      if (grainTiles.size <= GRAIN_CACHE) {
+        break;
+      }
+      if (old !== grainWanted) {
+        grainTiles.delete(old);
+        url.then(u => URL.revokeObjectURL(u), () => {});
+      }
+    }
+    return tile.then(url => `url("${url}")`);
+  }
+
+  // The tile comes a moment later; the old one stays until then, so
+  // dragging the Grain slider doesn't flicker
+  function setGrain(scheme) {
+    const amount = FzColors.grainOf(scheme);
+    const key = amount ? grainKey(amount) : "";
+    if (key === grainWanted && root.style.getPropertyValue("--fz-frame-grain")) {
+      return;
+    }
+    grainWanted = key;
+    grainImage(amount).then(
+      image => {
+        if (grainWanted === key && root.hasAttribute(ATTR)) {
+          root.style.setProperty("--fz-frame-grain", image);
+        }
+      },
+      console.error
+    );
+  }
+
+  // Another pixel ratio (zoom, a move to another screen): sharper tiles
+  function watchResolution() {
+    window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`).addEventListener(
+      "change",
+      () => {
+        if (paintedScheme) {
+          setGrain(paintedScheme);
+        }
+        watchResolution();
+      },
+      { once: true }
+    );
+  }
+  watchResolution();
+
   // The active space's scheme, else the Settings one
   /** @type {Map<string, object>} scheme id -> unsaved edit */
   const drafts = new Map();
@@ -111,9 +211,11 @@
         root.style.removeProperty(name);
       }
       applied = [];
+      grainWanted = "";
       return;
     }
-    const names = Object.keys(tokens).map(n => `--fz-${n}`);
+    // The grain is set apart (setGrain), but goes with the rest
+    const names = [...Object.keys(tokens).map(n => `--fz-${n}`), "--fz-frame-grain"];
     for (const name of applied) {
       if (!names.includes(name)) {
         root.style.removeProperty(name);
@@ -126,6 +228,7 @@
     }
     applied = names;
     root.setAttribute(ATTR, scheme.id);
+    setGrain(scheme);
     // Another scheme, not an edit of this one (the editor writes as you drag)
     if (previous && previous.id !== scheme.id) {
       fadeFrom(previous);
@@ -181,6 +284,7 @@
     draft: id => drafts.get(id) ?? null,
     setDraft,
     withDraft,
+    grainImage,
   };
 
   update();

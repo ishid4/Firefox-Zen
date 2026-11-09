@@ -60,7 +60,7 @@ export const WHEEL_CHROMA = 0.2;
 // Lightness the wheel and its seeds are shown at
 const WHEEL_LIGHTNESS = 0.7;
 // Grain at 100%: opacity of the noise
-const GRAIN_OPACITY = 0.22;
+export const GRAIN_OPACITY = 0.22;
 
 // Contrast targets (WCAG ratio)
 const TEXT_CONTRAST = 7;
@@ -280,18 +280,12 @@ function frameOf(seeds, mode, tweaks, style, color = plainColor) {
   return { base: oklchHex(avg), stops, gradient };
 }
 
-// Film grain: gray noise drawn once at window size (fixed, never tiled)
-function grainCss(scheme) {
-  const grain = clamp(Number(scheme?.grain) || 0, 0, 1);
-  if (!grain) {
-    return "none";
-  }
-  const svg =
-    `<svg xmlns='http://www.w3.org/2000/svg' width='1600' height='1000'>` +
-    `<filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/>` +
-    `<feColorMatrix type='saturate' values='0'/></filter>` +
-    `<rect width='100%' height='100%' filter='url(%23n)' opacity='${(grain * GRAIN_OPACITY).toFixed(3)}'/></svg>`;
-  return `url("data:image/svg+xml,${svg}")`;
+/**
+ * A scheme's film grain, 0-1 in steps of 0.01 (0: none). The window script
+ * draws it as a noise tile (JS/firefox-zen-colors.uc.js grainImage).
+ */
+export function grainOf(scheme) {
+  return Math.round(clamp(Number(scheme?.grain) || 0, 0, 1) * 100) / 100;
 }
 
 /**
@@ -379,7 +373,6 @@ export function palette(scheme, mode) {
   return {
     "frame-bg": frame.base,
     "frame-gradient": frame.gradient,
-    "frame-grain": grainCss(scheme),
     "frame-edge": withAlpha(ink, dark ? 0.08 : 0.1),
     "field-bg": field,
     "popup-bg": popup,
@@ -412,8 +405,6 @@ export function tokens(scheme) {
     if (name == "frame-gradient") {
       out["frame-gradient-light"] = light[name];
       out["frame-gradient-dark"] = dark[name];
-    } else if (name == "frame-grain") {
-      out[name] = light[name];
     } else {
       out[name] = light[name] == dark[name] ? light[name] : `light-dark(${light[name]}, ${dark[name]})`;
     }
@@ -550,6 +541,8 @@ export const FzColors = {
   MAX_SEEDS,
   WHEEL_CHROMA,
   gradientOf,
+  grainOf,
+  GRAIN_OPACITY,
   fadeImage,
   wheelOf,
   fromWheel,

@@ -47,6 +47,9 @@
 
 @-moz-document url-prefix("chrome:") {
 :root[fz-colors] {
+  /* Film grain: --fz-frame-grain is a noise tile this size, repeated
+   * (GRAIN_TILE in JS/firefox-zen-colors.uc.js) */
+  --fz-grain-tile: 256px;
   --fz-frame-gradient: var(--fz-frame-gradient-light);
   --fz-fade-image: var(--fz-fade-image-light, none);
 
@@ -130,11 +133,20 @@
   & body,
   html& :is(#navigator-toolbox, #sidebar-container, #fz-titlebar) {
     background-color: var(--fz-frame-bg) !important;
-    background-image: var(--fz-frame-grain), var(--fz-fade-image), var(--fz-frame-gradient) !important;
+    background-image: var(--fz-frame-grain, none), var(--fz-fade-image), var(--fz-frame-gradient) !important;
     background-attachment: fixed !important;
     background-position: 0 0 !important;
-    background-size: 100vw 100vh !important;
-    background-repeat: no-repeat !important;
+    /* The grain tile repeats; every other layer (the fade and the gradient
+     * can be up to 9 together) spans the window once. Values past the
+     * number of layers are unused. */
+    background-size:
+      var(--fz-grain-tile) var(--fz-grain-tile),
+      100vw 100vh, 100vw 100vh, 100vw 100vh, 100vw 100vh, 100vw 100vh,
+      100vw 100vh, 100vw 100vh, 100vw 100vh, 100vw 100vh !important;
+    background-repeat:
+      repeat,
+      no-repeat, no-repeat, no-repeat, no-repeat, no-repeat,
+      no-repeat, no-repeat, no-repeat, no-repeat !important;
   }
 
   /* No native macOS titlebar vibrancy */

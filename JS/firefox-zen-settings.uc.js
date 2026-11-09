@@ -1251,6 +1251,106 @@
     );
   }
 
+  // A bigger look at one scheme: a small window per look (light and dark, or
+  // the one a scheme uses only), with its whole gradient, grain, tabs,
+  // address bar and accent. Shows the tile under the pointer or keyboard
+  // focus, else the picked scheme (with unsaved edits).
+  const PREVIEW_VARS = {
+    "frame-bg": "frame",
+    "frame-gradient": "gradient",
+    "frame-edge": "edge",
+    "field-bg": "field",
+    "tab-selected-bg": "selected",
+    text: "text",
+    "text-muted": "muted",
+    border: "border",
+    accent: "accent",
+    "accent-text": "accent-text",
+  };
+
+  const PREVIEW_PREF = PREF_BRANCH + "scheme-preview";
+
+  function buildSchemePreview() {
+    const name = h("span", { class: "fz-preview-name" });
+    const note = h("span", { class: "fz-hint" });
+    const sideRow = selected =>
+      h("i", { class: "fz-pv-row", "data-selected": selected }, h("i", { class: "fz-pv-icon" }), h("i", { class: "fz-pv-line" }));
+    const looks = ["light", "dark"].map(mode => {
+      const win = h(
+        "div",
+        { class: "fz-pv-window" },
+        h(
+          "div",
+          { class: "fz-pv-sidebar" },
+          h("i", { class: "fz-pv-urlbar" }, h("i", { class: "fz-pv-line" })),
+          sideRow(true),
+          sideRow(false),
+          sideRow(false),
+          sideRow(false),
+          h("i", { class: "fz-pv-spaces" }, h("i"), h("i"), h("i"))
+        ),
+        h(
+          "div",
+          { class: "fz-pv-page" },
+          h("i", { class: "fz-pv-heading" }),
+          h("i", { class: "fz-pv-text" }),
+          h("i", { class: "fz-pv-text fz-pv-short" }),
+          h("i", { class: "fz-pv-button" }, h("i", { class: "fz-pv-line" }))
+        )
+      );
+      const caption = h("span", { class: "fz-pv-caption" });
+      const el = h("figure", { class: "fz-pv-look", "data-mode": mode }, win, caption);
+      return { el, win, caption, mode };
+    });
+    const el = h(
+      "div",
+      { class: "fz-scheme-preview", "aria-hidden": "true" },
+      h("div", { class: "fz-preview-head" }, name, note),
+      h("div", { class: "fz-pv-looks" }, ...looks.map(x => x.el))
+    );
+
+    let shownKey = "";
+    let grainFor = "";
+    function show(scheme, hovered) {
+      note.textContent = hovered ? "Preview" : "";
+      const key = JSON.stringify(scheme);
+      if (key === shownKey) {
+        return;
+      }
+      shownKey = key;
+      name.textContent = scheme.name;
+      const firefox = scheme.id === FzColors.FIREFOX_ID;
+      el.toggleAttribute("data-firefox", firefox);
+      for (const look of looks) {
+        // A scheme that uses one look shows only that one
+        const mode = scheme.mode || look.mode;
+        look.el.hidden = !!scheme.mode && look.mode === "dark";
+        look.el.dataset.mode = mode;
+        look.caption.textContent = scheme.mode
+          ? `${mode === "light" ? "Light" : "Dark"} look only`
+          : `${mode === "light" ? "Light" : "Dark"} look`;
+        const p = !firefox && FzColors.palette(scheme, mode);
+        for (const [token, v] of Object.entries(PREVIEW_VARS)) {
+          if (p) {
+            look.win.style.setProperty(`--pv-${v}`, p[token]);
+          } else {
+            look.win.style.removeProperty(`--pv-${v}`);
+          }
+        }
+      }
+      // The grain tile comes a moment later (JS/firefox-zen-colors.uc.js)
+      const amount = firefox ? 0 : FzColors.grainOf(scheme);
+      grainFor = key;
+      const set = image => grainFor === key && looks.forEach(l => l.win.style.setProperty("--pv-grain", image));
+      if (!amount) {
+        set("none");
+      } else {
+        window.FirefoxZenColors?.grainImage(amount).then(set, console.error);
+      }
+    }
+    return { el, show };
+  }
+
   // With spaces on, the picker is for the space this window shows. Spaces
   // without their own scheme use the default (the pref), as does everything
   // with spaces off.
@@ -1998,6 +2098,61 @@
       h("span", { class: "fz-scheme-label", text: "Import" })
     );
     const editor = buildSchemeEditor(s);
+    const preview = buildSchemePreview();
+    // The scheme as this window shows it (an unsaved draft in its place)
+    const asShown = id => {
+      const scheme = FzColors.schemeById(id);
+      return scheme && (window.FirefoxZenColors?.withDraft(scheme) ?? scheme);
+    };
+    // The tile under the pointer, else the one with keyboard focus
+    let hoverId = null;
+    let focusId = null;
+    // Shown only while its switch is on (remembered across restarts)
+    const previewOn = () => Services.prefs.getBoolPref(PREVIEW_PREF, false);
+    const previewSwitch = h("input", {
+      type: "checkbox",
+      role: "switch",
+      class: "fz-switch",
+      "aria-label": "Show preview",
+      onchange: e => {
+        Services.prefs.setBoolPref(PREVIEW_PREF, e.target.checked);
+        sync();
+      },
+    });
+    const previewToggle = h(
+      "label",
+      { class: "fz-option fz-scheme-preview-toggle", title: "A bigger look at the scheme: hover a tile to try it" },
+      previewSwitch,
+      h("span", { text: "Show preview" })
+    );
+    const showPreview = () => {
+      const on = previewOn();
+      previewSwitch.checked = on;
+      preview.el.hidden = !on;
+      if (!on) {
+        return;
+      }
+      const id = hoverId ?? focusId;
+      const hovered = id && id !== shownScheme(s) ? asShown(id) : null;
+      preview.show(hovered ?? asShown(shownScheme(s)) ?? FzColors.activeScheme(), !!hovered);
+    };
+    const tileId = e => e.target.closest?.(".fz-scheme-tile[data-scheme]")?.dataset.scheme ?? null;
+    tiles.addEventListener("pointerover", e => {
+      hoverId = tileId(e);
+      showPreview();
+    });
+    tiles.addEventListener("pointerleave", () => {
+      hoverId = null;
+      showPreview();
+    });
+    tiles.addEventListener("focusin", e => {
+      focusId = tileId(e);
+      showPreview();
+    });
+    tiles.addEventListener("focusout", () => {
+      focusId = null;
+      showPreview();
+    });
     const options = buildOptions(s.options);
     const reset = h("button", {
       type: "button",
@@ -2048,6 +2203,8 @@
       ),
       scope,
       tiles,
+      previewToggle,
+      preview.el,
       editor.el,
       options.el,
       h("ul", { class: "fz-tips" }, ...s.tips.map(t => h("li", { text: t })))
@@ -2096,6 +2253,7 @@
       useDefault.hidden = !own;
       makeDefault.hidden = !own || active === readValue(s);
       row.toggleAttribute("data-modified", isModified(s) || own);
+      showPreview();
       editor.sync();
       options.sync();
     });

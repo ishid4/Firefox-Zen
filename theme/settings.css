@@ -755,6 +755,251 @@
   font-size: 18px;
 }
 
+/* ---- Scheme preview ----
+ * A small window per look, painted like the real one: the whole gradient,
+ * the grain tile (repeated at its own size, as on the window), the sidebar
+ * with the address bar and tabs, and a page. --pv-* come from the palette
+ * (buildSchemePreview); Firefox theme uses Firefox's own colors below. */
+.fz-scheme-preview {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 9px;
+  background: var(--fz-surface);
+
+  /* Show preview is off */
+  &[hidden] {
+    display: none;
+  }
+
+  /* No weight, so each part's own display wins */
+  & :where(i) {
+    display: block;
+    font-style: normal;
+  }
+}
+
+.fz-scheme-preview-toggle {
+  justify-self: start;
+  gap: 8px;
+  width: fit-content;
+  cursor: pointer;
+}
+
+.fz-preview-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.fz-preview-name {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fz-pv-looks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.fz-pv-look {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+
+  &[hidden] {
+    display: none;
+  }
+
+  /* Content isn't painted by schemes: a plain page per look */
+  &[data-mode="light"] {
+    --pv-page: #ffffff;
+    --pv-ink: #d4d4d8;
+  }
+
+  &[data-mode="dark"] {
+    --pv-page: #1c1b22;
+    --pv-ink: #3f3f46;
+  }
+}
+
+.fz-pv-caption {
+  font-size: 12px;
+  color: var(--fz-muted);
+  text-align: center;
+}
+
+.fz-pv-window {
+  display: flex;
+  gap: 6px;
+  aspect-ratio: 16 / 9;
+  padding: 6px;
+  overflow: hidden;
+  border: 1px solid var(--fz-line);
+  border-radius: 8px;
+  color: var(--pv-text);
+  background-color: var(--pv-frame);
+  background-image: var(--pv-grain, none), var(--pv-gradient, none);
+  /* Grain tile, then up to 4 gradient layers (corners) */
+  background-size: 256px 256px, 100% 100%, 100% 100%, 100% 100%, 100% 100%;
+  background-repeat: repeat, no-repeat, no-repeat, no-repeat, no-repeat;
+}
+
+.fz-pv-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 30%;
+  min-width: 0;
+}
+
+.fz-pv-urlbar,
+.fz-pv-row {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  height: 15px;
+  padding-inline: 5px;
+  border-radius: 5px;
+}
+
+.fz-pv-urlbar {
+  margin-bottom: 4px;
+  background: var(--pv-field);
+
+  & > .fz-pv-line {
+    max-width: 55%;
+    background: var(--pv-muted);
+  }
+}
+
+.fz-pv-row[data-selected] {
+  background: var(--pv-selected);
+  box-shadow: 0 0 0 1px var(--pv-edge);
+}
+
+.fz-pv-icon {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  background: var(--pv-muted);
+
+  [data-selected] > & {
+    background: var(--pv-accent);
+  }
+}
+
+.fz-pv-line {
+  flex: 1;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--pv-muted);
+  opacity: 0.8;
+
+  [data-selected] > & {
+    background: var(--pv-text);
+  }
+}
+
+.fz-pv-spaces {
+  display: flex;
+  justify-content: center;
+  gap: 5px;
+  margin-top: auto;
+
+  & > i {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--pv-muted);
+    opacity: 0.7;
+  }
+
+  & > i:first-child {
+    background: var(--pv-accent);
+    opacity: 1;
+  }
+}
+
+.fz-pv-page {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px;
+  border-radius: 6px;
+  background: var(--pv-page);
+  box-shadow: 0 0 0 1px var(--pv-edge);
+}
+
+.fz-pv-heading {
+  width: 45%;
+  height: 6px;
+  margin-bottom: 2px;
+  border-radius: 3px;
+  background: var(--pv-ink);
+  filter: contrast(1.4);
+}
+
+.fz-pv-text {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--pv-ink);
+
+  &.fz-pv-short {
+    width: 70%;
+  }
+}
+
+/* A primary button: the accent and its text */
+.fz-pv-button {
+  display: flex;
+  align-items: center;
+  width: 38%;
+  height: 13px;
+  margin-top: auto;
+  padding-inline: 8px;
+  border-radius: 5px;
+  background: var(--pv-accent);
+
+  & > .fz-pv-line {
+    background: var(--pv-accent-text);
+    opacity: 1;
+  }
+}
+
+/* Firefox theme: Firefox's own light and dark */
+.fz-scheme-preview[data-firefox] {
+  & [data-mode="light"] > .fz-pv-window {
+    --pv-frame: #f0f0f4;
+    --pv-field: #ffffff;
+    --pv-selected: #ffffff;
+    --pv-edge: rgb(0 0 0 / 0.1);
+    --pv-text: #15141a;
+    --pv-muted: #5b5b66;
+    --pv-accent: #0061e0;
+    --pv-accent-text: #ffffff;
+  }
+
+  & [data-mode="dark"] > .fz-pv-window {
+    --pv-frame: #1c1b22;
+    --pv-field: #2b2a33;
+    --pv-selected: #42414d;
+    --pv-edge: rgb(255 255 255 / 0.08);
+    --pv-text: #fbfbfe;
+    --pv-muted: #bfbfc9;
+    --pv-accent: #00ddff;
+    --pv-accent-text: #15141a;
+  }
+}
+
 .fz-scheme-editor {
   padding: 10px 12px;
   border-radius: 9px;
