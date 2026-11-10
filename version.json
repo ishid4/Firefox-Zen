@@ -1,8 +1,13 @@
 {
-  "version": "1.6.0",
+  "version": "1.6.1",
   "repository": "https://github.com/ishid4/Firefox-Zen",
   "branch": "main",
   "history": [
+    {
+      "version": "1.6.1",
+      "date": "2026-11-10",
+      "notes": "Works with Firefox 160: dragging a tab above the line moves the line and New Tab out of the way again. Dragging a tab over the upper half of New Tab is now enough to drop it above the line. Publishing a touch to the gallery explains what's wrong when the gallery's GitHub app can't open issues there."
+    },
     {
       "version": "1.6.0",
       "date": "2026-11-10",

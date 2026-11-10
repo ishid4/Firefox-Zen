@@ -212,6 +212,13 @@ async function api(method, path, body) {
   }
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
+    // The app's token can't reach the repository: the app isn't installed
+    // on it, or lacks (or hasn't been granted) Issues: Read and write.
+    if (res.status === 403 && /not accessible by integration/i.test(data.message ?? "")) {
+      throw new Error(
+        `GitHub didn't let the Touches app open issues in ${REPO()}. Whoever runs the gallery needs to install the app on that repository with Issues: Read and write (and accept the permission if it was changed).`
+      );
+    }
     throw new Error(data.message ? `GitHub: ${data.message}` : `GitHub said ${res.status}`);
   }
   return res.status === 204 ? null : res.json();

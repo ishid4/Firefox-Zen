@@ -225,11 +225,16 @@
     queueNormalize();
   }
 
-  // Middle of the line where it sits in the list, not where a drag has slid
-  // it to (deciding by the slid line would keep it slid: the pointer would
-  // stay "above" it for another tab's height)
-  function lineMiddle(separator) {
-    const rect = separator.getBoundingClientRect();
+  // Where "above the line" ends for a dragged tab: the middle of New Tab just
+  // under the line (or of the line itself, if New Tab isn't shown), so
+  // pointing at New Tab's upper half is enough. Measured where it sits in the
+  // list, not where a drag has slid it to (deciding by the slid periphery
+  // would keep it slid: the pointer would stay "above" it for another tab's
+  // height).
+  function aboveEnd(separator) {
+    const newTab = periphery().querySelector("#tabs-newtab-button");
+    const newTabRect = newTab?.getBoundingClientRect();
+    const rect = newTabRect?.height ? newTabRect : separator.getBoundingClientRect();
     const slid = new DOMMatrix(getComputedStyle(periphery()).transform).m42;
     return rect.top - slid + rect.height / 2;
   }
@@ -244,7 +249,7 @@
     if (!dragged || dragged.ownerDocument !== document || !separator || e.dataTransfer.dropEffect === "copy") {
       return;
     }
-    const above = e.clientY < lineMiddle(separator);
+    const above = e.clientY < aboveEnd(separator);
     let crossing = false;
     for (const item of dragged._dragData?.movingTabs ?? [dragged]) {
       if (isLooseItem(item)) {
@@ -417,7 +422,9 @@
       const items = this._tabbrowserTabs.dragAndDropElements;
       const moving = dragData.movingTabsSet;
       const index = el => el.currentIndex ?? el.elementIndex;
-      const size = dragData.tabHeight ?? 0;
+      // Firefox 160 no longer keeps the dragged tab's height in its drag data:
+      // measure it the way its own drag code does.
+      const size = dragData.tabHeight ?? window.windowUtils.getBoundsWithoutFlushing(itemNode(dragItem)).height;
       const from = dragItem.elementIndex;
       // How far an item at index i slides when the drop is at index `to`
       const slide = (i, to) => (i < from && i >= to ? size : i > from && i < to ? -size : 0);
@@ -437,7 +444,7 @@
       // top of the list and the line: drop before the first loose item there.
       const last = lastAboveItem();
       const gapTop = last ? last.bottom : scrollbox().getBoundingClientRect().top;
-      const inGap = event.clientY < lineMiddle(separator) && event.clientY > gapTop;
+      const inGap = event.clientY < aboveEnd(separator) && event.clientY > gapTop;
       let to = dragData.animDropElementIndex ?? from;
       if (inGap) {
         to = lineIndex + 0.5;
