@@ -1,8 +1,13 @@
 {
-  "version": "1.7.0",
+  "version": "1.7.1",
   "repository": "https://github.com/ishid4/Firefox-Zen",
   "branch": "main",
   "history": [
+    {
+      "version": "1.7.1",
+      "date": "2026-11-14",
+      "notes": "Checking several downloads on VirusTotal at once no longer opens a tab for each. Lookups without an API key ask VirusTotal for much less, and when it asks to slow down the download says VirusTotal: busy right away instead of waiting. Clicking it tries again; if VirusTotal is still busy, one tab opens where you can confirm you're not a robot. An API key avoids the limit."
+    },
     {
       "version": "1.7.0",
       "date": "2026-11-14",

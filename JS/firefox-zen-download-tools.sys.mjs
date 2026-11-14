@@ -232,8 +232,15 @@ function verdictOf(report) {
 
 const PAGE_WAIT = 30000;
 const UI_HOST = "www.virustotal.com";
+// VirusTotal limits how often the page may ask without an account
+// (HTTP 429). After that, page lookups pause for a while.
+const LIMITED = Symbol("limited");
+const LIMIT_PAUSE = 90000;
+let limitedUntil = 0;
 // hash -> fn(result), while a page lookup waits for it.
 const pageWaiters = new Map();
+// The hidden pages' browsers.
+const hiddenBrowsers = new WeakSet();
 let observing = false;
 
 const BinaryInputStream = Components.Constructor(
@@ -265,11 +272,14 @@ function uiRequest(uri) {
   return null;
 }
 
-// Body of a finished /ui/ response -> report, null (not on VirusTotal), or
-// undefined (no answer: a challenge, a rate limit).
+// Body of a finished /ui/ response -> report, null (not on VirusTotal),
+// LIMITED, or undefined (no answer).
 function pageResult(status, body, search, hash) {
   if (status === 404) {
     return null;
+  }
+  if (status === 429) {
+    return LIMITED;
   }
   if (status !== 200) {
     return undefined;
@@ -351,13 +361,33 @@ function capture(channel, { hash, search }) {
   original = channel.QueryInterface(Ci.nsITraceableChannel).setNewListener(tee);
 }
 
+// Whether a request comes from one of the hidden pages.
+function fromHiddenPage(channel) {
+  const id = channel.loadInfo?.browsingContextID;
+  const top = id ? BrowsingContext.get(id)?.top : null;
+  return !!top?.embedderElement && hiddenBrowsers.has(top.embedderElement);
+}
+
 const responseObserver = {
-  observe(subject) {
+  observe(subject, topic) {
     if (!pageWaiters.size) {
       return;
     }
     try {
       const channel = subject.QueryInterface(Ci.nsIHttpChannel);
+      if (topic === "http-on-modify-request") {
+        // The report page also loads the file's behaviour, relations,
+        // comments...: ~20 requests that count against VirusTotal's limit.
+        // The hidden page needs none of them.
+        if (
+          channel.URI.host === UI_HOST &&
+          /^\/ui\/files\/[0-9a-f]{64}\/./i.test(channel.URI.filePath) &&
+          fromHiddenPage(channel)
+        ) {
+          channel.cancel(Cr.NS_BINDING_ABORTED);
+        }
+        return;
+      }
       const req = uiRequest(channel.URI);
       if (req && pageWaiters.has(req.hash)) {
         capture(channel, req);
@@ -367,7 +397,12 @@ const responseObserver = {
     }
   },
 };
-const RESPONSE_TOPICS = ["http-on-examine-response", "http-on-examine-cached-response", "http-on-examine-merged-response"];
+const RESPONSE_TOPICS = [
+  "http-on-modify-request",
+  "http-on-examine-response",
+  "http-on-examine-cached-response",
+  "http-on-examine-merged-response",
+];
 
 // An off-screen content browser in a browser window showing `url`.
 function hiddenBrowser(win, url) {
@@ -393,6 +428,7 @@ function hiddenBrowser(win, url) {
     b.setAttribute(k, v);
   }
   b.style.cssText = "position: fixed; left: -20000px; top: 0; width: 1200px; height: 800px; pointer-events: none;";
+  hiddenBrowsers.add(b);
   doc.documentElement.append(b);
   b.loadURI(Services.io.newURI(url), {
     triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(),
@@ -400,12 +436,16 @@ function hiddenBrowser(win, url) {
   return b;
 }
 
-// One page at a time; each resolves to a report, null (not on VirusTotal)
-// or undefined (couldn't tell).
+// One page at a time; each resolves to a report, null (not on VirusTotal),
+// LIMITED, or undefined (couldn't tell).
 let pageQueue = Promise.resolve();
-function pageLookup(hash) {
+function pageLookup(hash, { evenIfLimited = false } = {}) {
   const run = () =>
     new Promise(resolve => {
+      if (!evenIfLimited && Date.now() < limitedUntil) {
+        resolve(LIMITED);
+        return;
+      }
       const win = Services.wm.getMostRecentWindow("navigator:browser");
       if (!win || win.closed) {
         resolve(undefined);
@@ -420,6 +460,12 @@ function pageLookup(hash) {
       let browser = null;
       let timer = null;
       const finish = result => {
+        if (result === LIMITED) {
+          limitedUntil = Date.now() + LIMIT_PAUSE;
+        } else if (result !== undefined) {
+          // Answered: the limit is over (or was lifted in a tab).
+          limitedUntil = 0;
+        }
         clearTimeout(timer);
         if (pageWaiters.get(hash) === finish) {
           pageWaiters.delete(hash);
@@ -479,12 +525,14 @@ async function waitForReport(d, hash, { until = 6 * 60000 } = {}) {
 }
 
 // Looks the download up: VirusTotal's report page first, then the API when
-// the page couldn't tell and there's a key. Returns a URL to open when
-// neither could (no key): the file's report page.
+// the page couldn't tell and there's a key. The outcome lands in vtState().
+// Asking again about a rate-limited download (no key) skips the pause, and
+// returns the report URL to open if VirusTotal still limits it.
 async function check(d) {
   if (!d.succeeded || !d.target?.path) {
     return null;
   }
+  const retry = vt.get(d)?.status === "limited";
   setState(d, { status: "hashing" });
   let hash;
   try {
@@ -502,7 +550,7 @@ async function check(d) {
   setState(d, { status: "checking", hash });
   let page;
   try {
-    page = await pageLookup(hash);
+    page = await pageLookup(hash, { evenIfLimited: retry });
   } catch (e) {
     log(e);
   }
@@ -512,7 +560,7 @@ async function check(d) {
     setState(d, { status: "unknown", hash });
     return null;
   }
-  if (page) {
+  if (page && page !== LIMITED) {
     const verdict = verdictOf(page);
     if (verdict) {
       verdicts.set(hash, verdict);
@@ -525,10 +573,14 @@ async function check(d) {
     }
   }
   if (!apiKey()) {
-    // The page didn't answer (a challenge, a timeout): open it in a tab.
-    vt.delete(d);
-    notify(d);
-    return `${GUI}/file/${hash}`;
+    if (page === LIMITED) {
+      // Asked again and still limited: the report page in a tab lets you
+      // confirm you're not a robot, which lifts the limit here too.
+      setState(d, { status: "limited", hash });
+      return retry ? `${GUI}/file/${hash}` : null;
+    }
+    setState(d, { status: "error", hash, note: "VirusTotal didn't answer, try again" });
+    return null;
   }
   try {
     const report = await api(`/files/${hash}`);
@@ -638,7 +690,7 @@ export const FzDownloadTools = {
   },
 
   // { status: "hashing" | "checking" | "unknown" | "uploading" | "scanning"
-  //   | "done" | "error", hash?, verdict?: { malicious, suspicious, total },
+  //   | "limited" | "done" | "error", hash?, verdict?: { malicious, suspicious, total },
   //   note? } or null when not checked.
   vtState: d => vt.get(d) ?? null,
   // A verdict known from before (a private space's saved one), shown

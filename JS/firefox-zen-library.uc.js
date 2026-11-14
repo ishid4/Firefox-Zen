@@ -2298,8 +2298,8 @@
 
   // ---- VirusTotal (JS/firefox-zen-download-tools.sys.mjs) ----
 
-  // Checks the download; without an API key, a page that couldn't tell opens
-  // the report in a tab.
+  // Checks the download; the verdict shows on its row. Asking again while
+  // VirusTotal still rate-limits it opens the report in a tab.
   function vtCheck(d) {
     FzDownloadTools.check(d)
       .then(url => url && openUrl(url, { spaceId: dlSource || null }))
@@ -2332,6 +2332,7 @@
       case "checking":
         text = "Checking…";
         verdict = "busy";
+        title = state.note || "Looking it up on VirusTotal";
         onclick = null;
         break;
       case "uploading":
@@ -2355,6 +2356,13 @@
           title = state.note || "VirusTotal hasn't seen this file. Click to check it on VirusTotal's site.";
           onclick = () => openUrl(FzDownloadTools.uploadUrl, { spaceId: dlSource || null });
         }
+        break;
+      case "limited":
+        text = "VirusTotal: busy";
+        verdict = "unknown";
+        title =
+          "VirusTotal limits lookups without an account. Click to try again; if it's still busy, " +
+          "VirusTotal opens in a tab to confirm you're not a robot. An API key avoids this.";
         break;
       case "error":
         text = "VirusTotal: try again";
