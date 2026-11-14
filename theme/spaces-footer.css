@@ -20,8 +20,96 @@
   display: none !important;
 }
 
-:host([fz-spaces-footer][expanded]) .buttons-wrapper {
+:host([fz-spaces-footer]) .buttons-wrapper {
   height: auto !important;
+}
+
+/* Collapsed sidebar: Firefox's first visible tool, then the Library button
+ * (rules further down), instead of every tool stacked in a column */
+:host([fz-spaces-footer]:not([expanded]))
+  .tools-and-extensions:not(.overflow-button)
+  > moz-button:not([hidden])
+  ~ moz-button {
+  display: none !important;
+}
+
+/* The first tool and the Library button keep one place in both sidebar
+ * states, on the tab icons' column (25px from the edge), so nothing moves
+ * when it collapses or expands. Firefox sizes and pads the tools differently
+ * per state and per density (a 48x33.5 button with 6px under it, collapsed),
+ * so both states get the same fixed box: a 26px button 12px from the edge,
+ * 3px below it. The Library button's 10px is in #fz-spaces-bar below. */
+:host([fz-spaces-footer]) .buttons-wrapper {
+  padding: 0 !important;
+}
+
+:host([fz-spaces-footer]) .tools-and-extensions:not(.overflow-button) {
+  padding-inline-start: 12px !important;
+  padding-block: 0 3px !important;
+}
+
+:host([fz-spaces-footer]:not([expanded])) .tools-and-extensions:not(.overflow-button) {
+  align-items: flex-start !important;
+
+  /* Firefox's outer padding for the collapsed column (it pads the button
+   * inside moz-button, around the 26px box) */
+  > moz-button {
+    --button-outer-padding-inline: 0px !important;
+    --button-outer-padding-block: 0px !important;
+    --button-outer-padding-block-start: 0px !important;
+    --button-outer-padding-block-end: 0px !important;
+  }
+}
+
+/* Collapsed and always shown, the first tool opens a dock with the others
+ * (JS/firefox-zen-spaces.uc.js): a small chevron on its edge says so */
+:host([fz-spaces-footer][fz-tools-dock]:not([expanded]))
+  .tools-and-extensions:not(.overflow-button)
+  > moz-button:not([hidden]):not(moz-button:not([hidden]) ~ moz-button) {
+  position: relative;
+
+  &::after {
+    content: "";
+    position: absolute;
+    inset-inline-end: -5px;
+    top: 50%;
+    width: 6px;
+    height: 6px;
+    translate: 0 -50%;
+    background: currentColor;
+    mask: url("chrome://global/skin/icons/arrow-right.svg") center / 6px no-repeat;
+    opacity: 0.4;
+    pointer-events: none;
+    transition: opacity 0.15s ease, translate 0.15s ease;
+  }
+
+  &:hover::after {
+    opacity: 0.8;
+    translate: 2px -50%;
+  }
+}
+
+/* Likewise the Library button, whose dock has the spaces and + (the chevron
+ * sits where the first tool's does, 5px past its edge) */
+:host([fz-spaces-footer][fz-dock]:not([expanded])) .fz-library {
+  > .fz-library-books::after {
+    content: "";
+    position: absolute;
+    left: calc(100% + 5px);
+    top: 50%;
+    width: 6px;
+    height: 6px;
+    translate: 0 -50%;
+    background: currentColor;
+    mask: url("chrome://global/skin/icons/arrow-right.svg") center / 6px no-repeat;
+    opacity: 0.4;
+    transition: opacity 0.15s ease, translate 0.15s ease;
+  }
+
+  &:hover > .fz-library-books::after {
+    opacity: 0.8;
+    translate: 2px -50%;
+  }
 }
 
 /* Firefox's tools row (expanded sidebar): one clipped row instead of
@@ -40,7 +128,6 @@
   overflow-y: clip !important;
   scroll-behavior: smooth;
   margin-block-start: 0 !important;
-  padding-block-end: var(--space-xsmall, 4px) !important;
 
   /* Fade an edge while more tools are hidden that way, driven by the row's
    * own scroll position. Unregistered properties flip halfway through each
@@ -82,9 +169,16 @@
   display: none !important;
 }
 
-/* Collapsed sidebar: no footer */
+/* Collapsed sidebar: the Library button only. The update bubble waits for
+ * the expanded sidebar (the strip is too narrow); the button shows the
+ * update icon meanwhile. */
 :host(:not([expanded])) #fz-spaces-bar {
-  display: none;
+  justify-content: flex-start;
+  padding-inline-end: 0;
+
+  > :not(.fz-library) {
+    display: none;
+  }
 }
 
 /* ---- Footer: history | 4-space carousel | + ---- */
@@ -97,6 +191,9 @@
   gap: 4px;
   flex: none;
   padding: 6px var(--tab-margin-inline-inner, 6px) 6px;
+  /* Fixed, so the Library button stays on the tab icons' column in both
+   * sidebar states and densities (see the tools row above) */
+  padding-inline-start: 10px;
   color: var(--toolbox-text-color, inherit);
   font: menu;
 
@@ -133,12 +230,25 @@
   transition: translate 0.2s ease;
 }
 
+/* The icon is a mask on ::after, so it can be painted with a gradient
+ * (::before is the downloads ring below) */
 .fz-history,
 .fz-library {
-  background: url("icons/history.svg") center / 16px no-repeat;
-  -moz-context-properties: fill, fill-opacity;
-  fill: currentColor;
+  --fz-button-icon: url("icons/history.svg");
+  --fz-button-paint: currentColor;
+  --fz-button-icon-size: 16px;
   opacity: 0.6;
+
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    width: var(--fz-button-icon-size);
+    height: var(--fz-button-icon-size);
+    background: var(--fz-button-paint);
+    mask: var(--fz-button-icon) center / var(--fz-button-icon-size) no-repeat;
+  }
 
   &:hover,
   &[aria-pressed="true"] {
@@ -146,16 +256,226 @@
   }
 }
 
+/* How far the Library button's books have turned from the text color to the
+ * theme's colors; registered so it fades (it's set inside the sidebar's
+ * shadow root, which shares this document's registration) */
+@property --fz-book-mix {
+  syntax: "<percentage>";
+  inherits: true;
+  initial-value: 0%;
+}
+
+/* The Library button's books: three outlined boxes, drawn alike and on whole
+ * pixels (4px wide, 1px line, 1.5px corners, 1px apart, 14px tall: 14px
+ * reads the same size as Firefox's 16px tool icons) so they match exactly
+ * once the leaning one stands up. ::after (the icon above) is only used when
+ * another icon stands in for them (update, downloads). */
 .fz-library {
-  background-image: url("icons/library.svg");
+  --fz-button-icon: none;
+  --fz-book-mix: 0%;
+
+  /* Library open: the books fade into the theme's colors (theme/colors.css) */
+  &[aria-pressed="true"] {
+    --fz-button-paint: var(--fz-accent-gradient, var(--fz-accent));
+    --fz-book-mix: 100%;
+  }
+
+  /* .fz-space's transitions (later in this file), plus the color fade */
+  &.fz-space {
+    transition:
+      background-color 0.15s ease,
+      opacity 0.15s ease,
+      filter 0.15s ease,
+      scale 0.1s ease,
+      --fz-book-mix 0.45s ease;
+  }
+
+  &::after {
+    display: none;
+  }
+
+  > .fz-library-books {
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    width: 14px;
+    height: 14px;
+    pointer-events: none;
+  }
+}
+
+.fz-book {
+  --fz-book-x: 0px;
+  position: absolute;
+  left: var(--fz-book-x);
+  bottom: 0;
+  box-sizing: border-box;
+  width: 4px;
+  height: 14px;
+  padding: 1px;
+  border-radius: 1.5px;
+  /* The text color, or the theme's gradient as far as --fz-book-mix says,
+   * laid out as over the whole icon */
+  background: linear-gradient(
+    135deg,
+    color-mix(in oklch, var(--fz-accent-from, var(--fz-accent)) var(--fz-book-mix), currentColor),
+    color-mix(in oklch, var(--fz-accent-to, var(--fz-accent)) var(--fz-book-mix), currentColor)
+  );
+  background-size: 14px 14px;
+  background-position: calc(-1 * var(--fz-book-x)) 0;
+  /* Only the outline */
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+
+  & + .fz-book {
+    --fz-book-x: 5px;
+  }
+}
+
+/* The leaning one: shorter and narrower, resting on its bottom-left corner
+ * against the second. End states: a slight lift on hover, and while the
+ * Library is open, upright in the third place at the others' size.
+ * JS/firefox-zen-spaces.uc.js animates between them. */
+.fz-book.fz-library-lean {
+  --fz-book-x: 11px;
+  width: 3px;
+  height: 11.5px;
+  transform-origin: 0 100%;
+  rotate: -9deg;
+  transition: rotate 0.3s cubic-bezier(0.3, 0.7, 0.4, 1);
+
+  .fz-library:hover:not([aria-pressed="true"]) & {
+    rotate: -6deg;
+  }
+
+  .fz-library[aria-pressed="true"] & {
+    --fz-book-x: 10px;
+    rotate: 0deg;
+    width: 4px;
+    height: 14px;
+  }
+}
+
+/* Another icon stands in for the books (update, downloads) */
+#fz-spaces-bar:is([fz-update], [fz-download-icon]) .fz-library {
+  &::after {
+    display: block;
+  }
+
+  > .fz-library-books {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fz-library-lean {
+    transition: none !important;
+  }
 }
 
 /* A Firefox-Zen update not seen yet: the update icon, until About is opened
    (JS/firefox-zen-about.uc.js). The downloads cue below wins while it shows. */
 #fz-spaces-bar[fz-update] .fz-library {
-  background-image: url("icons/update.svg");
-  fill: var(--fz-accent);
+  --fz-button-icon: url("icons/update.svg");
+  --fz-button-paint: var(--fz-accent);
   opacity: 1;
+}
+
+/* ---- Update bubble (JS/firefox-zen-about.uc.js): above the Library button
+ * until it's dismissed or About is opened ---- */
+#fz-spaces-bar {
+  position: relative;
+}
+
+.fz-update-bubble {
+  position: absolute;
+  inset-inline-start: 6px;
+  bottom: calc(100% + 2px);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100% - 12px);
+  box-sizing: border-box;
+  padding: 7px 6px 7px 10px;
+  border-radius: 10px;
+  background: var(--fz-accent);
+  color: var(--fz-accent-text, white);
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.3);
+  font: menu;
+  cursor: pointer;
+  animation: fz-bubble-in 0.35s cubic-bezier(0.3, 1.4, 0.5, 1) both;
+
+  &[fz-shown] {
+    animation: none;
+  }
+
+  /* The tail, pointing at the Library button */
+  &::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    inset-inline-start: 9px;
+    border: 6px solid transparent;
+    border-top-color: var(--fz-accent);
+    border-bottom-width: 0;
+  }
+
+  &:hover {
+    filter: brightness(1.08);
+  }
+
+  > .fz-update-bubble-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    line-height: 1.25;
+
+    > strong {
+      font-weight: 600;
+    }
+
+    > span {
+      opacity: 0.85;
+      font-size: 0.92em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+  }
+
+  > .fz-update-bubble-close {
+    appearance: none;
+    flex: none;
+    width: 20px;
+    height: 20px;
+    margin: 0;
+    padding: 0;
+    border: none;
+    border-radius: 6px;
+    background: currentColor;
+    mask: url("icons/close.svg") center / 12px no-repeat;
+    opacity: 0.7;
+    cursor: pointer;
+
+    &:hover {
+      opacity: 1;
+    }
+  }
+}
+
+@keyframes fz-bubble-in {
+  from {
+    opacity: 0;
+    translate: 0 8px;
+    scale: 0.9;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fz-update-bubble {
+    animation: none;
+  }
 }
 
 /* A tab dragged from the Library over a space button */
@@ -353,7 +673,7 @@
 }
 
 #fz-spaces-bar[fz-download-icon] .fz-library {
-  background-image: url("icons/downloads.svg");
+  --fz-button-icon: url("icons/downloads.svg");
 }
 
 #fz-spaces-bar[fz-downloading] .fz-library::before {

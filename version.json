@@ -1,8 +1,13 @@
 {
-  "version": "1.7.2",
+  "version": "1.8.0",
   "repository": "https://github.com/ishid4/Firefox-Zen",
   "branch": "main",
   "history": [
+    {
+      "version": "1.8.0",
+      "date": "2026-11-14",
+      "notes": "The Library button's leaning book stands up beside the others when the Library opens and tips back when it closes, and the books take your color scheme's colors while it's open. A new update shows a bubble above the Library button until you open About or close it. The Library's open view shows its icon in your scheme's colors, and its folders fold and unfold together with the sidebar's. Hovering a folder in the sidebar shows how many tabs it has. Collapsed, the sidebar keeps the first tool and the Library button, in the same place as when expanded; with Always shown – Icons, hovering them opens a dock with the other tools or with your spaces and +. With many tabs, the list uses the space it used to leave empty above the tools, and stays scrolled to the end when the sidebar collapses or expands."
+    },
     {
       "version": "1.7.2",
       "date": "2026-11-14",

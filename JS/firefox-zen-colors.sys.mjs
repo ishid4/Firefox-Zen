@@ -369,6 +369,16 @@ export function palette(scheme, mode) {
     accentText == "#ffffff"
   );
 
+  // Ends of the accent gradient (colored icons, theme/colors.css
+  // --fz-accent-gradient): the first and last colorful seeds at the accent's
+  // strength, or the accent's hue turned either way with fewer than two.
+  const asAccent = (H, C = accentBase.C) => reach({ L: accentBase.L, C, H }, backgrounds, ACCENT_CONTRAST, dark);
+  const colorful = seeds.filter(seed => seed.C >= 0.03);
+  const [accentFrom, accentTo] =
+    colorful.length >= 2
+      ? [colorful[0], colorful.at(-1)].map(seed => asAccent(seed.H, clamp(seed.C, 0.08, 0.2)))
+      : [asAccent(vivid.H - 35), asAccent(vivid.H + 35)];
+
   const ink = dark ? "#ffffff" : "#000000";
   return {
     "frame-bg": frame.base,
@@ -384,6 +394,8 @@ export function palette(scheme, mode) {
     active: withAlpha(ink, dark ? 0.14 : 0.11),
     accent,
     "accent-text": tintedAccentText,
+    "accent-from": accentFrom,
+    "accent-to": accentTo,
   };
 }
 

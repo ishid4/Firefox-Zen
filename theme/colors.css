@@ -21,6 +21,13 @@
     /* Accent for selection, toggles and primary buttons */
     --fz-accent: var(--color-accent-primary, AccentColor);
 
+    /* Colored icons (the open Library view, the Library button while open).
+     * A scheme sets the ends from its seeds; without one, the accent's hue
+     * turned either way. */
+    --fz-accent-from: oklch(from var(--fz-accent) l c calc(h - 35));
+    --fz-accent-to: oklch(from var(--fz-accent) l c calc(h + 35));
+    --fz-accent-gradient: linear-gradient(135deg, var(--fz-accent-from), var(--fz-accent-to));
+
     /* Status colors */
     --fz-attention: light-dark(#d18b00, #f5b82e);
     --fz-danger: light-dark(#c50042, #ff848b);
@@ -31,7 +38,8 @@
  * Set by the scheme (inline on <html>): --fz-frame-bg, --fz-frame-gradient-light,
  * --fz-frame-gradient-dark, --fz-frame-edge, --fz-field-bg, --fz-popup-bg,
  * --fz-tab-selected-bg, --fz-text, --fz-text-muted, --fz-border, --fz-hover,
- * --fz-active, --fz-accent, --fz-accent-text, --fz-frame-grain.
+ * --fz-active, --fz-accent, --fz-accent-text, --fz-accent-from,
+ * --fz-accent-to, --fz-frame-grain.
  * The window is one surface: the frame color, gradient and grain are painted
  * fixed to the window, by the body and by each overlay that slides over the
  * page, so the gradient runs unbroken behind everything, Zen-style.

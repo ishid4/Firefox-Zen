@@ -176,3 +176,74 @@
     transition: none !important;
   }
 }
+
+/* ---- Tools dock (JS/firefox-zen-spaces.uc.js): beside a collapsed,
+ * always-shown sidebar, the tools its footer has no room for ---- */
+#fz-tools-dock {
+  --panel-padding: 4px;
+  --panel-border-radius: 10px;
+  --panel-background: var(--fz-popup-bg, var(--arrowpanel-background));
+  --panel-color: var(--fz-text, var(--arrowpanel-color));
+  --panel-shadow-margin: 6px;
+
+  &::part(content) {
+    padding: var(--panel-padding);
+  }
+}
+
+.fz-tools-dock-row {
+  display: flex;
+  gap: 2px;
+}
+
+.fz-tools-dock-button {
+  appearance: none;
+  position: relative;
+  width: 30px;
+  height: 30px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  transition: background-color 0.12s ease;
+
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    width: 16px;
+    height: 16px;
+    background: currentColor;
+    mask: var(--fz-dock-icon) center / 16px no-repeat;
+    opacity: 0.85;
+  }
+
+  &:hover {
+    background-color: var(--fz-hover, color-mix(in srgb, currentColor 10%, transparent));
+
+    &::before {
+      opacity: 1;
+    }
+  }
+
+  &:active {
+    background-color: var(--fz-active, color-mix(in srgb, currentColor 16%, transparent));
+  }
+
+  /* The tool open in the sidebar */
+  &[aria-pressed="true"] {
+    background-color: var(--fz-active, color-mix(in srgb, currentColor 14%, transparent));
+
+    &::before {
+      opacity: 1;
+    }
+  }
+
+  &:focus-visible {
+    outline: var(--focus-outline, 2px solid var(--fz-accent));
+    outline-offset: -2px;
+  }
+}

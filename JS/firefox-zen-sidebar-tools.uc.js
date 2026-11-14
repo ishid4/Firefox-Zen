@@ -155,6 +155,54 @@
     queueCollapsedWidthCheck();
   }
 
+  // ---- tab count on a hovered folder ----
+
+  // theme/tabgroups.css shows [fz-count] at the end of the folder's row on
+  // hover, like the Library's folders.
+  let folderCountsQueued = false;
+
+  function updateFolderCounts() {
+    folderCountsQueued = false;
+    for (const group of gBrowser.tabGroups ?? []) {
+      group
+        .querySelector(":scope > .tab-group-label-container")
+        ?.setAttribute("fz-count", String(group.tabs.length));
+    }
+  }
+
+  // TabClose fires before the tab leaves its group.
+  function queueFolderCounts() {
+    if (!folderCountsQueued) {
+      folderCountsQueued = true;
+      setTimeout(updateFolderCounts, 0);
+    }
+  }
+
+  // ---- keep the tab list scrolled to its end when it gets shorter ----
+
+  // The tab list is a different height expanded (spaces row + one tools row)
+  // and collapsed (the tools stacked in a column). Scrolled to the end, a
+  // shorter list kept its scroll position, so the last tabs went out of view
+  // and, after the next toggle, stayed scrolled up from the end.
+  function keepTabsAtEnd() {
+    const box = gBrowser.tabContainer.arrowScrollbox?.scrollbox;
+    if (!box) {
+      return;
+    }
+    let lastHeight = box.clientHeight;
+    new ResizeObserver(() => {
+      const height = box.clientHeight;
+      if (!height) {
+        return; // hidden (compact sidebar): compare with the last shown height
+      }
+      const wasAtEnd = box.scrollTop + lastHeight >= box.scrollHeight - 2;
+      if (height < lastHeight && wasAtEnd) {
+        box.scrollTo({ top: box.scrollHeight, behavior: "instant" });
+      }
+      lastHeight = height;
+    }).observe(box);
+  }
+
   // ---- at most maxPins() pinned tabs ----
 
   // Pins the user makes (tab menu, dragging into the pinned area) go through
@@ -768,6 +816,12 @@
       gBrowser.tabContainer.addEventListener(type, queuePinnedRows);
     }
     window.addEventListener("SSWindowRestored", queuePinnedRows);
+    for (const type of ["TabGrouped", "TabUngrouped", "TabGroupCreate", "TabOpen", "TabClose"]) {
+      gBrowser.tabContainer.addEventListener(type, queueFolderCounts);
+    }
+    window.addEventListener("SSWindowRestored", queueFolderCounts);
+    updateFolderCounts();
+    keepTabsAtEnd();
     gBrowser.tabContainer.addEventListener("dragover", onPinDragOver, true);
     gBrowser.tabContainer.addEventListener("drop", onPinDrop, true);
     gBrowser.tabContainer.addEventListener("dragover", onReorderDragOver);

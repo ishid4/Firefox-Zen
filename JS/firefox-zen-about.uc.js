@@ -702,6 +702,64 @@
     if (library) {
       library.title = s.unseen && !s.updated ? `Firefox-Zen ${s.latest} is available` : "Library";
     }
+    syncBubble(s, library);
+  }
+
+  // ---- update bubble ----
+
+  // A speech bubble above the Library button (theme/spaces-footer.css) while
+  // an update is unseen. Clicking it opens About; its × marks it seen. The
+  // footer is rebuilt with the spaces, so it's added again on each sync.
+  let bubble = null;
+
+  function syncBubble(s, library) {
+    const footer = bar();
+    const show = !!library && s.unseen && !s.updated;
+    if (!show || bubble?.dataset.version !== s.latest) {
+      bubble?.remove();
+      bubble = null;
+    }
+    if (!show) {
+      return;
+    }
+    if (!bubble) {
+      bubble = buildBubble(footer.ownerDocument, s.latest);
+    }
+    if (bubble.parentNode !== footer) {
+      footer.append(bubble);
+    }
+  }
+
+  function buildBubble(doc, version) {
+    const el = (tag, cls, text) => {
+      const node = doc.createElementNS(HTML_NS, tag);
+      if (cls) {
+        node.className = cls;
+      }
+      if (text) {
+        node.textContent = text;
+      }
+      return node;
+    };
+    const node = el("div", "fz-update-bubble");
+    node.dataset.version = version;
+    node.setAttribute("role", "status");
+    node.title = "Open About to see what's new and update";
+    // Its entrance plays once, not again each time the footer is rebuilt.
+    node.addEventListener("animationend", () => node.setAttribute("fz-shown", ""), { once: true });
+    const text = el("div", "fz-update-bubble-text");
+    text.append(el("strong", null, "Update available"), el("span", null, `Firefox-Zen ${version}`));
+    const close = el("button", "fz-update-bubble-close");
+    close.type = "button";
+    close.title = "Dismiss";
+    close.setAttribute("aria-label", "Dismiss");
+    close.addEventListener("click", e => {
+      e.stopPropagation();
+      FzUpdate.markSeen();
+    });
+    node.append(text, close);
+    node.addEventListener("click", () => window.FirefoxZenLibrary?.open("about"));
+    return node;
   }
 
   const observer = {

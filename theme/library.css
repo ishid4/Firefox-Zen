@@ -107,6 +107,24 @@
     background: var(--fz-lib-active);
     opacity: 1;
     font-weight: 600;
+
+    /* The open view's icon in the theme's colors (theme/colors.css) */
+    &::before {
+      background: var(--fz-accent-gradient, currentColor);
+      animation: fz-lib-nav-pop 0.3s ease-out;
+    }
+  }
+}
+
+@keyframes fz-lib-nav-pop {
+  40% {
+    scale: 1.2;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fz-lib-nav[aria-current="true"]::before {
+    animation: none;
   }
 }
 
@@ -797,6 +815,11 @@
   margin-inline-start: 10px;
   padding-inline-start: 6px;
   border-inline-start: 2px solid color-mix(in srgb, var(--fz-group-color) 60%, transparent);
+
+  /* A folded folder without the selected tab */
+  &:empty {
+    display: none;
+  }
 }
 
 .fz-lib-new-column {

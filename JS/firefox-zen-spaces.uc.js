@@ -1260,59 +1260,7 @@
     const list = visibleSpaces();
     const active = list.find(s => s.id === activeId);
 
-    const buttons = list.map(space => {
-      const btn = h("button", {
-        class: "fz-space",
-        type: "button",
-        title: space.name,
-        "aria-label": space.name,
-        "aria-pressed": String(space.id === activeId),
-        "data-id": space.id,
-        text: space.icon || "•",
-      });
-      const container = containerOf(space);
-      if (container) {
-        const identity = ContextualIdentityService.getPublicIdentityFromId(container);
-        btn.classList.add("fz-space-has-container");
-        btn.style.setProperty(
-          "--fz-space-container-color",
-          ContextualIdentityService.getContainerColorCode(identity.color)
-        );
-        btn.title = `${space.name} (${ContextualIdentityService.getUserContextLabel(container)})`;
-      }
-      if (space.private) {
-        // A badge (CSS): mask while unlocked, padlock while locked.
-        const locked = space.locked;
-        btn.classList.add("fz-space-private");
-        btn.toggleAttribute("fz-locked", locked);
-        // The icon in its own element, so locking can blur it under the badge.
-        btn.replaceChildren(h("span", { class: "fz-space-icon", text: space.icon }));
-        // Middle-click locks it.
-        btn.addEventListener("auxclick", e => {
-          if (e.button === 1 && !locked) {
-            e.preventDefault();
-            lockPrivateSpace(space.id);
-          }
-        });
-        btn.title = `${space.name} (private, ${locked ? "locked" : "unlocked"})`;
-      }
-      btn.addEventListener("click", () => switchTo(space.id));
-      // The clicks already switched to it, so its name is in the (re-rendered) header.
-      btn.addEventListener("dblclick", () => {
-        if (!isLocal(space.id)) {
-          return;
-        }
-        const label = document.querySelector(`#${HEADER_ID} .fz-space-name`);
-        if (label) {
-          startInlineRename(space.id, label);
-        }
-      });
-      btn.addEventListener("contextmenu", e => {
-        e.preventDefault();
-        openMenu(space.id, e);
-      });
-      return btn;
-    });
+    const buttons = list.map(buildSpaceButton);
 
     const add = h("button", {
       class: "fz-space fz-space-add",
@@ -1332,7 +1280,31 @@
       "aria-label": library ? "Library" : "History",
     });
     if (library) {
-      history.setAttribute("aria-pressed", String(!!window.FirefoxZenLibrary.isOpen()));
+      const open = !!window.FirefoxZenLibrary.isOpen();
+      history.setAttribute("aria-pressed", String(open));
+      // The icon's three books (theme/spaces-footer.css); the leaning one
+      // stands up while the Library is open
+      history.append(
+        h(
+          "span",
+          { class: "fz-library-books", "aria-hidden": "true" },
+          h("span", { class: "fz-book" }),
+          h("span", { class: "fz-book" }),
+          h("span", { class: "fz-book fz-library-lean" })
+        )
+      );
+      // The Library sets aria-pressed as it opens and closes; the footer can
+      // also be rebuilt mid-change, so a new button whose state differs from
+      // the one last shown animates too.
+      if (open !== libraryShownOpen) {
+        animateLibraryIcon(history, open);
+      }
+      new MutationObserver(() => {
+        const now = history.getAttribute("aria-pressed") === "true";
+        if (now !== libraryShownOpen) {
+          animateLibraryIcon(history, now);
+        }
+      }).observe(history, { attributes: true, attributeFilter: ["aria-pressed"] });
     }
     history.addEventListener("click", () => {
       if (libraryOn()) {
@@ -1369,6 +1341,199 @@
     bar.replaceChildren(history, viewport, add);
     renderHeader(active);
     window.dispatchEvent(new CustomEvent("FzSpacesChanged"));
+  }
+
+  // ---- Library button: the leaning book ----
+
+  // Whether the Library button last showed the Library open.
+  let libraryShownOpen = false;
+
+  // Each part of the motion has its own timing, so it reads as one physical
+  // movement rather than a sequence of poses. Opening: the book lifts a
+  // little off its corner, grows to the others' size and swings upright on a
+  // spring (settling with a slight overshoot), sliding into the third place.
+  // Closing: it lifts, shrinks back and falls over, accelerating like it's
+  // dropping, bounces off its neighbor and settles. The end states are CSS
+  // (theme/spaces-footer.css); these animate between them, from wherever the
+  // book is (a hover tilt, or partway through the other animation).
+  const LEAN_REST = { rotate: -9, left: 11, w: 3, h: 11.5 };
+  const LEAN_UP = { rotate: 0, left: 10, w: 4, h: 14 };
+
+  // A damped spring (damping ratio z, natural frequency w rad/s) over T
+  // seconds as a CSS linear() easing; values pass 1 where it overshoots.
+  function springEasing(z, w, T, steps = 40) {
+    const wd = w * Math.sqrt(1 - z * z);
+    const at = t => 1 - Math.exp(-z * w * t) * (Math.cos(wd * t) + ((z * w) / wd) * Math.sin(wd * t));
+    const end = at(T);
+    const points = [];
+    for (let i = 0; i <= steps; i++) {
+      points.push((at((i / steps) * T) / end).toFixed(4));
+    }
+    return `linear(${points.join(", ")})`;
+  }
+  const OPEN_MS = 720;
+  const CLOSE_MS = 640;
+  const SPRING = springEasing(0.6, 13, OPEN_MS / 1000);
+
+  function animateLibraryIcon(button, open) {
+    libraryShownOpen = open;
+    // A rebuilt footer's button isn't in the document yet
+    if (!button.isConnected) {
+      requestAnimationFrame(() => button.isConnected && playLibraryIcon(button, open));
+      return;
+    }
+    playLibraryIcon(button, open);
+  }
+
+  function playLibraryIcon(button, open) {
+    const lean = button.querySelector(".fz-library-lean");
+    if (
+      !lean ||
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches ||
+      // Another icon stands in for the books (update, downloads)
+      button.parentNode?.matches("[fz-update], [fz-download-icon]")
+    ) {
+      return;
+    }
+    // The hover tilt's CSS transition starts with the state change too, and
+    // transitions win over script animations: flush styles so it exists,
+    // then drop it.
+    getComputedStyle(lean).rotate;
+    for (const a of lean.getAnimations()) {
+      if (a instanceof CSSTransition) {
+        a.cancel();
+      }
+    }
+    // Where the book is now: mid-animation, or (the CSS end state already
+    // applied) where it was before this change.
+    const running = lean.getAnimations().filter(a => !(a instanceof CSSAnimation));
+    let from;
+    if (running.length) {
+      const cs = getComputedStyle(lean);
+      from = {
+        rotate: parseFloat(cs.rotate) || 0,
+        left: parseFloat(cs.left),
+        w: parseFloat(cs.width),
+        h: parseFloat(cs.height),
+        y: parseFloat(cs.translate.split(" ")[1]) || 0,
+      };
+      running.forEach(a => a.cancel());
+    } else {
+      from = open
+        ? { ...LEAN_REST, rotate: button.matches(":hover") ? -6 : LEAN_REST.rotate, y: 0 }
+        : { ...LEAN_UP, y: 0 };
+    }
+    const to = open ? LEAN_UP : LEAN_REST;
+    const px = v => `${v}px`;
+    const play = (keyframes, options) => lean.animate(keyframes, { fill: "backwards", ...options });
+
+    if (open) {
+      play([{ rotate: `${from.rotate}deg` }, { rotate: `${to.rotate}deg` }], { duration: OPEN_MS, easing: SPRING });
+      // Up off its corner and back down as it straightens
+      play(
+        [
+          { translate: `0px ${px(from.y)}`, easing: "cubic-bezier(0.3, 0.6, 0.5, 1)" },
+          { translate: "0px -1.2px", offset: 0.38, easing: "cubic-bezier(0.5, 0, 0.6, 1)" },
+          { translate: "0px 0px" },
+        ],
+        { duration: OPEN_MS * 0.75 }
+      );
+      play(
+        [
+          { width: px(from.w), height: px(from.h) },
+          { width: px(to.w), height: px(to.h) },
+        ],
+        { duration: OPEN_MS * 0.6, delay: 40, easing: "cubic-bezier(0.2, 0.8, 0.3, 1)" }
+      );
+      play([{ left: px(from.left) }, { left: px(to.left) }], {
+        duration: OPEN_MS * 0.7,
+        delay: 80,
+        easing: "cubic-bezier(0.25, 0.8, 0.3, 1)",
+      });
+    } else {
+      // Falls: slow at first, faster until it lands against its neighbor,
+      // then a small rebound and settle
+      play(
+        [
+          { rotate: `${from.rotate}deg`, easing: "cubic-bezier(0.45, 0, 0.9, 0.55)" },
+          { rotate: `${to.rotate - 0.6}deg`, offset: 0.62, easing: "cubic-bezier(0.2, 0.6, 0.4, 1)" },
+          { rotate: `${to.rotate + 1}deg`, offset: 0.8, easing: "cubic-bezier(0.4, 0, 0.4, 1)" },
+          { rotate: `${to.rotate}deg` },
+        ],
+        { duration: CLOSE_MS }
+      );
+      play(
+        [
+          { translate: `0px ${px(from.y)}`, easing: "cubic-bezier(0.3, 0.6, 0.5, 1)" },
+          { translate: "0px -0.8px", offset: 0.3, easing: "cubic-bezier(0.5, 0, 0.7, 1)" },
+          { translate: "0px 0px", offset: 0.62 },
+          { translate: "0px 0px" },
+        ],
+        { duration: CLOSE_MS }
+      );
+      play(
+        [
+          { width: px(from.w), height: px(from.h), left: px(from.left) },
+          { width: px(to.w), height: px(to.h), left: px(to.left) },
+        ],
+        { duration: CLOSE_MS * 0.55, easing: "cubic-bezier(0.4, 0, 0.3, 1)" }
+      );
+    }
+  }
+
+  // A space's footer button (also the spaces dock's, below)
+  function buildSpaceButton(space) {
+    const btn = h("button", {
+      class: "fz-space",
+      type: "button",
+      title: space.name,
+      "aria-label": space.name,
+      "aria-pressed": String(space.id === activeId),
+      "data-id": space.id,
+      text: space.icon || "•",
+    });
+    const container = containerOf(space);
+    if (container) {
+      const identity = ContextualIdentityService.getPublicIdentityFromId(container);
+      btn.classList.add("fz-space-has-container");
+      btn.style.setProperty(
+        "--fz-space-container-color",
+        ContextualIdentityService.getContainerColorCode(identity.color)
+      );
+      btn.title = `${space.name} (${ContextualIdentityService.getUserContextLabel(container)})`;
+    }
+    if (space.private) {
+      // A badge (CSS): mask while unlocked, padlock while locked.
+      const locked = space.locked;
+      btn.classList.add("fz-space-private");
+      btn.toggleAttribute("fz-locked", locked);
+      // The icon in its own element, so locking can blur it under the badge.
+      btn.replaceChildren(h("span", { class: "fz-space-icon", text: space.icon }));
+      // Middle-click locks it.
+      btn.addEventListener("auxclick", e => {
+        if (e.button === 1 && !locked) {
+          e.preventDefault();
+          lockPrivateSpace(space.id);
+        }
+      });
+      btn.title = `${space.name} (private, ${locked ? "locked" : "unlocked"})`;
+    }
+    btn.addEventListener("click", () => switchTo(space.id));
+    // The clicks already switched to it, so its name is in the (re-rendered) header.
+    btn.addEventListener("dblclick", () => {
+      if (!isLocal(space.id)) {
+        return;
+      }
+      const label = document.querySelector(`#${HEADER_ID} .fz-space-name`);
+      if (label) {
+        startInlineRename(space.id, label);
+      }
+    });
+    btn.addEventListener("contextmenu", e => {
+      e.preventDefault();
+      openMenu(space.id, e);
+    });
+    return btn;
   }
 
   function updateCarousel(viewport, count) {
@@ -1481,6 +1646,225 @@
     if (tools) {
       attachEdgeScroll(tools);
     }
+    setupToolsDock();
+  }
+
+  // ---- Docks beside a collapsed, always-shown sidebar ----
+
+  // Collapsed, the footer keeps only Firefox's first tool and the Library
+  // button (theme/spaces-footer.css). With "Expand on hover" hovering brings
+  // the rest back, but an always-shown collapsed sidebar never expands:
+  // there, hovering one of them opens a small dock to its right with what its
+  // row had. The first tool's: the other tools, whose buttons click the real
+  // ones, so tools, extensions and Customize behave as usual. The Library
+  // button's: the spaces and the + button, built like the footer's own.
+  const DOCK_ID = "fz-tools-dock";
+  const DOCK_OPEN_DELAY = 180;
+  const DOCK_CLOSE_DELAY = 280;
+  let dockTimer = null;
+  let dockKind = null;
+  const dockWatched = new WeakSet();
+
+  const alwaysShown = () => Services.prefs.getStringPref("sidebar.visibility", "always-show") === "always-show";
+  const dockMode = () => alwaysShown() && !sidebarMain()?.hasAttribute("expanded");
+
+  // Firefox's tool buttons, the shown one first
+  function toolButtons() {
+    const group = sidebarMain()?.shadowRoot?.querySelector(".tools-and-extensions:not(.overflow-button)");
+    return [...(group?.querySelectorAll(":scope > moz-button") ?? [])].filter(b => !b.hidden);
+  }
+
+  const libraryButton = () => barEl?.querySelector(".fz-library, .fz-history");
+
+  // What a dock opens beside
+  const dockAnchor = kind => (kind === "tools" ? toolButtons()[0] : libraryButton());
+
+  // [fz-dock]: docks are on (the Library button's chevron); [fz-tools-dock]:
+  // the first tool has others to show (its chevron)
+  function syncDockAttr() {
+    const main = sidebarMain();
+    if (main) {
+      main.toggleAttribute("fz-dock", alwaysShown());
+      main.toggleAttribute("fz-tools-dock", alwaysShown() && toolButtons().length > 1);
+    }
+  }
+
+  function ensureDock() {
+    let panel = document.getElementById(DOCK_ID);
+    if (panel) {
+      return panel;
+    }
+    panel = document.createXULElement("panel");
+    panel.id = DOCK_ID;
+    panel.setAttribute("noautofocus", "true");
+    panel.setAttribute("consumeoutsideclicks", "false");
+    panel.setAttribute("norolluponanchor", "true");
+    panel.setAttribute("role", "toolbar");
+    panel.addEventListener("mouseenter", () => clearTimeout(dockTimer));
+    panel.addEventListener("mouseleave", () => scheduleDock(null));
+    panel.addEventListener("popuphidden", e => {
+      if (e.target === panel) {
+        dockKind = null;
+      }
+    });
+    document.getElementById("mainPopupSet").append(panel);
+    return panel;
+  }
+
+  function toolsDockRow(panel, buttons) {
+    return buttons.map(orig => {
+      const selected = orig.getAttribute("type") === "icon";
+      const btn = h("button", {
+        type: "button",
+        class: "fz-tools-dock-button",
+        title: orig.title || orig.getAttribute("tooltiptext") || "",
+        "aria-label": orig.title || "",
+        "aria-pressed": String(selected),
+      });
+      btn.style.setProperty("--fz-dock-icon", `url("${orig.iconSrc || orig.shadowRoot?.querySelector("img")?.src || ""}")`);
+      btn.addEventListener("click", () => {
+        panel.hidePopup();
+        orig.click();
+      });
+      // Extensions and tools have their own context menus on the originals
+      btn.addEventListener("contextmenu", e => {
+        e.preventDefault();
+        panel.hidePopup();
+        orig.dispatchEvent(
+          new MouseEvent("contextmenu", {
+            bubbles: true,
+            composed: true,
+            screenX: e.screenX,
+            screenY: e.screenY,
+            clientX: e.clientX,
+            clientY: e.clientY,
+          })
+        );
+      });
+      return btn;
+    });
+  }
+
+  // The footer's space buttons (click switches, double-click renames,
+  // right-click opens the space's menu, middle-click locks a private one),
+  // then +. Clicking or right-clicking one closes the dock first.
+  function spacesDockRow(panel) {
+    const row = visibleSpaces().map(space => {
+      const btn = buildSpaceButton(space);
+      for (const type of ["click", "contextmenu"]) {
+        btn.addEventListener(type, () => panel.hidePopup(), { capture: true });
+      }
+      return btn;
+    });
+    const add = h("button", {
+      class: "fz-space fz-space-add",
+      type: "button",
+      title: "Create…",
+      "aria-label": "Create",
+      "aria-haspopup": "menu",
+    });
+    add.addEventListener("click", () => {
+      panel.hidePopup();
+      openPlusMenu(libraryButton() ?? add, "end_after");
+    });
+    return [...row, add];
+  }
+
+  function openDock(kind) {
+    const anchor = dockAnchor(kind);
+    if (!anchor || !dockMode()) {
+      return;
+    }
+    const panel = ensureDock();
+    let row;
+    if (kind === "tools") {
+      const rest = toolButtons().slice(1);
+      if (!rest.length) {
+        return;
+      }
+      row = toolsDockRow(panel, rest);
+    } else {
+      row = spacesDockRow(panel);
+    }
+    panel.setAttribute("fz-kind", kind);
+    panel.setAttribute("aria-label", kind === "tools" ? "Sidebar tools" : "Spaces");
+    panel.replaceChildren(h("div", { class: "fz-tools-dock-row" }, ...row));
+    const wasKind = dockKind;
+    dockKind = kind;
+    if (panel.state === "open" || panel.state === "showing") {
+      if (wasKind !== kind) {
+        panel.moveToAnchor(anchor, "end_after", 8, 0);
+      }
+      return;
+    }
+    panel.openPopup(anchor, "end_after", 8, 0, false, false);
+  }
+
+  function closeDock() {
+    document.getElementById(DOCK_ID)?.hidePopup();
+  }
+
+  // kind: the dock to open (at once when one is already open: moving from
+  // one anchor to the other), or null to close
+  function scheduleDock(kind) {
+    clearTimeout(dockTimer);
+    dockTimer = kind
+      ? setTimeout(() => openDock(kind), dockKind ? 0 : DOCK_OPEN_DELAY)
+      : setTimeout(closeDock, DOCK_CLOSE_DELAY);
+  }
+
+  // Which dock's anchor an event's path goes through
+  function dockKindOf(path) {
+    const first = toolButtons()[0];
+    if (first && path.includes(first)) {
+      return "tools";
+    }
+    const library = libraryButton();
+    return library && path.includes(library) ? "spaces" : null;
+  }
+
+  function setupToolsDock() {
+    syncDockAttr();
+    const root = sidebarMain()?.shadowRoot;
+    if (!root || dockWatched.has(root)) {
+      return;
+    }
+    dockWatched.add(root);
+    // Delegated: Firefox re-renders the tool buttons, and the footer is
+    // rebuilt with the spaces
+    root.addEventListener("mouseover", e => {
+      const kind = dockMode() && dockKindOf(e.composedPath());
+      if (kind) {
+        scheduleDock(kind);
+      }
+    });
+    // Leaving an anchor (moves inside it come retargeted to it)
+    root.addEventListener("mouseout", e => {
+      const kind = dockKindOf(e.composedPath());
+      const anchor = kind && dockAnchor(kind);
+      const to = e.relatedTarget;
+      if (anchor && !(to && (to === anchor || anchor.contains(to)))) {
+        scheduleDock(null);
+      }
+    });
+    // Expanding, or Firefox re-rendering its tools (count, order)
+    new MutationObserver(() => {
+      syncDockAttr();
+      if (!dockMode()) {
+        closeDock();
+      }
+    }).observe(sidebarMain(), { attributes: true, attributeFilter: ["expanded"] });
+    window.addEventListener("SidebarItemChanged", syncDockAttr);
+    const prefObserver = () => {
+      syncDockAttr();
+      if (!dockMode()) {
+        closeDock();
+      }
+    };
+    Services.prefs.addObserver("sidebar.visibility", prefObserver);
+    window.addEventListener("unload", () => Services.prefs.removeObserver("sidebar.visibility", prefObserver), {
+      once: true,
+    });
   }
 
   // ---- + button menu: Create Space / Create Folder / New Tab ----
@@ -1547,7 +1931,7 @@
     return menu;
   }
 
-  function openPlusMenu(anchor) {
+  function openPlusMenu(anchor, position = "before_end") {
     const menu = ensurePlusMenu();
     // From a private space's window a new space (or an import) would only show
     // in other windows; a new private space opens its own window, so it stays.
@@ -1562,8 +1946,9 @@
       "browser.tabs.groups.enabled",
       true
     );
-    // Opens upward from the footer, right-aligned with the + button.
-    menu.openPopup(anchor, "before_end");
+    // Opens upward from the footer, right-aligned with the + button (the
+    // spaces dock opens it beside the Library button instead).
+    menu.openPopup(anchor, position);
   }
 
   function ensureMenu() {

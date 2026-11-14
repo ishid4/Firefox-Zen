@@ -63,8 +63,6 @@
   let view = Services.prefs.getStringPref(VIEW_PREF, "spaces");
   let filterText = "";
   let renderQueued = false;
-  // Folders collapsed in the board (by tab group id), for this window.
-  const collapsedGroups = new Set();
   // Tabs picked with Ctrl/Shift+click; dragging one of them drags them all.
   const picked = new Set();
   let pickAnchor = null;
@@ -980,7 +978,9 @@
     }
     const key = keyOf(group);
     groupByKey.set(key, group);
-    const collapsed = collapsedGroups.has(group.id) && !filterText;
+    // Folded as in the sidebar; folding here folds it there too (the
+    // TabGroupCollapse/Expand events re-render the board).
+    const collapsed = !!group.collapsed && !filterText;
     const seenSplits = new Set();
     const head = h(
       "div",
@@ -989,12 +989,7 @@
         "data-drag": "group",
         title: "Click to fold · drag to move the folder",
         onclick: () => {
-          if (collapsedGroups.has(group.id)) {
-            collapsedGroups.delete(group.id);
-          } else {
-            collapsedGroups.add(group.id);
-          }
-          renderBoard();
+          group.collapsed = !group.collapsed;
         },
       },
       h("span", { class: "fz-lib-chevron", "aria-hidden": "true" }),
@@ -1013,7 +1008,12 @@
         style: `--fz-group-color: var(--tab-group-${group.color}, currentColor)`,
       },
       head,
-      collapsed ? null : h("div", { class: "fz-lib-group-tabs" }, ...tabs.map(t => buildRow(t, seenSplits)))
+      // Folded, the sidebar still shows the folder's selected tab: so does this.
+      h(
+        "div",
+        { class: "fz-lib-group-tabs" },
+        ...(collapsed ? tabs.filter(t => t.selected) : tabs).map(t => buildRow(t, seenSplits))
+      )
     );
   }
 

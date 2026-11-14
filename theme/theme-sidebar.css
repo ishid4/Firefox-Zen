@@ -47,11 +47,14 @@
 
 /* FF Sidebar header */
 @media -moz-pref("sidebar.verticalTabs") {
-  /* Hide separator below New Tab button */
+  /* No separator below the tabs while they scroll. It's an empty ::after
+   * after the tab list: no line and no padding, so it only leaves the list's
+   * 6px gap above the tools row (the padding this used to add took 23px
+   * from the tabs with many open). */
   #tabbrowser-tabs[orient="vertical"] {
     &[overflow]::after {
       border-bottom: none !important;
-      padding-bottom: calc(var(--toolbarbutton-border-radius) - 1px) !important;
+      padding-bottom: 0 !important;
     }
   }
 }

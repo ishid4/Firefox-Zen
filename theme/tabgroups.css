@@ -159,6 +159,32 @@ tab-group {
   }
 }
 
+/* Expanded sidebar: the folder's tab count at the end of its row while
+ * hovered, like the Library's folders ([fz-count] from
+ * JS/firefox-zen-sidebar-tools.uc.js) */
+#tabbrowser-tabs[orient="vertical"][expanded] tab-group > .tab-group-label-container {
+  position: relative;
+
+  /* ::before: Firefox draws the open folder's line with ::after */
+  &[fz-count]::before {
+    content: attr(fz-count);
+    position: absolute;
+    inset-inline-end: 12px;
+    top: 50%;
+    translate: 0 -50%;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    color: var(--lwt-text-color, currentColor);
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    pointer-events: none;
+  }
+
+  &:hover::before {
+    opacity: 0.55;
+  }
+}
+
 /* Collapsed sidebar: tint the whole group on hover. Spacing is left native so
  * groups don't shift when the sidebar expands on hover. */
 #tabbrowser-tabs[orient="vertical"]:not([expanded]) tab-group:hover {
