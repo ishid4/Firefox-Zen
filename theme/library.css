@@ -1145,6 +1145,11 @@
   }
 }
 
+/* Where a running download's remove button will be */
+.fz-lib-dl-slot {
+  visibility: hidden;
+}
+
 .fz-lib-dl-action {
   flex: none;
   height: 26px;

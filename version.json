@@ -1,8 +1,13 @@
 {
-  "version": "1.6.1",
+  "version": "1.7.0",
   "repository": "https://github.com/ishid4/Firefox-Zen",
   "branch": "main",
   "history": [
+    {
+      "version": "1.7.0",
+      "date": "2026-11-14",
+      "notes": "VirusTotal check works without an API key: downloads are looked up through VirusTotal's own page, and the verdict shows on the download. A key is only needed when that page can't answer, and to upload files VirusTotal doesn't know; without one, those open VirusTotal's upload page, as does a download whose file can't be read anymore. New Check new downloads automatically setting (Settings → VirusTotal check): only downloads that finish from now on are checked by themselves, earlier ones when you click. A running download's Pause and Cancel line up with the buttons of finished ones."
+    },
     {
       "version": "1.6.1",
       "date": "2026-11-10",

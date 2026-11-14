@@ -2298,7 +2298,8 @@
 
   // ---- VirusTotal (JS/firefox-zen-download-tools.sys.mjs) ----
 
-  // Checks the download; without an API key that opens its report page.
+  // Checks the download; without an API key, a page that couldn't tell opens
+  // the report in a tab.
   function vtCheck(d) {
     FzDownloadTools.check(d)
       .then(url => url && openUrl(url, { spaceId: dlSource || null }))
@@ -2323,9 +2324,8 @@
     const v = state?.verdict;
     let text = "VirusTotal";
     let verdict = "none";
-    let title = FzDownloadTools.hasApiKey()
-      ? "Look this file up on VirusTotal (sends only its hash)"
-      : "Open this file's VirusTotal report (no API key: checked in a tab)";
+    const keyed = FzDownloadTools.hasApiKey();
+    let title = "Look this file up on VirusTotal (sends only its hash)";
     let onclick = () => vtCheck(d);
     switch (state?.status) {
       case "hashing":
@@ -2348,13 +2348,24 @@
       case "unknown":
         text = "Not on VirusTotal";
         verdict = "unknown";
-        title = state.note || "VirusTotal hasn't seen this file. Upload it or let VirusTotal scan its link.";
-        onclick = e => openDownloadMenu(e, d);
+        if (keyed) {
+          title = state.note || "VirusTotal hasn't seen this file. Upload it or let VirusTotal scan its link.";
+          onclick = e => openDownloadMenu(e, d);
+        } else {
+          title = state.note || "VirusTotal hasn't seen this file. Click to check it on VirusTotal's site.";
+          onclick = () => openUrl(FzDownloadTools.uploadUrl, { spaceId: dlSource || null });
+        }
         break;
       case "error":
         text = "VirusTotal: try again";
         verdict = "unknown";
         title = state.note || "";
+        if (!state.hash) {
+          // The file couldn't be read to look it up: check it on the site.
+          text = "Check on VirusTotal";
+          title = `${state.note || "Couldn't read the file"}. Click to check it on VirusTotal's site.`;
+          onclick = () => openUrl(FzDownloadTools.uploadUrl, { spaceId: dlSource || null });
+        }
         break;
       case "done":
         // Just the count; the color says which: red flagged, yellow
@@ -2450,11 +2461,12 @@
       if (state?.hash && state.status !== "unknown") {
         out.push(item("Open VirusTotal Report", () => vtOpenReport(subject)));
       }
-      out.push(
-        item(keyed ? "Check on VirusTotal" : "Check on VirusTotal (opens a tab)", () => vtCheck(subject), {
-          disabled: busy,
-        })
-      );
+      out.push(item("Check on VirusTotal", () => vtCheck(subject), { disabled: busy }));
+      if ((!keyed && state?.status === "unknown") || (state?.status === "error" && !state.hash)) {
+        out.push(
+          item("Check on VirusTotal's Site (opens a tab)", () => openUrl(FzDownloadTools.uploadUrl, { spaceId }))
+        );
+      }
       if (keyed) {
         out.push(
           item(`Upload File to VirusTotal${shares}`, () => FzDownloadTools.upload(subject), { disabled: busy }),
@@ -2569,6 +2581,8 @@
       h("span", { class: "fz-lib-history-time", text: timeFormat.format(d.startTime) }),
       vtChip(d),
       ...actions,
+      // While running, an empty stand-in keeps the buttons lined up with the
+      // finished rows' below.
       d.stopped
         ? h("button", {
             type: "button",
@@ -2580,7 +2594,7 @@
               remove();
             },
           })
-        : null
+        : h("span", { class: "fz-lib-icon-button fz-lib-close-tab fz-lib-dl-slot", "aria-hidden": "true" })
     );
   }
 

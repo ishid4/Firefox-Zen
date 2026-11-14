@@ -77,6 +77,14 @@
     hint: "Waits a few seconds before each try, longer each time.",
   };
 
+  const VT_AUTO = {
+    type: "switch",
+    pref: "virustotal.auto",
+    default: true,
+    label: "Check new downloads automatically",
+    hint: "Each download is looked up once it finishes. Earlier downloads are only checked when you click their VirusTotal button.",
+  };
+
   // Secret: left out of settings files, Reset and Undo.
   const VT_KEY = {
     type: "text",
@@ -85,7 +93,7 @@
     default: "",
     label: "API key",
     placeholder: "Optional",
-    hint: "Free from your virustotal.com account (API key in your profile menu). With one, finished downloads are checked automatically and the verdict shows on the download. Without one, Check opens the file's report in a tab.",
+    hint: "Optional, free from your virustotal.com account (API key in your profile menu). Downloads are checked through VirusTotal's own page either way; a key is used when the page can't answer, and lets you upload files VirusTotal doesn't know. Without one, those open VirusTotal's upload page.",
   };
 
   // Applied here (applyBorderWidth), read by theme/general.css.
@@ -386,11 +394,11 @@
           keywords: "virus malware scan antivirus virustotal security download hash",
           tips: [
             "The verdict shows on each download in the Library; click it for the full report.",
-            "A file VirusTotal doesn't know can be uploaded, or its link sent for VirusTotal to download, from the download's right-click menu.",
+            "A file VirusTotal doesn't know can be uploaded, or its link sent for VirusTotal to download, from the download's right-click menu (with an API key). Without a key, its button opens VirusTotal's upload page.",
             "Uploaded files and sent links are shared with VirusTotal's security partners. Don't send private files.",
             "The free API key allows 4 lookups a minute and 500 a day.",
           ],
-          options: [VT_KEY],
+          options: [VT_AUTO, VT_KEY],
         },
         {
           pref: "show-menu-icons",

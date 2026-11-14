@@ -16,11 +16,16 @@
 //   VirusTotal. Only the hash is sent (a few KB), never the file, unless you
 //   press Upload. Firefox already hashes every download while saving it, so
 //   usually nothing is read again from disk.
-//   With an API key (firefox-zen.virustotal.api-key, free from virustotal.com)
-//   finished downloads are checked automatically and the verdict shows on the
-//   row; a file VirusTotal doesn't know can then be uploaded, or its link sent
-//   for VirusTotal to download itself. Without a key, the row's VirusTotal
-//   button opens the file's report page in a tab.
+//   New downloads are checked when they finish (firefox-zen.virustotal.auto),
+//   key or not; earlier ones only when asked. First through
+//   VirusTotal's own report page, loaded in a hidden browser (the result the
+//   page fetches for itself is read as it arrives, nothing is clicked or
+//   faked). If that can't tell (a challenge page, a timeout) and there's an
+//   API key (firefox-zen.virustotal.api-key, free from virustotal.com), the
+//   API is asked instead.
+//   A file VirusTotal doesn't know can, with a key, be uploaded or its link
+//   sent for VirusTotal to download itself; without one, the row's button
+//   opens VirusTotal's upload page in a tab.
 //   Besides Firefox's Downloads, it takes stand-ins for a private space's
 //   saved downloads: { target: { path }, source: { url }, succeeded: true }
 //   (JS/firefox-zen-private-spaces.sys.mjs keeps their verdicts, encrypted).
@@ -36,6 +41,7 @@ const RETRY_PREF = "firefox-zen.download-retry";
 const ATTEMPTS_PREF = "firefox-zen.download-retry.attempts";
 const VT_PREF = "firefox-zen.virustotal";
 const VT_KEY_PREF = "firefox-zen.virustotal.api-key";
+const VT_AUTO_PREF = "firefox-zen.virustotal.auto";
 
 // firefox-zen.virustotal.dev-url points the API at a test server.
 const apiBase = () =>
@@ -56,7 +62,12 @@ const RETRY_DELAYS = [3000, 10000, 30000];
 const retryOn = () => Services.prefs.getBoolPref(RETRY_PREF, true);
 const maxAttempts = () => Math.min(Math.max(Services.prefs.getIntPref(ATTEMPTS_PREF, 3), 1), 10);
 const vtOn = () => Services.prefs.getBoolPref(VT_PREF, false);
+const vtAuto = () => Services.prefs.getBoolPref(VT_AUTO_PREF, true);
 const apiKey = () => Services.prefs.getStringPref(VT_KEY_PREF, "").trim();
+
+// Downloads seen unfinished: only these are checked automatically when they
+// finish, never ones already done from earlier sessions.
+const fresh = new WeakSet();
 
 // Download -> { tries, timer }
 const retries = new WeakMap();
@@ -98,9 +109,12 @@ function onChanged(d) {
       clearTimeout(r.timer);
       retries.delete(d);
     }
-    if (vtOn() && apiKey() && !vt.has(d) && d.target?.path) {
-      // Finished: look it up. Errors show on the row.
-      check(d).catch(log);
+    if (fresh.has(d)) {
+      fresh.delete(d);
+      if (vtOn() && vtAuto() && !vt.has(d) && d.target?.path) {
+        // Just finished: look it up. Errors show on the row.
+        check(d).catch(log);
+      }
     }
     return;
   }
@@ -211,6 +225,227 @@ function verdictOf(report) {
   return { malicious: stats.malicious || 0, suspicious: stats.suspicious || 0, total };
 }
 
+// ---- keyless lookup through VirusTotal's report page ----
+// The page at /gui/file/<hash> asks www.virustotal.com/ui/files/<hash> (or
+// /ui/search?query=<hash>) for the same report the API gives. A hidden browser
+// loads the page and the answer is copied as the page receives it.
+
+const PAGE_WAIT = 30000;
+const UI_HOST = "www.virustotal.com";
+// hash -> fn(result), while a page lookup waits for it.
+const pageWaiters = new Map();
+let observing = false;
+
+const BinaryInputStream = Components.Constructor(
+  "@mozilla.org/binaryinputstream;1",
+  "nsIBinaryInputStream",
+  "setInputStream"
+);
+function byteStream(data) {
+  const s = Cc["@mozilla.org/io/string-input-stream;1"].createInstance(Ci.nsIStringInputStream);
+  s.setByteStringData(data);
+  return s;
+}
+
+// The hash a /ui/ request is about, and whether it's a search.
+function uiRequest(uri) {
+  if (uri.scheme !== "https" || uri.host !== UI_HOST) {
+    return null;
+  }
+  const file = /^\/ui\/files\/([0-9a-f]{64})$/i.exec(uri.filePath);
+  if (file) {
+    return { hash: file[1].toLowerCase(), search: false };
+  }
+  if (uri.filePath === "/ui/search") {
+    const q = new URLSearchParams(uri.query).get("query")?.trim().toLowerCase();
+    if (q && /^[0-9a-f]{64}$/.test(q)) {
+      return { hash: q, search: true };
+    }
+  }
+  return null;
+}
+
+// Body of a finished /ui/ response -> report, null (not on VirusTotal), or
+// undefined (no answer: a challenge, a rate limit).
+function pageResult(status, body, search, hash) {
+  if (status === 404) {
+    return null;
+  }
+  if (status !== 200) {
+    return undefined;
+  }
+  let json;
+  try {
+    json = JSON.parse(new TextDecoder().decode(Uint8Array.from(body, c => c.charCodeAt(0))));
+  } catch (e) {
+    return undefined;
+  }
+  if (!search) {
+    return json?.data ? json : undefined;
+  }
+  if (!Array.isArray(json?.data)) {
+    return undefined;
+  }
+  const item = json.data.find(x => x?.type === "file" && x.id?.toLowerCase() === hash);
+  return item ? { data: item } : null;
+}
+
+// Copies the response the page gets, passing it on unchanged.
+function capture(channel, { hash, search }) {
+  let encoding = "";
+  try {
+    encoding = channel.getResponseHeader("Content-Encoding").trim().toLowerCase();
+  } catch (e) {
+    // Not encoded.
+  }
+  const status = channel.responseStatus;
+  const chunks = [];
+  const sink = {
+    QueryInterface: ChromeUtils.generateQI(["nsIStreamListener", "nsIRequestObserver"]),
+    onStartRequest() {},
+    onDataAvailable(request, stream, offset, count) {
+      chunks.push(new BinaryInputStream(stream).readBytes(count));
+    },
+    onStopRequest() {
+      const result = pageResult(status, chunks.join(""), search, hash);
+      if (result !== undefined) {
+        pageWaiters.get(hash)?.(result);
+      }
+    },
+  };
+  // In e10s the parent sees the body still compressed.
+  let copy = sink;
+  if (encoding && encoding !== "identity") {
+    try {
+      copy = Cc["@mozilla.org/streamConverters;1"]
+        .getService(Ci.nsIStreamConverterService)
+        .asyncConvertData(encoding, "uncompressed", sink, null);
+    } catch (e) {
+      return;
+    }
+  }
+  const quiet = fn => {
+    try {
+      fn();
+    } catch (e) {
+      log(e);
+    }
+  };
+  let original = null;
+  const tee = {
+    QueryInterface: ChromeUtils.generateQI(["nsIStreamListener", "nsIRequestObserver"]),
+    onStartRequest(request) {
+      quiet(() => copy.onStartRequest(request));
+      original.onStartRequest(request);
+    },
+    onDataAvailable(request, stream, offset, count) {
+      const data = new BinaryInputStream(stream).readBytes(count);
+      quiet(() => copy.onDataAvailable(request, byteStream(data), offset, count));
+      original.onDataAvailable(request, byteStream(data), offset, count);
+    },
+    onStopRequest(request, code) {
+      quiet(() => copy.onStopRequest(request, code));
+      original.onStopRequest(request, code);
+    },
+  };
+  original = channel.QueryInterface(Ci.nsITraceableChannel).setNewListener(tee);
+}
+
+const responseObserver = {
+  observe(subject) {
+    if (!pageWaiters.size) {
+      return;
+    }
+    try {
+      const channel = subject.QueryInterface(Ci.nsIHttpChannel);
+      const req = uiRequest(channel.URI);
+      if (req && pageWaiters.has(req.hash)) {
+        capture(channel, req);
+      }
+    } catch (e) {
+      log(e);
+    }
+  },
+};
+const RESPONSE_TOPICS = ["http-on-examine-response", "http-on-examine-cached-response", "http-on-examine-merged-response"];
+
+// An off-screen content browser in a browser window showing `url`.
+function hiddenBrowser(win, url) {
+  const doc = win.document;
+  const b = doc.createXULElement("browser");
+  let remoteType = "web";
+  try {
+    const { E10SUtils } = ChromeUtils.importESModule("resource://gre/modules/E10SUtils.sys.mjs");
+    remoteType = E10SUtils.getRemoteTypeForURI(url, true, true);
+  } catch (e) {
+    // The default content process; it switches on load.
+  }
+  const attrs = {
+    type: "content",
+    remote: "true",
+    remoteType,
+    maychangeremoteness: "true",
+    disableglobalhistory: "true",
+    messagemanagergroup: "fz-virustotal",
+    nodefaultsrc: "true",
+  };
+  for (const [k, v] of Object.entries(attrs)) {
+    b.setAttribute(k, v);
+  }
+  b.style.cssText = "position: fixed; left: -20000px; top: 0; width: 1200px; height: 800px; pointer-events: none;";
+  doc.documentElement.append(b);
+  b.loadURI(Services.io.newURI(url), {
+    triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(),
+  });
+  return b;
+}
+
+// One page at a time; each resolves to a report, null (not on VirusTotal)
+// or undefined (couldn't tell).
+let pageQueue = Promise.resolve();
+function pageLookup(hash) {
+  const run = () =>
+    new Promise(resolve => {
+      const win = Services.wm.getMostRecentWindow("navigator:browser");
+      if (!win || win.closed) {
+        resolve(undefined);
+        return;
+      }
+      if (!observing) {
+        observing = true;
+        for (const topic of RESPONSE_TOPICS) {
+          Services.obs.addObserver(responseObserver, topic);
+        }
+      }
+      let browser = null;
+      let timer = null;
+      const finish = result => {
+        clearTimeout(timer);
+        if (pageWaiters.get(hash) === finish) {
+          pageWaiters.delete(hash);
+        }
+        try {
+          browser?.remove();
+        } catch (e) {
+          // Its window closed.
+        }
+        browser = null;
+        resolve(result);
+      };
+      pageWaiters.set(hash, finish);
+      timer = setTimeout(() => finish(undefined), PAGE_WAIT);
+      try {
+        browser = hiddenBrowser(win, `${GUI}/file/${hash}`);
+      } catch (e) {
+        log(e);
+        finish(undefined);
+      }
+    });
+  const p = pageQueue.then(run, run);
+  pageQueue = p.catch(() => {});
+  return p;
+}
+
 function setState(d, state) {
   vt.set(d, state);
   notify(d);
@@ -243,8 +478,9 @@ async function waitForReport(d, hash, { until = 6 * 60000 } = {}) {
   }
 }
 
-// Looks the download up. Without an API key, opens its report page instead
-// (returns that URL).
+// Looks the download up: VirusTotal's report page first, then the API when
+// the page couldn't tell and there's a key. Returns a URL to open when
+// neither could (no key): the file's report page.
 async function check(d) {
   if (!d.succeeded || !d.target?.path) {
     return null;
@@ -258,17 +494,42 @@ async function check(d) {
     setState(d, { status: "error", note: "File not found" });
     return null;
   }
-  if (!apiKey()) {
-    vt.delete(d);
-    notify(d);
-    return `${GUI}/file/${hash}`;
-  }
   const known = verdicts.get(hash);
   if (known) {
     setState(d, { status: "done", hash, verdict: known });
     return null;
   }
   setState(d, { status: "checking", hash });
+  let page;
+  try {
+    page = await pageLookup(hash);
+  } catch (e) {
+    log(e);
+  }
+  if (page === null) {
+    // Not on VirusTotal: with a key it can be uploaded or its link scanned,
+    // without one the button opens the upload page.
+    setState(d, { status: "unknown", hash });
+    return null;
+  }
+  if (page) {
+    const verdict = verdictOf(page);
+    if (verdict) {
+      verdicts.set(hash, verdict);
+      setState(d, { status: "done", hash, verdict });
+      return null;
+    }
+    if (!apiKey()) {
+      setState(d, { status: "scanning", hash, note: "VirusTotal is still scanning it, check again later" });
+      return null;
+    }
+  }
+  if (!apiKey()) {
+    // The page didn't answer (a challenge, a timeout): open it in a tab.
+    vt.delete(d);
+    notify(d);
+    return `${GUI}/file/${hash}`;
+  }
   try {
     const report = await api(`/files/${hash}`);
     if (!report) {
@@ -346,7 +607,14 @@ export const FzDownloadTools = {
     started = true;
     try {
       const list = await lazy.Downloads.getList(lazy.Downloads.ALL);
-      await list.addView({ onDownloadChanged: d => onChanged(d) });
+      await list.addView({
+        onDownloadAdded: d => {
+          if (!d.succeeded) {
+            fresh.add(d);
+          }
+        },
+        onDownloadChanged: d => onChanged(d),
+      });
     } catch (e) {
       log(e);
     }
@@ -381,6 +649,8 @@ export const FzDownloadTools = {
     }
   },
   reportUrl: hash => `${GUI}/file/${hash}`,
+  // Where to check a file VirusTotal doesn't know yet, without a key.
+  uploadUrl: `${GUI}/home/upload`,
 
   check,
   upload,
