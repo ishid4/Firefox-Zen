@@ -300,6 +300,27 @@ function pageResult(status, body, search, hash) {
   return item ? { data: item } : null;
 }
 
+// Decompresses a whole body (gzip, br, ...) -> fn(decoded) when done.
+function decode(raw, encoding, request, fn) {
+  const out = [];
+  const sink = {
+    QueryInterface: ChromeUtils.generateQI(["nsIStreamListener", "nsIRequestObserver"]),
+    onStartRequest() {},
+    onDataAvailable(r, stream, offset, count) {
+      out.push(new BinaryInputStream(stream).readBytes(count));
+    },
+    onStopRequest() {
+      fn(out.join(""));
+    },
+  };
+  const converter = Cc["@mozilla.org/streamConverters;1"]
+    .getService(Ci.nsIStreamConverterService)
+    .asyncConvertData(encoding, "uncompressed", sink, null);
+  converter.onStartRequest(request);
+  converter.onDataAvailable(request, byteStream(raw), 0, raw.length);
+  converter.onStopRequest(request, Cr.NS_OK);
+}
+
 // Copies the response the page gets, passing it on unchanged.
 function capture(channel, { hash, search }) {
   let encoding = "";
@@ -310,33 +331,23 @@ function capture(channel, { hash, search }) {
   }
   const status = channel.responseStatus;
   const chunks = [];
-  const sink = {
-    QueryInterface: ChromeUtils.generateQI(["nsIStreamListener", "nsIRequestObserver"]),
-    onStartRequest() {},
-    onDataAvailable(request, stream, offset, count) {
-      chunks.push(new BinaryInputStream(stream).readBytes(count));
-    },
-    onStopRequest() {
-      const result = pageResult(status, chunks.join(""), search, hash);
-      if (result !== undefined) {
-        pageWaiters.get(hash)?.(result);
-      }
-    },
+  const settle = body => {
+    const result = pageResult(status, body, search, hash);
+    if (result !== undefined) {
+      pageWaiters.get(hash)?.(result);
+    }
+    return result;
   };
-  // In e10s the parent sees the body still compressed.
-  let copy = sink;
-  if (encoding && encoding !== "identity") {
-    try {
-      copy = Cc["@mozilla.org/streamConverters;1"]
-        .getService(Ci.nsIStreamConverterService)
-        .asyncConvertData(encoding, "uncompressed", sink, null);
-    } catch (e) {
+  // Depending on how Firefox handles the response, the copy is either
+  // already decompressed (though the header still names the encoding) or
+  // not: read it as is first.
+  const finished = request => {
+    const raw = chunks.join("");
+    if (settle(raw) !== undefined || status !== 200 || !encoding || encoding === "identity") {
       return;
     }
-  }
-  const quiet = fn => {
     try {
-      fn();
+      decode(raw, encoding, request, settle);
     } catch (e) {
       log(e);
     }
@@ -345,16 +356,19 @@ function capture(channel, { hash, search }) {
   const tee = {
     QueryInterface: ChromeUtils.generateQI(["nsIStreamListener", "nsIRequestObserver"]),
     onStartRequest(request) {
-      quiet(() => copy.onStartRequest(request));
       original.onStartRequest(request);
     },
     onDataAvailable(request, stream, offset, count) {
       const data = new BinaryInputStream(stream).readBytes(count);
-      quiet(() => copy.onDataAvailable(request, byteStream(data), offset, count));
+      chunks.push(data);
       original.onDataAvailable(request, byteStream(data), offset, count);
     },
     onStopRequest(request, code) {
-      quiet(() => copy.onStopRequest(request, code));
+      try {
+        finished(request);
+      } catch (e) {
+        log(e);
+      }
       original.onStopRequest(request, code);
     },
   };

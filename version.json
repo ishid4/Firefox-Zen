@@ -1,8 +1,13 @@
 {
-  "version": "1.7.1",
+  "version": "1.7.2",
   "repository": "https://github.com/ishid4/Firefox-Zen",
   "branch": "main",
   "history": [
+    {
+      "version": "1.7.2",
+      "date": "2026-11-14",
+      "notes": "VirusTotal check without an API key shows the verdict on the download again, in about a second, instead of saying VirusTotal didn't answer."
+    },
     {
       "version": "1.7.1",
       "date": "2026-11-14",
