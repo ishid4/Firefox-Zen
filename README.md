@@ -1,11 +1,27 @@
+<div align="center">
+
 # Firefox-Zen
 
 Zen / Arc-style browsing for regular Firefox: vertical tabs with Spaces,
 a floating address bar, Glance previews and a built-in Library.
 
-## Showcase
+<a href="https://github.com/ishid4/Firefox-Zen/stargazers"><img src="https://img.shields.io/github/stars/ishid4/Firefox-Zen?style=social" alt="Stars"></a>
+<a href="https://github.com/ishid4/Firefox-Zen/releases"><img src="https://img.shields.io/github/v/tag/ishid4/Firefox-Zen?label=version&color=8a63d2" alt="Version"></a>
+<a href="https://github.com/ishid4/Firefox-Zen/commits/main"><img src="https://img.shields.io/github/last-commit/ishid4/Firefox-Zen/main" alt="Last commit"></a>
 
-<!-- Add screenshots here, e.g. ![Spaces](docs/spaces.png) -->
+<br><br>
+
+<img src="docs/screenshots/hero.png" width="100%" alt="Firefox-Zen with Spaces in the sidebar">
+
+<img src="docs/screenshots/spaces.png" width="49.5%" alt="Spaces"> <img src="docs/screenshots/library.png" width="49.5%" alt="Library">
+
+<img src="docs/screenshots/address-bar.png" width="49.5%" alt="Floating address bar"> <img src="docs/screenshots/glance.png" width="49.5%" alt="Glance">
+
+<sub>Spaces · Library · Floating address bar · Glance</sub>
+
+</div>
+
+## Features
 
 - **Spaces**: separate sets of tabs, switched from a footer under the sidebar.
 - **Private spaces**: password-protected spaces, encrypted on disk.
