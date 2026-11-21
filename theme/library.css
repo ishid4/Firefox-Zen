@@ -178,6 +178,26 @@
   background: var(--fz-accent);
 }
 
+.fz-lib-nav-notifications {
+  --fz-lib-nav-icon: url("icons/desktop-notification.svg");
+
+  /* Unread ones (JS/firefox-zen-notifications.uc.js) */
+  &[data-count]::after {
+    content: attr(data-count);
+    min-width: 16px;
+    margin-inline-start: auto;
+    padding: 0 5px;
+    box-sizing: border-box;
+    border-radius: 8px;
+    background: var(--fz-accent);
+    color: var(--fz-accent-text, white);
+    font-size: 10.5px;
+    font-weight: 600;
+    line-height: 16px;
+    text-align: center;
+  }
+}
+
 .fz-lib-nav-close {
   --fz-lib-nav-icon: url("icons/close.svg");
 }
@@ -1258,4 +1278,124 @@
   #fz-library * {
     transition: none !important;
   }
+}
+
+/* ---- Notifications board (JS/firefox-zen-notifications.uc.js) ---- */
+.fz-notify-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.fz-notify-heading {
+  margin: 0;
+  padding-inline-start: 4px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.fz-notify-row {
+  --fz-notify-color: var(--fz-accent);
+
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 6px 6px 6px 10px;
+  border-radius: 7px;
+  cursor: default;
+
+  &[data-level="warning"] {
+    --fz-notify-color: var(--fz-attention);
+  }
+
+  &[data-level="danger"] {
+    --fz-notify-color: var(--fz-danger);
+  }
+
+  &[clickable] {
+    cursor: pointer;
+  }
+
+  &:hover {
+    background: var(--fz-lib-hover);
+
+    & .fz-lib-close-tab {
+      opacity: 0.6;
+    }
+  }
+
+  /* New since the board was last opened */
+  &[unread] {
+    background: color-mix(in srgb, var(--fz-notify-color) 12%, transparent);
+    box-shadow: inset 3px 0 0 var(--fz-notify-color);
+
+    &:hover {
+      background: color-mix(in srgb, var(--fz-notify-color) 20%, transparent);
+    }
+
+    & .fz-notify-title {
+      font-weight: 600;
+    }
+  }
+}
+
+.fz-notify-icon {
+  --fz-notify-icon: url("icons/info.svg");
+
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--fz-notify-color) 18%, transparent);
+  position: relative;
+
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: var(--fz-notify-color);
+    mask: var(--fz-notify-icon) center / 16px no-repeat;
+  }
+
+  [data-kind="update"] > & {
+    --fz-notify-icon: url("icons/update.svg");
+  }
+
+  [data-kind="virustotal"] > & {
+    --fz-notify-icon: url("icons/security-warning.svg");
+  }
+}
+
+.fz-notify-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.fz-notify-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fz-notify-body {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  opacity: 0.65;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.fz-notify-empty-icon {
+  width: 32px;
+  height: 32px;
+  background: currentColor;
+  mask: url("icons/desktop-notification.svg") center / 28px no-repeat;
+  opacity: 0.5;
 }

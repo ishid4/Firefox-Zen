@@ -230,7 +230,24 @@ history.
 **Downloads**: Firefox's downloads, newest first and grouped by day, with
 progress, Pause / Resume / Cancel, Retry, Show in folder, search, Clear
 finished and Open downloads folder. Click a finished download to open it.
-Failed downloads (the ones that need Retry) are tinted yellow.
+Failed downloads (the ones that need Retry) are tinted yellow. Retry asks the
+download's link again: when the link no longer works (an expired or signed
+link answering HTTP 403, 404, 410...), the download stays on the list, failed,
+with "Link no longer works" instead of saving the server's error page as the
+file; **Go to Download Page** (right-click) gets a fresh link. Cancel, and
+removing an unfinished download from the list (×, Delete, Clear), delete its
+partial `.part` file and the empty placeholder Firefox made for it.
+
+**Notifications**: a board of what Firefox-Zen has to tell you, newest first
+and grouped by day: a new version (opens About) and a file VirusTotal flags
+(opens its report; **Show in Downloads**). While some are unread the Library
+button shows their count, even with the sidebar collapsed, a bubble above it
+shows the newest one (expanded sidebar; × dismisses it), and the button opens
+the Library on the board. Opening the board marks them read; new ones stay
+highlighted while it's open. **Clear read** and **Clear all** tidy it, × removes
+one. They're kept in `chrome/.firefox-zen/notifications.json`, except a
+private space's detection, which names nothing from the space and is kept in
+memory only.
 
 ### About and updates
 
@@ -276,13 +293,14 @@ Every install sees it within a day; About shows the entries newer than the
 installed version as "What's new", and the whole list as the version history. `repository` and `branch` say where updates come from: a fork changes
 them there, and updates keep the local values.
 
-**Checks.** Each time Firefox starts (once it has settled), Firefox-Zen reads
-`version.json` on GitHub. The **Check at startup** switch
-(`firefox-zen.update.auto-check`) turns this off: then it only checks when you
-click **Check for updates**. When a newer version is there,
-the footer's Library button and the toolbar's Firefox-Zen button show an
-update icon and open the Library on About, until About has been seen; the
-About button keeps a dot until the update is installed.
+**Checks.** Each time Firefox starts (once it has settled), and every 6 hours
+while it runs, Firefox-Zen reads `version.json` on GitHub. The **Check at
+startup** switch (`firefox-zen.update.auto-check`) turns this off: then it only
+checks when you click **Check for updates**. When a newer version is there, it
+goes on the Library's **Notifications** board (see [Library](#library)),
+and the footer's Library button and the toolbar's Firefox-Zen button show an
+update icon until About has been seen or the notification read; the About
+button keeps a dot until the update is installed.
 
 **Updating.**
 

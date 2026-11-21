@@ -16,7 +16,11 @@
 // Checks: GitHub's version.json on that branch (through GitHub's API, which
 // is current right after a push; raw.githubusercontent.com if that fails).
 // While AUTO_CHECK_PREF is on (Check at startup): once per Firefox start,
-// after the browser has settled. Off: only when asked (Check for updates).
+// after the browser has settled, then every CHECK_EVERY while it runs (a
+// browser left open for days still hears of a release). Off: only when asked
+// (Check for updates). A newer version is also posted to the Library's
+// Notifications board (JS/firefox-zen-notifications.sys.mjs): reading it
+// there counts as seen, like opening About.
 // What it found is kept in prefs (LATEST_PREF, NOTES_PREF: the releases
 // newer than this one, as JSON), so every window
 // can show it right away at the next start, before any new check.
@@ -42,6 +46,7 @@
 // here: when it changed, the About tab says to run the installer again.
 
 import { setTimeout, clearTimeout } from "resource://gre/modules/Timer.sys.mjs";
+import { FzNotifications } from "chrome://userscripts/content/firefox-zen-notifications.sys.mjs";
 
 const PREF_BRANCH = "firefox-zen.update.";
 const AUTO_CHECK_PREF = PREF_BRANCH + "auto-check";
@@ -54,6 +59,8 @@ const NOTES_PREF = PREF_BRANCH + "latest-notes";
 const SEEN_PREF = PREF_BRANCH + "seen";
 const DEV_PREF = PREF_BRANCH + "dev-url";
 const CHANGED_TOPIC = "firefox-zen-update-changed";
+const CHECK_EVERY = 6 * 60 * 60 * 1000;
+const NOTE_PREFIX = "update:";
 
 const MAX_DOWNLOAD = 20 * 1024 * 1024;
 const MAX_HASHED = 5 * 1024 * 1024;
@@ -271,8 +278,43 @@ function markSeen() {
   const { available, latest } = status();
   if (available) {
     Services.prefs.setStringPref(SEEN_PREF, latest);
+    FzNotifications.markRead(NOTE_PREFIX + latest);
   }
 }
+
+// ---- the Notifications board ----
+
+// The waiting update as a notification (read once seen); older ones, and
+// one for a version that's installed now, go.
+function syncNotification() {
+  const s = status();
+  const current = s.available && !s.updated ? NOTE_PREFIX + s.latest : null;
+  FzNotifications.clear(n => n.kind === "update" && n.id !== current);
+  if (!current) {
+    return;
+  }
+  const notes = s.newer.find(e => e.version === s.latest)?.notes ?? "";
+  FzNotifications.add({
+    id: current,
+    kind: "update",
+    level: "info",
+    title: `Firefox-Zen ${s.latest} is available`,
+    body: notes || `You have ${s.version}. Open About to see what's new and update.`,
+    action: { view: "about" },
+    read: !s.unseen,
+  });
+  if (!s.unseen) {
+    FzNotifications.markRead(current);
+  }
+}
+
+// Read on the board: seen, as if About was opened.
+Services.obs.addObserver(() => {
+  const { available, latest, unseen } = status();
+  if (available && unseen && FzNotifications.get(NOTE_PREFIX + latest)?.read) {
+    Services.prefs.setStringPref(SEEN_PREF, latest);
+  }
+}, FzNotifications.TOPIC);
 
 // ---- network ----
 
@@ -321,6 +363,11 @@ async function check() {
   } finally {
     Services.prefs.setIntPref(LAST_CHECK_PREF, Math.floor(Date.now() / 1000));
     checking = false;
+    try {
+      syncNotification();
+    } catch (e) {
+      console.error("Firefox-Zen update: notification", e);
+    }
     notify();
   }
   return status();
@@ -776,6 +823,7 @@ async function prepareUpdate() {
           Services.appinfo.invalidateCachesOnRestart();
           local = await readLocal();
           updated = { to: meta.version, backup: saved ? backup : null, loader: await loaderChanged(src), git: false };
+          syncNotification();
           notify();
           return updated.backup;
         } catch (e) {
@@ -1016,6 +1064,7 @@ async function gitPull() {
     Services.appinfo.invalidateCachesOnRestart();
     updated = { to: local.version, backup: null, loader: false, git: true };
   }
+  syncNotification();
   notify();
   // Pulled (or already up to date), yet still older than GitHub: git keeps
   // a version.json edited here, which then names an old version.
@@ -1061,15 +1110,37 @@ const ready = (async () => {
   notify();
 })().catch(e => console.error("Firefox-Zen update:", e));
 
-// One check per Firefox start, once the browser has settled; off, only the
-// About tab's Check for updates checks.
+// One check per Firefox start, once the browser has settled, then every
+// CHECK_EVERY (counted from the last check, so a manual one pushes it back);
+// off, only the About tab's Check for updates checks.
+let autoTimer = null;
 function autoCheck() {
-  if (Services.prefs.getBoolPref(AUTO_CHECK_PREF, true)) {
-    check().catch(e => console.error("Firefox-Zen update check:", e));
+  clearTimeout(autoTimer);
+  autoTimer = null;
+  if (!Services.prefs.getBoolPref(AUTO_CHECK_PREF, true)) {
+    return;
   }
+  check()
+    .catch(e => console.error("Firefox-Zen update check:", e))
+    .finally(scheduleCheck);
 }
+function scheduleCheck() {
+  clearTimeout(autoTimer);
+  const last = Services.prefs.getIntPref(LAST_CHECK_PREF, 0) * 1000;
+  autoTimer = setTimeout(autoCheck, Math.min(Math.max(last + CHECK_EVERY - Date.now(), 60000), CHECK_EVERY));
+}
+// Turned back on: checks resume.
+Services.prefs.addObserver(AUTO_CHECK_PREF, () => {
+  if (Services.prefs.getBoolPref(AUTO_CHECK_PREF, true)) {
+    scheduleCheck();
+  } else {
+    clearTimeout(autoTimer);
+  }
+});
 setTimeout(() => {
   ready
+    .then(() => FzNotifications.ready)
+    .then(syncNotification)
     .then(() => ensureRecord())
     .catch(e => console.error("Firefox-Zen update: install record", e))
     .then(autoCheck);

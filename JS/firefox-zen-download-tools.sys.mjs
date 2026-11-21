@@ -12,6 +12,12 @@
 //   up to firefox-zen.download-retry.attempts times. Not when it was blocked,
 //   canceled, or the file couldn't be written (disk full, no permission):
 //   those fail the same way again.
+// - Restarts (Retry, Resume, auto-retry: restart()): a link that answers
+//   with an HTTP error fails the download instead of Firefox saving the
+//   error page as the file (linkError() says which); remove() and cancel()
+//   delete an unfinished download's partial file.
+// - A file VirusTotal flags goes on the Library's Notifications board
+//   (JS/firefox-zen-notifications.sys.mjs).
 // - VirusTotal (firefox-zen.virustotal): the file's SHA-256 is looked up on
 //   VirusTotal. Only the hash is sent (a few KB), never the file, unless you
 //   press Upload. Firefox already hashes every download while saving it, so
@@ -35,6 +41,7 @@ import { setTimeout, clearTimeout } from "resource://gre/modules/Timer.sys.mjs";
 const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, {
   Downloads: "resource://gre/modules/Downloads.sys.mjs",
+  FzNotifications: "chrome://userscripts/content/firefox-zen-notifications.sys.mjs",
 });
 
 const RETRY_PREF = "firefox-zen.download-retry";
@@ -89,7 +96,8 @@ function notify(download) {
 
 // ---- retry ----
 
-// Worth starting again: the network or the server failed, not the file.
+// Worth starting again: the network or the server failed, not the file, and
+// the link still works.
 function retryable(d) {
   const err = d.error;
   return (
@@ -98,8 +106,81 @@ function retryable(d) {
     !d.canceled &&
     !err.becauseBlocked &&
     !err.becauseTargetFailed &&
+    !linkGone(d) &&
     d.stopped
   );
+}
+
+// ---- restarts and expired links ----
+// Starting a stopped download again asks its link again. A link that no
+// longer works (signed or session links expire) answers with an error page
+// (HTTP 403, 404, 410...), which Firefox would save as the file and call
+// done. While a download restarts, such an answer fails it instead, and
+// linkError() tells its row why.
+
+// url -> Set of downloads restarting from it.
+const restarting = new Map();
+// Download -> the HTTP status its link last answered with (>= 400).
+const httpErrors = new WeakMap();
+// Answers that won't change by asking again.
+const linkGone = d => {
+  const status = httpErrors.get(d);
+  return !!status && status !== 408 && status !== 429 && status < 500;
+};
+let watchingRestarts = false;
+
+const restartObserver = {
+  observe(subject) {
+    if (!restarting.size) {
+      return;
+    }
+    try {
+      const channel = subject.QueryInterface(Ci.nsIHttpChannel);
+      // The download's own request, not a page loading the same link.
+      if (channel.loadInfo?.externalContentPolicyType !== Ci.nsIContentPolicy.TYPE_SAVEAS_DOWNLOAD) {
+        return;
+      }
+      const set = restarting.get(channel.originalURI?.spec) ?? restarting.get(channel.URI.spec);
+      const status = channel.responseStatus;
+      if (!set || status < 400) {
+        return;
+      }
+      for (const d of set) {
+        httpErrors.set(d, status);
+      }
+      channel.cancel(Cr.NS_BINDING_FAILED);
+    } catch (e) {
+      // Not HTTP, or no response yet.
+    }
+  },
+};
+
+// Starts a stopped download again (Retry, auto-retry, a private space's
+// resume). Resolves when it settles; failures show on its row.
+async function restart(d) {
+  if (!watchingRestarts) {
+    watchingRestarts = true;
+    Services.obs.addObserver(restartObserver, "http-on-examine-response");
+    Services.obs.addObserver(restartObserver, "http-on-examine-cached-response");
+  }
+  const url = d.source.url;
+  let set = restarting.get(url);
+  if (!set) {
+    restarting.set(url, (set = new Set()));
+  }
+  set.add(d);
+  httpErrors.delete(d);
+  try {
+    await d.start();
+  } catch (e) {
+    // Shown on its row.
+  } finally {
+    set.delete(d);
+    if (!set.size && restarting.get(url) === set) {
+      restarting.delete(url);
+    }
+    notify(d);
+  }
 }
 
 function onChanged(d) {
@@ -131,7 +212,7 @@ function onChanged(d) {
     r.timer = null;
     // Retried or removed meanwhile.
     if (retryable(d)) {
-      d.start().catch(() => {});
+      restart(d);
     }
     notify(d);
   }, delay);
@@ -509,6 +590,44 @@ function pageLookup(hash, { evenIfLimited = false } = {}) {
 function setState(d, state) {
   vt.set(d, state);
   notify(d);
+  if (state.status === "done") {
+    try {
+      postDetection(d, state);
+    } catch (e) {
+      log(e);
+    }
+  }
+}
+
+// A flagged file goes on the Library's Notifications board. A private
+// space's download (its stand-in's source says so, like a live private
+// download's) names nothing from the space and is kept in memory only.
+function postDetection(d, { hash, verdict: v }) {
+  if (!v || !(v.malicious || v.suspicious)) {
+    return;
+  }
+  const isPrivate = !!d.source?.isPrivate;
+  const name = d.target?.path ? PathUtils.filename(d.target.path) : "A download";
+  const count = v.malicious
+    ? `${v.malicious} of ${v.total} scanners flag it as malicious`
+    : `${v.suspicious} of ${v.total} scanners find it suspicious`;
+  let host = "";
+  try {
+    host = new URL(d.source.url).host;
+  } catch (e) {
+    // No URL.
+  }
+  lazy.FzNotifications.add({
+    id: `virustotal:${hash}:${isPrivate ? "private" : d.target?.path}`,
+    kind: "virustotal",
+    level: v.malicious ? "danger" : "warning",
+    title: isPrivate ? "A private space's download was flagged" : `${name} was flagged`,
+    body: isPrivate
+      ? `${count}. Unlock the space and see its Downloads.`
+      : `${count}${host ? ` · from ${host}` : ""}. Don't open it unless you trust it.`,
+    action: isPrivate ? { view: "downloads" } : { url: `${GUI}/file/${hash}` },
+    private: isPrivate,
+  });
 }
 
 const failText = e =>
@@ -696,6 +815,26 @@ export const FzDownloadTools = {
 
   vtEnabled: vtOn,
   hasApiKey: () => !!apiKey(),
+
+  // Starts a stopped download again; an expired link fails it (linkError).
+  restart,
+  // The HTTP status (>= 400) its link answered the last restart with, or null.
+  linkError: d => (d.error && !d.succeeded ? (httpErrors.get(d) ?? null) : null),
+  // Takes it off Firefox's list. One that didn't finish leaves nothing on
+  // disk: its partial file and the empty placeholder Firefox made for it go
+  // (Firefox's own Remove does the same). A finished one keeps its file.
+  async remove(d) {
+    const list = await lazy.Downloads.getList(lazy.Downloads.ALL);
+    await list.remove(d);
+    if (!d.succeeded) {
+      await d.finalize(true).catch(log);
+    }
+  },
+  // Cancels it and deletes what it saved so far.
+  async cancel(d) {
+    await d.cancel();
+    await d.removePartialData();
+  },
 
   // { tries, max, waiting } while auto-retry is handling a failed download.
   retryInfo(d) {

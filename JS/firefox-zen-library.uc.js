@@ -23,6 +23,9 @@
 // - Settings: built by JS/firefox-zen-settings.uc.js (window.FirefoxZenSettings).
 // - About: built by JS/firefox-zen-about.uc.js (window.FirefoxZenAbout). While
 //   it says an update is waiting, the footer button opens on About.
+// - Notifications: built by JS/firefox-zen-notifications.uc.js
+//   (window.FirefoxZenNotifications): updates, VirusTotal detections, ...
+//   While some are unread, the footer button opens on it.
 //
 // The Library is core: always on. The toolbar's Firefox-Zen button opens it on
 // Settings, so it can be reached before Spaces (and its footer) is on.
@@ -59,7 +62,7 @@
 
   let root = null;
   let main = null;
-  const VIEWS = ["spaces", "history", "downloads", "touches", "mods", "settings", "about"];
+  const VIEWS = ["spaces", "history", "downloads", "notifications", "touches", "mods", "settings", "about"];
   let view = Services.prefs.getStringPref(VIEW_PREF, "spaces");
   let filterText = "";
   let renderQueued = false;
@@ -176,7 +179,7 @@
 
   const holdsSidebar = name => name !== "settings";
   // Detours: the footer button opens the last of the other views.
-  const isDetour = name => name === "touches" || name === "mods" || name === "settings" || name === "about";
+  const isDetour = name => name === "notifications" || name === "touches" || name === "mods" || name === "settings" || name === "about";
 
   function holdSidebar() {
     if (sidebarHeld) {
@@ -259,6 +262,8 @@
       }
       root = buildRoot();
       gBrowser.tabbox.append(root);
+      // The rail's unread count.
+      window.FirefoxZenNotifications?.syncBadges();
       origin = null;
       place();
       resizeObserver.observe(gBrowser.tabpanels);
@@ -318,6 +323,10 @@
     // (JS/firefox-zen-download-cue.uc.js): open on Downloads.
     if (window.FirefoxZenDownloadCue?.opensDownloads() && !(root && view === "downloads")) {
       open("downloads");
+    } else if (window.FirefoxZenNotifications?.opensBoard() && !(root && view === "notifications")) {
+      // Unread notifications (JS/firefox-zen-notifications.uc.js): open on
+      // the board.
+      open("notifications");
     } else if (window.FirefoxZenAbout?.opensAbout() && !(root && view === "about")) {
       // Showing the update icon (JS/firefox-zen-about.uc.js): open on About.
       open("about");
@@ -382,6 +391,7 @@
         nav("spaces", "Spaces"),
         nav("history", "History"),
         nav("downloads", "Downloads"),
+        window.FirefoxZenNotifications && nav("notifications", "Notifications"),
         h("div", { class: "fz-lib-rail-spacer" }),
         window.FirefoxZenTouches && nav("touches", "Touches"),
         window.FirefoxZenMods && nav("mods", "Mods"),
@@ -439,6 +449,8 @@
       main.replaceChildren(window.FirefoxZenMods.buildView());
     } else if (view === "settings" && window.FirefoxZenSettings) {
       main.replaceChildren(window.FirefoxZenSettings.buildView());
+    } else if (view === "notifications" && window.FirefoxZenNotifications) {
+      main.replaceChildren(window.FirefoxZenNotifications.buildView());
     } else if (view === "about" && window.FirefoxZenAbout) {
       main.replaceChildren(window.FirefoxZenAbout.buildView());
     } else {
@@ -2208,6 +2220,10 @@
       return "Blocked";
     }
     if (dlFailed(d)) {
+      const gone = FzDownloadTools.linkError(d);
+      if (gone) {
+        return `Link no longer works (HTTP ${gone}) · Go to the download page for a new one`;
+      }
       const retry = FzDownloadTools.retryInfo(d);
       if (retry?.waiting) {
         return `Failed · Retrying (${retry.tries} of ${retry.max})…`;
@@ -2260,6 +2276,7 @@
       d.target?.exists !== false,
       d.target?.path,
       FzDownloadTools.retryInfo(d),
+      FzDownloadTools.linkError(d),
       FzDownloadTools.vtEnabled() && d.succeeded ? (FzDownloadTools.vtState(d) ?? "unchecked") : null,
     ]);
   let dlRowCache = new WeakMap();
@@ -2490,7 +2507,7 @@
         items.push(item("Open", () => d.launch()), item("Show in Folder", () => d.showContainingDirectory()), sep());
       }
       if (dlFailed(d) && !dlBlocked(d)) {
-        items.push(item("Retry", () => d.start()), sep());
+        items.push(item("Retry", () => FzDownloadTools.restart(d)), sep());
       }
       items.push(
         item("Go to Download Page", () => openUrl(dlPage(d), { spaceId })),
@@ -2500,7 +2517,7 @@
         items.push(...vtItems(d));
       }
       if (d.stopped) {
-        items.push(sep(), item("Remove from List", () => (remove ?? (() => dlList?.remove(d)))()));
+        items.push(sep(), item("Remove from List", () => (remove ?? (() => FzDownloadTools.remove(d)))()));
       }
     } else {
       // A private space's saved record.
@@ -2524,19 +2541,20 @@
   }
 
   // `remove`: takes it off its list (Firefox's, or a private space's).
-  function buildDownloadRow(d, remove = () => dlList?.remove(d)) {
+  function buildDownloadRow(d, remove = () => FzDownloadTools.remove(d).catch(ex => console.error("firefox-zen-library:", ex))) {
     const running = !d.stopped;
     const actions = [];
     if (running) {
       if (d.hasPartialData) {
         actions.push(dlAction("Pause", "", () => d.cancel()));
       }
-      actions.push(dlAction("Cancel", "", () => d.cancel().then(() => d.removePartialData())));
+      actions.push(dlAction("Cancel", "", () => FzDownloadTools.cancel(d)));
     } else if (dlPaused(d)) {
-      actions.push(dlAction("Resume", "", () => d.start()));
-      actions.push(dlAction("Cancel", "", () => d.removePartialData().then(() => d.refresh?.())));
+      actions.push(dlAction("Resume", "", () => void FzDownloadTools.restart(d)));
+      actions.push(dlAction("Cancel", "", () => FzDownloadTools.cancel(d)));
     } else if ((dlFailed(d) && !dlBlocked(d)) || (d.canceled && !d.succeeded)) {
-      actions.push(dlAction("Retry", "fz-lib-dl-retry", () => d.start()));
+      // Waits only for it to start: the row changes to the running one.
+      actions.push(dlAction("Retry", "fz-lib-dl-retry", () => void FzDownloadTools.restart(d)));
     } else if (d.succeeded && d.target.exists !== false) {
       actions.push(dlAction("Show in folder", "", () => d.showContainingDirectory()));
     }
@@ -2635,13 +2653,8 @@
     const shownStatus = interrupted
       ? `Interrupted · ${d.totalBytes ? `${formatBytes(d.currentBytes)} of ${formatBytes(d.totalBytes)}` : formatBytes(d.currentBytes)}`
       : status;
-    const remove = () => {
-      // Its partial file (kept for Retry) goes with it.
-      if (d.state !== "done" && (d.partPath || d.path)) {
-        IOUtils.remove(d.partPath || `${d.path}.part`, { ignoreAbsent: true }).catch(() => {});
-      }
-      api().removePrivateDownload(spaceId, d.key);
-    };
+    // Its partial file (kept for Retry) goes with it.
+    const remove = () => api().removePrivateDownload(spaceId, d.key);
     const fileUrl = d.path ? PathUtils.toFileURI(d.path) : "";
     // VirusTotal: a stand-in for the finished file (its verdict is kept in
     // the space's encrypted data).
@@ -2684,16 +2697,15 @@
       d.state === "done" && d.path
         ? dlAction("Show in folder", "", () => file().reveal())
         : null,
-      // Continues from where it stopped, like Firefox's Retry. Without a
-      // partial file to continue (or a server that allows it), downloads it
-      // again from its link in the private space (the old entry goes).
+      // Continues from where it stopped, like Firefox's Retry, else starts
+      // over from its link; it stays this entry either way, so a link that
+      // no longer works leaves it here, failed. Without a known file path,
+      // its link opens in the private space instead (the entry stays).
       interrupted || d.state === "failed" || d.state === "canceled"
         ? dlAction("Retry", "fz-lib-dl-retry", async () => {
-            if (await api().resumePrivateDownload?.(spaceId, d.key)) {
-              return;
+            if (!(await api().resumePrivateDownload?.(spaceId, d.key))) {
+              openUrl(d.url, { spaceId });
             }
-            remove();
-            openUrl(d.url, { spaceId });
           })
         : null,
       h("button", {

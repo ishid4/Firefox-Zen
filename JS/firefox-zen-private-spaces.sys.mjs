@@ -549,7 +549,12 @@ export const FzPrivateSpaces = {
     }
     let subject = vtSubjects.get(key);
     if (!subject || subject.target.path !== record.path) {
-      subject = { target: { path: record.path }, source: { url: record.url }, succeeded: true, stopped: true };
+      subject = {
+        target: { path: record.path },
+        source: { url: record.url, isPrivate: true },
+        succeeded: true,
+        stopped: true,
+      };
       vtSubjects.set(key, subject);
       downloadKeys.set(subject, { id, key });
     }
@@ -560,18 +565,18 @@ export const FzPrivateSpaces = {
   },
 
   // Starts a stopped download again from where it stopped (its kept partial
-  // file, asking the server for the rest), like Firefox's own Retry.
-  // Resolves false when that can't be done (no partial file, or the server
-  // gave no resume id): then only downloading it again from its link works.
+  // file, asking the server for the rest), like Firefox's own Retry; without
+  // a partial file to continue (or a resume id from the server), from the
+  // start. Either way it stays the same entry, so a link that no longer works
+  // leaves it on the list, failed (FzDownloadTools.restart).
+  // Resolves false when it can't be started (no file path known).
   async resumeDownload(id, key) {
     const entry = unlocked.get(id);
     const record = entry?.downloads.find(d => d.key === key);
-    if (!record || liveDownloads.has(key) || record.state === "done") {
+    if (!record || liveDownloads.has(key) || record.state === "done" || !record.path) {
       return false;
     }
-    if (!record.path || !record.partPath || !record.entityID || !(await IOUtils.exists(record.partPath))) {
-      return false;
-    }
+    const resumable = !!record.partPath && !!record.entityID && (await IOUtils.exists(record.partPath));
     const source = { url: record.url, isPrivate: true };
     if (record.referrer) {
       try {
@@ -585,13 +590,16 @@ export const FzPrivateSpaces = {
         // Not a URL anymore: go without.
       }
     }
+    if (!resumable && record.partPath) {
+      await IOUtils.remove(record.partPath, { ignoreAbsent: true }).catch(() => {});
+    }
     const download = await lazy.Downloads.createDownload({
       source,
-      target: { path: record.path, partFilePath: record.partPath },
-      saver: { type: "copy", entityID: record.entityID },
+      target: { path: record.path, partFilePath: record.partPath || `${record.path}.part` },
+      saver: resumable ? { type: "copy", entityID: record.entityID } : "copy",
       tryToKeepPartialData: true,
-      hasPartialData: true,
-      totalBytes: record.totalBytes,
+      hasPartialData: resumable,
+      totalBytes: resumable ? record.totalBytes : 0,
       startTime: new Date(record.startTime),
     });
     downloadKeys.set(download, { id, key });
@@ -599,19 +607,29 @@ export const FzPrivateSpaces = {
     const list = await lazy.Downloads.getList(lazy.Downloads.PRIVATE);
     await list.add(download);
     // Failures show on its row (Retry again).
-    download.start().catch(() => {});
+    lazy.FzDownloadTools.restart(download);
     return true;
   },
 
+  // Takes it off the space's list. One that didn't finish leaves nothing on
+  // disk: its partial file and the empty placeholder Firefox made for it go.
   async removeDownload(id, key) {
     const live = liveDownloads.get(key);
+    const entry = unlocked.get(id);
+    const record = entry?.downloads.find(d => d.key === key);
     if (live?.stopped) {
       liveDownloads.delete(key);
       lazy.Downloads.getList(lazy.Downloads.PRIVATE)
         .then(list => list.remove(live))
         .catch(() => {});
+      if (!live.succeeded) {
+        // Not finalize(): keepPartialData() makes that keep the data.
+        live.removePartialData().catch(() => {});
+      }
     }
-    const entry = unlocked.get(id);
+    if (record && record.state !== "done" && (!live || live.stopped)) {
+      removeLeftovers(record);
+    }
     if (entry) {
       entry.downloads = entry.downloads.filter(d => d.key !== key);
       Services.obs.notifyObservers(null, DOWNLOADS_TOPIC, id);
@@ -1008,6 +1026,22 @@ function privateWindowOpen() {
     }
   }
   return false;
+}
+
+// What an unfinished download left: its partial file, and the empty file
+// Firefox puts at the final path meanwhile (never a file with data in it).
+async function removeLeftovers(record) {
+  if (!record.path) {
+    return;
+  }
+  try {
+    await IOUtils.remove(record.partPath || `${record.path}.part`, { ignoreAbsent: true });
+    if ((await IOUtils.stat(record.path).catch(() => null))?.size === 0) {
+      await IOUtils.remove(record.path, { ignoreAbsent: true });
+    }
+  } catch (e) {
+    console.error("firefox-zen-private-spaces: removing a download's files", e);
+  }
 }
 
 function keepPartialData(download) {

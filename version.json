@@ -1,8 +1,13 @@
 {
-  "version": "1.8.0",
+  "version": "1.9.0",
   "repository": "https://github.com/ishid4/Firefox-Zen",
   "branch": "main",
   "history": [
+    {
+      "version": "1.9.0",
+      "date": "2026-11-21",
+      "notes": "New Notifications board in the Library: new versions and files VirusTotal flags land there. While some are unread, the Library button shows their count (even with the sidebar collapsed), a bubble above it shows the newest one, and the button opens the board. Updates are now checked every 6 hours too, not only when Firefox starts. Retry on a download whose link expired keeps it on the list, failed, with \"Link no longer works\", instead of saving the server's error page as the file or (in a private space) dropping it from the list. Removing a failed or paused download from the list deletes its leftover .part file."
+    },
     {
       "version": "1.8.0",
       "date": "2026-11-14",

@@ -9,7 +9,7 @@ a floating address bar, Glance previews and a built-in Library.
 
 - **Spaces**: separate sets of tabs, switched from a footer under the sidebar.
 - **Private spaces**: password-protected spaces, encrypted on disk.
-- **Library**: every space, history and downloads in one panel; drag tabs between spaces. Downloads can retry by themselves after network errors and be checked on VirusTotal.
+- **Library**: every space, history and downloads in one panel; drag tabs between spaces. Downloads can retry by themselves after network errors and be checked on VirusTotal. A Notifications board collects updates and VirusTotal detections.
 - **Floating address bar**: Ctrl+T opens a centered command bar instead of a New Tab page.
 - **Glance**: Alt+click a link to preview it in a floating window.
 - **Touches**: restyle any website: pick an element and change it, zap clutter away, or write CSS. Several per site, each with its own switch. Share one by link: others try it in one click, then keep it.
@@ -118,11 +118,12 @@ Then start Firefox and click **Restart now** when Firefox-Zen asks (first start 
   sidebar, …), and pick a sidebar layout (Full, Icons, Auto-hide, …) in one click.
 - Once Spaces is on, use the bar under the tabs to switch spaces and **+** to
   create spaces, folders or private spaces. Right-click a space for more.
-- Its first button opens the **Library** (spaces, history, downloads, mods, settings, about).
-- Firefox-Zen checks GitHub for a new version each time Firefox starts (turn
-  off **Check at startup** on the About tab to check by hand). When there is one,
-  the Library button shows an update icon: click it, then **Update** on the
-  **About** tab. Files you edited are never replaced without asking.
+- Its first button opens the **Library** (spaces, history, downloads, notifications, mods, settings, about).
+- Firefox-Zen checks GitHub for a new version when Firefox starts and every 6 hours
+  after (turn off **Check at startup** on the About tab to check by hand). When there
+  is one, a bubble above the Library button says so and the update lands on the
+  Library's **Notifications** board: click it, then **Update** on the **About** tab.
+  Files you edited are never replaced without asking.
 
 | Windows / Linux | macOS | Does |
 | --- | --- | --- |
