@@ -1,0 +1,8 @@
+<!-- Tinted from CSS: -moz-context-properties: stroke; stroke: <color> -->
+<svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M1 3C1 1.89543 1.89543 1 3 1H8L10 3H15C16.1046 3 17 3.89543 17 5V15C17 16.1046 16.1046 17 15 17H3C1.89543 17 1 16.1046 1 15V3Z" fill="context-stroke"/>
+<path d="M1 3C1 1.89543 1.89543 1 3 1H8L10 3H15C16.1046 3 17 3.89543 17 5V15C17 16.1046 16.1046 17 15 17H3C1.89543 17 1 16.1046 1 15V3Z" fill="white" fill-opacity="0.5"/>
+<path d="M1 3C1 1.89543 1.89543 1 3 1H8L10 3H15C16.1046 3 17 3.89543 17 5V15C17 16.1046 16.1046 17 15 17H3C1.89543 17 1 16.1046 1 15V3Z" stroke="context-stroke" stroke-width="1.5"/>
+<path d="M1 8C1 6.89543 1.89543 6 3 6H15C16.1046 6 17 6.89543 17 8V15C17 16.1046 16.1046 17 15 17H3C1.89543 17 1 16.1046 1 15V8Z" fill="white"/>
+<path d="M1 8C1 6.89543 1.89543 6 3 6H15C16.1046 6 17 6.89543 17 8V15C17 16.1046 16.1046 17 15 17H3C1.89543 17 1 16.1046 1 15V8Z" fill="context-stroke" fill-opacity="0.05" stroke="context-stroke" stroke-width="1.5"/>
+</svg>

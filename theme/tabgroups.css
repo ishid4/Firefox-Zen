@@ -1,45 +1,10 @@
-/* Folder icons per tab group color.
- * Firefox sets inline style "--tab-group-color: var(--tab-group-<color>)"
- * on <tab-group> (no color attribute), so match on that. Blue is the fallback. */
+/* Folder icons: one open/closed pair painted with context-stroke, tinted
+ * with the group's own color (Firefox sets --tab-group-color inline on
+ * <tab-group>). Blue is the fallback. */
 tab-group {
-  --folder-icon-closed: url("icons/folder/folder-closed-blue.svg");
-  --folder-icon-open: url("icons/folder/folder-open-blue.svg");
-}
-tab-group[style*="--tab-group-color: var(--tab-group-blue)"] {
-  --folder-icon-closed: url("icons/folder/folder-closed-blue.svg");
-  --folder-icon-open: url("icons/folder/folder-open-blue.svg");
-}
-tab-group[style*="--tab-group-color: var(--tab-group-cyan)"] {
-  --folder-icon-closed: url("icons/folder/folder-closed-cyan.svg");
-  --folder-icon-open: url("icons/folder/folder-open-cyan.svg");
-}
-tab-group[style*="--tab-group-color: var(--tab-group-gray)"] {
-  --folder-icon-closed: url("icons/folder/folder-closed-gray.svg");
-  --folder-icon-open: url("icons/folder/folder-open-gray.svg");
-}
-tab-group[style*="--tab-group-color: var(--tab-group-green)"] {
-  --folder-icon-closed: url("icons/folder/folder-closed-green.svg");
-  --folder-icon-open: url("icons/folder/folder-open-green.svg");
-}
-tab-group[style*="--tab-group-color: var(--tab-group-orange)"] {
-  --folder-icon-closed: url("icons/folder/folder-closed-orange.svg");
-  --folder-icon-open: url("icons/folder/folder-open-orange.svg");
-}
-tab-group[style*="--tab-group-color: var(--tab-group-pink)"] {
-  --folder-icon-closed: url("icons/folder/folder-closed-pink.svg");
-  --folder-icon-open: url("icons/folder/folder-open-pink.svg");
-}
-tab-group[style*="--tab-group-color: var(--tab-group-purple)"] {
-  --folder-icon-closed: url("icons/folder/folder-closed-purple.svg");
-  --folder-icon-open: url("icons/folder/folder-open-purple.svg");
-}
-tab-group[style*="--tab-group-color: var(--tab-group-red)"] {
-  --folder-icon-closed: url("icons/folder/folder-closed-red.svg");
-  --folder-icon-open: url("icons/folder/folder-open-red.svg");
-}
-tab-group[style*="--tab-group-color: var(--tab-group-yellow)"] {
-  --folder-icon-closed: url("icons/folder/folder-closed-yellow.svg");
-  --folder-icon-open: url("icons/folder/folder-open-yellow.svg");
+  --folder-icon-closed: url("icons/folder-closed.svg");
+  --folder-icon-open: url("icons/folder-open.svg");
+  --folder-icon-color: var(--tab-group-color, #0069CC);
 }
 
 :root {
@@ -93,6 +58,8 @@ tab-group {
   /* Horizontal tabs: icon inline before the label text */
   tab-group .tab-group-label-container label::before {
     content: var(--folder-icon-open) !important;
+    -moz-context-properties: stroke;
+    stroke: var(--folder-icon-color);
   }
 
   tab-group[collapsed] .tab-group-label-container label::before {
@@ -117,6 +84,8 @@ tab-group {
       background-position: calc(var(--fz-folder-column-center) - 10px) center !important;
       background-repeat: no-repeat !important;
       background-size: 20px auto !important;
+      -moz-context-properties: stroke;
+      stroke: var(--folder-icon-color);
 
       & label::before {
         content: none !important;

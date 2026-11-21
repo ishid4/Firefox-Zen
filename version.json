@@ -1,8 +1,13 @@
 {
-  "version": "1.9.0",
+  "version": "1.9.1",
   "repository": "https://github.com/ishid4/Firefox-Zen",
   "branch": "main",
   "history": [
+    {
+      "version": "1.9.1",
+      "date": "2026-11-21",
+      "notes": "Folder icons take each folder's own color from Firefox, so they always match the folder's line, in the sidebar and in the Library."
+    },
     {
       "version": "1.9.0",
       "date": "2026-11-21",

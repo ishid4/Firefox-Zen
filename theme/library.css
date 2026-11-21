@@ -765,6 +765,8 @@
     width: 18px;
     border-radius: 0;
     background: var(--fz-folder-open) center / contain no-repeat;
+    -moz-context-properties: stroke;
+    stroke: var(--fz-group-color);
 
     .fz-lib-group[collapsed] & {
       background-image: var(--fz-folder-closed);
@@ -773,44 +775,8 @@
 }
 
 .fz-lib-group {
-  --fz-folder-closed: url("icons/folder/folder-closed-blue.svg");
-  --fz-folder-open: url("icons/folder/folder-open-blue.svg");
-}
-.fz-lib-group[data-color="blue"] {
-  --fz-folder-closed: url("icons/folder/folder-closed-blue.svg");
-  --fz-folder-open: url("icons/folder/folder-open-blue.svg");
-}
-.fz-lib-group[data-color="cyan"] {
-  --fz-folder-closed: url("icons/folder/folder-closed-cyan.svg");
-  --fz-folder-open: url("icons/folder/folder-open-cyan.svg");
-}
-.fz-lib-group[data-color="gray"] {
-  --fz-folder-closed: url("icons/folder/folder-closed-gray.svg");
-  --fz-folder-open: url("icons/folder/folder-open-gray.svg");
-}
-.fz-lib-group[data-color="green"] {
-  --fz-folder-closed: url("icons/folder/folder-closed-green.svg");
-  --fz-folder-open: url("icons/folder/folder-open-green.svg");
-}
-.fz-lib-group[data-color="orange"] {
-  --fz-folder-closed: url("icons/folder/folder-closed-orange.svg");
-  --fz-folder-open: url("icons/folder/folder-open-orange.svg");
-}
-.fz-lib-group[data-color="pink"] {
-  --fz-folder-closed: url("icons/folder/folder-closed-pink.svg");
-  --fz-folder-open: url("icons/folder/folder-open-pink.svg");
-}
-.fz-lib-group[data-color="purple"] {
-  --fz-folder-closed: url("icons/folder/folder-closed-purple.svg");
-  --fz-folder-open: url("icons/folder/folder-open-purple.svg");
-}
-.fz-lib-group[data-color="red"] {
-  --fz-folder-closed: url("icons/folder/folder-closed-red.svg");
-  --fz-folder-open: url("icons/folder/folder-open-red.svg");
-}
-.fz-lib-group[data-color="yellow"] {
-  --fz-folder-closed: url("icons/folder/folder-closed-yellow.svg");
-  --fz-folder-open: url("icons/folder/folder-open-yellow.svg");
+  --fz-folder-closed: url("icons/folder-closed.svg");
+  --fz-folder-open: url("icons/folder-open.svg");
 }
 
 /* Line between folders and loose tabs, like the sidebar's tab sections */

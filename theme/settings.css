@@ -1582,13 +1582,16 @@
     border-radius: 0;
     margin-inline: 0;
     background-color: transparent;
-    background-image: url("icons/folder/folder-closed-blue.svg");
+    background-image: url("icons/folder-closed.svg");
+    -moz-context-properties: stroke;
+    stroke: #0069CC;
   }
   & .fz-mock-row:nth-child(2) .fz-mock-icon {
-    background-image: url("icons/folder/folder-closed-green.svg");
+    stroke: #477A00;
   }
   & .fz-mock-row:nth-child(3) .fz-mock-icon {
-    background-image: url("icons/folder/folder-open-purple.svg");
+    background-image: url("icons/folder-open.svg");
+    stroke: #8C39BC;
   }
 }
 
