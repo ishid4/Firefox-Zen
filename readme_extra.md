@@ -60,6 +60,7 @@ Then open `about:support`, click **Clear startup cache…**, and restart.
 | `firefox-zen.download-cue.icon-seconds` | 7 | How long the Library button shows the downloads icon after a download starts (0-10, 0 = never) |
 | `firefox-zen.show-menu-icons` | true | Icons in context menus |
 | `firefox-zen.menu-customizer` | false | **Customize menu…** at the bottom of right-click menus (see [Customize menus](#customize-menus)) |
+| `firefox-zen.menu-customizer.button` | true | Show **Customize menu…** in right-click menus; off, customized menus keep their changes |
 | `firefox-zen.menu-customizer.menus` | {} | How each menu was customized: hidden, added and moved items (JSON by menu id); in settings files, kept by Reset to defaults |
 | `firefox-zen.mods.enabled` | [] | Ids of the [mods](#mods) that are on (JSON); `firefox-zen.mods.trusted` lists the scripts confirmed to run |
 | `firefox-zen.mods.safe-mode` | false | Load no mods on the next start (then clears itself) |
@@ -673,6 +674,10 @@ its own editor, Windows 11 style, in two columns:
 - **Done** applies the changes and shows the result in the same open menu.
   **Cancel**, Esc or closing the menu drops them. **Restore default** puts
   Firefox's menu back (applied with Done).
+- **Show Customize menu…**, under Customize menus in Settings (on by
+  default), takes the entry out of the menus when off. Your changes to the
+  menus still apply; turn it on again to edit them. Turning Customize menus
+  itself off puts every menu back as Firefox made it, until it's on again.
 - **Restore all to default**, under Customize menus in Settings, puts every
   menu back at once and says how many are customized.
 

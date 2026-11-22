@@ -1,8 +1,13 @@
 {
-  "version": "1.10.0",
+  "version": "1.10.1",
   "repository": "https://github.com/ishid4/Firefox-Zen",
   "branch": "main",
   "history": [
+    {
+      "version": "1.10.1",
+      "date": "2026-11-22",
+      "notes": "Customize menus has a new Show Customize menu… switch, on by default. Turned off, right-click menus no longer show the Customize menu… entry, while the changes you made to them keep applying; turn it on again to edit them."
+    },
     {
       "version": "1.10.0",
       "date": "2026-11-22",

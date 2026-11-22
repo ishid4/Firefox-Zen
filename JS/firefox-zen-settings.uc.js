@@ -159,6 +159,15 @@
   // it (each menu's editor has Restore default).
   const MENU_LAYOUTS = { type: "json", pref: "menu-customizer.menus", default: {}, keepOnReset: true };
 
+  // JS/firefox-zen-menu-customizer.uc.js
+  const MENU_BUTTON = {
+    type: "switch",
+    pref: "menu-customizer.button",
+    default: true,
+    label: "Show Customize menu…",
+    hint: "At the bottom of right-click menus. Off, your changes to menus still apply; turn it on again to edit them.",
+  };
+
   // A button under Customize menus: no pref of its own, so not in settings
   // files, Reset or Undo.
   const MENU_RESTORE_ALL = {
@@ -442,7 +451,7 @@
             "Done applies the changes in the open menu. Cancel or Esc drops them; Restore default puts Firefox's menu back.",
             "The menu edits what it showed where you opened it: the page menu on a link differs from the one on an image.",
           ],
-          options: [MENU_RESTORE_ALL],
+          options: [MENU_BUTTON, MENU_RESTORE_ALL],
         },
       ],
     },

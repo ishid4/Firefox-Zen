@@ -34,6 +34,8 @@
 
   const PREF = "firefox-zen.menu-customizer";
   const DATA_PREF = "firefox-zen.menu-customizer.menus";
+  // Off: no Customize menu… entry, but the menus keep their changes
+  const BUTTON_PREF = "firefox-zen.menu-customizer.button";
   const HTML_NS = "http://www.w3.org/1999/xhtml";
   const ENTRY_CLASS = "fz-menu-customize";
   const ENTRY_SEP_CLASS = "fz-menu-customize-sep";
@@ -114,6 +116,7 @@
   const ACTION_BY_ID = new Map(ACTIONS.map(a => [a.id, a]));
 
   const enabled = () => Services.prefs.getBoolPref(PREF, false);
+  const showButton = () => Services.prefs.getBoolPref(BUTTON_PREF, true);
 
   function doCommand(id) {
     const command = document.getElementById(id);
@@ -495,7 +498,7 @@
       return;
     }
     // Menus without an id can't be told apart next time, so they can't be customized.
-    const context = isContextMenu(popup) && !!popup.id;
+    const context = isContextMenu(popup) && !!popup.id && showButton();
     if (context) {
       ensureEntry(popup);
       watchLateItems(popup);
@@ -1300,6 +1303,12 @@
       removeAll();
       return;
     }
+    if (!showButton()) {
+      session?.popup.hidePopup();
+      for (const el of document.querySelectorAll(`.${ENTRY_CLASS}, .${ENTRY_SEP_CLASS}`)) {
+        el.remove();
+      }
+    }
     // Added items follow the new layout next time each menu opens
     const menus = readMenus();
     for (const el of document.querySelectorAll(`menupopup > [${ADDED_ATTR}]`)) {
@@ -1313,6 +1322,7 @@
   const prefObserver = { observe: update };
   Services.prefs.addObserver(PREF, prefObserver);
   Services.prefs.addObserver(DATA_PREF, prefObserver);
+  Services.prefs.addObserver(BUTTON_PREF, prefObserver);
   window.addEventListener("contextmenu", onContextMenu, true);
   window.addEventListener("mousedown", onOtherInput, true);
   window.addEventListener("keydown", onOtherInput, true);
@@ -1324,6 +1334,7 @@
     () => {
       Services.prefs.removeObserver(PREF, prefObserver);
       Services.prefs.removeObserver(DATA_PREF, prefObserver);
+      Services.prefs.removeObserver(BUTTON_PREF, prefObserver);
     },
     { once: true }
   );
