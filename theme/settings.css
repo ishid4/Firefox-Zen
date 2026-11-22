@@ -437,6 +437,19 @@
   }
 }
 
+.fz-reset:disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.fz-option-status {
+  opacity: 0.65;
+}
+
+.fz-option-action {
+  margin-inline-start: auto;
+}
+
 /* ---- Preview mockups ---- */
 .fz-mock {
   position: relative;
@@ -1639,6 +1652,38 @@
 
 .fz-setting[data-on] .fz-preview-menu .fz-mock-icon {
   opacity: 1;
+}
+
+/* Customize menus: a Customize menu… row appears at the bottom, one item fades out */
+.fz-preview-menucustom {
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 10px;
+  background: var(--arrowpanel-background, Canvas);
+  & .fz-mock-row:nth-child(1) .fz-mock-icon { background-image: url("icons/back.svg"); }
+  & .fz-mock-row:nth-child(2) .fz-mock-icon { background-image: url("icons/reload.svg"); }
+  & .fz-mock-row:nth-child(3) .fz-mock-icon { background-image: url("icons/save.svg"); }
+  & .fz-mock-row:nth-child(2) {
+    transition: opacity 0.3s ease;
+  }
+  & .fz-mock-customize {
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    & .fz-mock-icon { background-image: url("icons/customize.svg"); }
+    & .fz-mock-line {
+      flex: 0.6;
+      background: var(--fz-accent);
+    }
+  }
+}
+
+.fz-setting[data-on] .fz-preview-menucustom {
+  & .fz-mock-customize {
+    opacity: 1;
+  }
+  & .fz-mock-row:nth-child(2) {
+    opacity: 0.25;
+  }
 }
 
 /* Hide sidebar tools: the row at the bottom of the sidebar shrinks away */

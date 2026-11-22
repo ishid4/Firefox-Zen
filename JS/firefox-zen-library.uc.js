@@ -283,7 +283,8 @@
       }
     }
     renderView();
-    root.focus();
+    restoreViewScroll();
+    root.focus({ preventScroll: true });
     syncFooterButton();
   }
 
@@ -291,6 +292,7 @@
     if (!root) {
       return;
     }
+    saveViewScroll();
     cancelDrag();
     closePopover();
     stopDownloads();
@@ -338,6 +340,9 @@
   }
 
   function setView(name, { render = true } = {}) {
+    if (root) {
+      saveViewScroll();
+    }
     view = VIEWS.includes(name) ? name : "spaces";
     // Touches, Mods, Settings and About are detours: the footer button opens the last content view.
     if (!isDetour(view)) {
@@ -353,6 +358,7 @@
     }
     if (render && root) {
       renderView();
+      restoreViewScroll();
     }
   }
 
@@ -1224,6 +1230,91 @@
   }
 
   // ---- scroll + FLIP ----
+
+  // Where each view was scrolled, so closing and opening the Library (or
+  // going to another view and back) comes back to the same place. Kept for
+  // this window until Firefox closes. Scrolled elements are found again by
+  // their tag and class path under the view, since the view is rebuilt.
+  const viewScroll = new Map(); // view -> [{ selector, nth, top, left }]
+  let scrollRestore = null; // stops the running restore
+
+  function scrollSelector(el) {
+    const parts = [];
+    for (let node = el; node && node !== main; node = node.parentElement) {
+      const classes = [...node.classList].map(c => "." + CSS.escape(c)).join("");
+      parts.unshift(`${node.localName}${classes}`);
+    }
+    return ":scope > " + parts.join(" > ");
+  }
+
+  function saveViewScroll() {
+    scrollRestore?.();
+    if (!main) {
+      return;
+    }
+    const entries = [];
+    for (const el of [main, ...main.querySelectorAll("*")]) {
+      if (el.scrollTop > 0 || el.scrollLeft > 0) {
+        const selector = el === main ? null : scrollSelector(el);
+        const nth = selector ? [...main.querySelectorAll(selector)].indexOf(el) : 0;
+        entries.push({ selector, nth, top: el.scrollTop, left: el.scrollLeft });
+      }
+    }
+    viewScroll.set(view, entries);
+  }
+
+  // Content can arrive late (history loads in pages, more as it's scrolled),
+  // so keep trying for a moment; scrolling or clicking yourself stops it.
+  function restoreViewScroll() {
+    scrollRestore?.();
+    const entries = viewScroll.get(view);
+    if (!main || !root || !entries?.length) {
+      return;
+    }
+    const target = root;
+    let frames = 0;
+    let raf = 0;
+    const stop = () => {
+      cancelAnimationFrame(raf);
+      for (const type of ["wheel", "pointerdown", "keydown"]) {
+        target.removeEventListener(type, stop, true);
+      }
+      if (scrollRestore === stop) {
+        scrollRestore = null;
+      }
+    };
+    for (const type of ["wheel", "pointerdown", "keydown"]) {
+      target.addEventListener(type, stop, true);
+    }
+    scrollRestore = stop;
+    const step = () => {
+      if (!main || root !== target) {
+        stop();
+        return;
+      }
+      let pending = false;
+      for (const entry of entries) {
+        const el = entry.selector ? main.querySelectorAll(entry.selector)[entry.nth] : main;
+        if (!el) {
+          pending = true;
+          continue;
+        }
+        if (Math.abs(el.scrollTop - entry.top) >= 1 || Math.abs(el.scrollLeft - entry.left) >= 1) {
+          el.scrollTop = entry.top;
+          el.scrollLeft = entry.left;
+          if (Math.abs(el.scrollTop - entry.top) >= 1 || Math.abs(el.scrollLeft - entry.left) >= 1) {
+            pending = true;
+          }
+        }
+      }
+      if (pending && ++frames < 90) {
+        raf = requestAnimationFrame(step);
+      } else {
+        stop();
+      }
+    };
+    step();
+  }
 
   function saveScroll() {
     const saved = new Map();

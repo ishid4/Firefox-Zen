@@ -154,6 +154,26 @@
   // Undo, but Reset to defaults keeps them: only which one is picked resets.
   const SAVED_SCHEMES = { type: "schemes", pref: "colors.schemes", default: [], keepOnReset: true };
 
+  // How each right-click menu was customized (JS/firefox-zen-menu-customizer.uc.js),
+  // a JSON object by menu id. In settings files and Undo; Reset to defaults keeps
+  // it (each menu's editor has Restore default).
+  const MENU_LAYOUTS = { type: "json", pref: "menu-customizer.menus", default: {}, keepOnReset: true };
+
+  // A button under Customize menus: no pref of its own, so not in settings
+  // files, Reset or Undo.
+  const MENU_RESTORE_ALL = {
+    type: "action",
+    label: "Customized menus",
+    button: "Restore all to default",
+    status: () => {
+      const count = Object.keys(readValue(MENU_LAYOUTS)).length;
+      return count ? `${count} ${count === 1 ? "menu" : "menus"}` : "None";
+    },
+    enabled: () => Object.keys(readValue(MENU_LAYOUTS)).length > 0,
+    run: () => Services.prefs.clearUserPref(PREF_BRANCH + MENU_LAYOUTS.pref),
+    hint: "Puts every right-click menu back as Firefox made it: shows what you hid, moves items back and removes what you added.",
+  };
+
   // CSS reads these with -moz-pref(), which treats an unset pref as false.
   // Settings that default to true get written once on first run (see applyDefaults).
   const CATEGORIES = [
@@ -407,6 +427,23 @@
           description: "Show icons next to items in right-click menus.",
           preview: "menu",
         },
+        {
+          pref: "menu-customizer",
+          default: false,
+          label: "Customize menus",
+          description: "Customize menu… at the bottom of every right-click menu turns that menu into its own editor: hide, move and add items.",
+          preview: "menucustom",
+          keywords: "context menu right click customize remove hide add move reorder drag items reset default restore all",
+          tips: [
+            "Press and drag a row (or hold, then release) to move it; × or a drag to Hidden hides it.",
+            "Hidden items wait in their own column beside the menu: ↺, a click or a drag back shows them.",
+            "Click a chip under Add to put it at the end, or drag it to its place in the menu.",
+            "Customize menu… stays last, even under items extensions add.",
+            "Done applies the changes in the open menu. Cancel or Esc drops them; Restore default puts Firefox's menu back.",
+            "The menu edits what it showed where you opened it: the page menu on a link differs from the one on an image.",
+          ],
+          options: [MENU_RESTORE_ALL],
+        },
       ],
     },
   ];
@@ -415,7 +452,9 @@
   const OPTIONS = CATEGORIES.flatMap(c => c.settings).flatMap(s => s.options ?? []);
   // Everything a settings file, Reset and Undo cover.
   // Saved schemes first, so a file's picked scheme exists when it's applied.
-  const ALL = [SAVED_SCHEMES, ...SETTINGS, ...OPTIONS].filter(o => !o.secret);
+  // Options kept in a pref (not secret ones, not buttons)
+  const stored = o => !o.secret && o.type !== "action";
+  const ALL = [SAVED_SCHEMES, MENU_LAYOUTS, ...SETTINGS, ...OPTIONS].filter(stored);
 
   // Renamed prefs: old name -> new name, and whether the meaning flipped.
   const MIGRATIONS = [
@@ -498,6 +537,14 @@
         return FzColors.schemeById(getString(o)) ? getString(o) : o.default;
       case "schemes":
         return FzColors.savedSchemes();
+      case "json": {
+        try {
+          const value = JSON.parse(getString({ ...o, default: JSON.stringify(o.default) }));
+          return value && typeof value === "object" && !Array.isArray(value) ? value : o.default;
+        } catch {
+          return o.default;
+        }
+      }
       case "text":
         return getString(o);
       case "switch":
@@ -535,6 +582,15 @@
         return false;
       }
       FzColors.saveSchemes(value);
+    } else if (o.type === "json") {
+      if (!value || typeof value !== "object" || Array.isArray(value)) {
+        return false;
+      }
+      if (Object.keys(value).length) {
+        Services.prefs.setStringPref(PREF_BRANCH + o.pref, JSON.stringify(value));
+      } else {
+        Services.prefs.clearUserPref(PREF_BRANCH + o.pref);
+      }
     } else if (o.type === "switch") {
       if (typeof value !== "boolean") {
         return false;
@@ -558,10 +614,10 @@
 
   // A setting differs from its default, the feature or any of its options.
   const isModified = s =>
-    (!s.core && !isDefault(s)) || (s.options ?? []).some(o => !o.secret && !isDefault(o));
+    (!s.core && !isDefault(s)) || (s.options ?? []).some(o => stored(o) && !isDefault(o));
 
   function resetSetting(s) {
-    for (const o of [...(s.core ? [] : [s]), ...(s.options ?? []).filter(o => !o.secret)]) {
+    for (const o of [...(s.core ? [] : [s]), ...(s.options ?? []).filter(stored)]) {
       writeValue(o, o.default);
     }
   }
@@ -869,6 +925,22 @@
           );
         }
         break;
+      case "menucustom":
+        for (let i = 0; i < 3; i++) {
+          mock.append(
+            h("div", { class: "fz-mock-row" }, h("span", { class: "fz-mock-icon" }), h("span", { class: "fz-mock-line" }))
+          );
+        }
+        mock.append(
+          h("div", { class: "fz-mock-separator" }),
+          h(
+            "div",
+            { class: "fz-mock-row fz-mock-customize" },
+            h("span", { class: "fz-mock-icon" }),
+            h("span", { class: "fz-mock-line" })
+          )
+        );
+        break;
     }
     return mock;
   }
@@ -1066,7 +1138,32 @@
     return { el, sync: () => (input.checked = getBool(o)) };
   }
 
+  // A button with what it would act on, e.g. Restore all to default.
+  function buildAction(o) {
+    const status = h("span", { class: "fz-option-status" });
+    const button = h("button", {
+      type: "button",
+      class: "fz-reset fz-option-action",
+      text: o.button,
+      onclick: () => o.run(),
+    });
+    const el = h(
+      "div",
+      { class: "fz-option" },
+      h("span", { class: "fz-option-label", text: o.label }),
+      status,
+      button,
+      o.hint && h("p", { class: "fz-option-hint", text: o.hint })
+    );
+    const sync = () => {
+      status.textContent = o.status();
+      button.disabled = !o.enabled();
+    };
+    return { el, sync };
+  }
+
   const OPTION_BUILDERS = {
+    action: buildAction,
     number: buildNumber,
     range: buildRange,
     modifiers: buildModifiers,
@@ -1098,7 +1195,7 @@
 
   // Lower-cased text a search matches against: everything the row shows.
   function searchText(s) {
-    const options = (s.options ?? []).flatMap(o => [o.label, o.unit, o.hint, ...(o.keys ?? []).map(k => k.label)]);
+    const options = (s.options ?? []).flatMap(o => [o.label, o.button, o.unit, o.hint, ...(o.keys ?? []).map(k => k.label)]);
     const layouts = s.layout ? LAYOUTS.flatMap(l => [l.group, l.label, l.hint]) : [];
     const schemes = s.colors ? FzColors.allSchemes().map(x => x.name) : [];
     return [s.label, s.description, s.keywords, ...(s.tips ?? []), ...options, ...layouts, ...schemes]

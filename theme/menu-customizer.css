@@ -1,0 +1,439 @@
+/* Customize menu… and editing a menu in place (JS/firefox-zen-menu-customizer.uc.js).
+ * Removed items, and the menu's own items while editing, are hidden by the
+ * script's own sheet. */
+
+/* ---- in the menus ---- */
+
+.fz-menu-customize {
+  --menu-image: url("icons/customize.svg");
+}
+
+
+/* Added items: icons follow Context menu icons (theme/icons.css draws
+ * --menu-image), and the editor shows the same ones. */
+:is([fz-menu-action], .fz-mc-icon[data-action]) {
+  &:is([fz-menu-action="new-tab"], [data-action="new-tab"]) { --menu-image: url("icons/new-tab.svg"); }
+  &:is([fz-menu-action="new-window"], [data-action="new-window"]) { --menu-image: url("icons/window.svg"); }
+  &:is([fz-menu-action="private-window"], [data-action="private-window"]) { --menu-image: url("icons/private-window.svg"); }
+  &:is([fz-menu-action="reopen-tab"], [data-action="reopen-tab"]) { --menu-image: url("icons/edit-undo.svg"); }
+  &:is([fz-menu-action="reload"], [data-action="reload"]) { --menu-image: url("icons/reload.svg"); }
+  &:is([fz-menu-action="duplicate-tab"], [data-action="duplicate-tab"]) { --menu-image: url("icons/duplicate-tab.svg"); }
+  &:is([fz-menu-action="close-tab"], [data-action="close-tab"]) { --menu-image: url("icons/close.svg"); }
+  &:is([fz-menu-action="copy-link"], [data-action="copy-link"]) { --menu-image: url("icons/link.svg"); }
+  &:is([fz-menu-action="bookmark"], [data-action="bookmark"]) { --menu-image: url("icons/bookmark-hollow.svg"); }
+  &:is([fz-menu-action="screenshot"], [data-action="screenshot"]) { --menu-image: url("icons/screenshot.svg"); }
+  &:is([fz-menu-action="print"], [data-action="print"]) { --menu-image: url("icons/print.svg"); }
+  &:is([fz-menu-action="find"], [data-action="find"]) { --menu-image: url("icons/search-page.svg"); }
+  &:is([fz-menu-action="fullscreen"], [data-action="fullscreen"]) { --menu-image: url("icons/fullscreen.svg"); }
+  &:is([fz-menu-action="downloads"], [data-action="downloads"]) { --menu-image: url("icons/downloads.svg"); }
+  &:is([fz-menu-action="library"], [data-action="library"]) { --menu-image: url("icons/library.svg"); }
+  &:is([fz-menu-action="zen-settings"], [data-action="zen-settings"]) { --menu-image: url("icons/settings.svg"); }
+  &:is([fz-menu-action="addons"], [data-action="addons"]) { --menu-image: url("icons/extension.svg"); }
+  &:is([fz-menu-action="firefox-settings"], [data-action="firefox-settings"]) { --menu-image: url("icons/manage.svg"); }
+}
+
+/* ---- editing, inside the menu ---- */
+
+menupopup[fz-menu-editing] {
+  --fz-mc-line: color-mix(in srgb, currentColor 12%, transparent);
+  --fz-mc-hover: color-mix(in srgb, currentColor 8%, transparent);
+  --fz-mc-active: color-mix(in srgb, currentColor 13%, transparent);
+  --fz-mc-accent: var(--fz-accent, AccentColor);
+  --fz-mc-accent-text: var(--fz-accent-text, var(--button-text-color-primary, white));
+
+  & button {
+    appearance: none;
+    font: inherit;
+    color: inherit;
+    margin: 0;
+    border: none;
+    background: none;
+  }
+}
+
+.fz-mc-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-sizing: border-box;
+  padding: 8px 10px 6px;
+}
+
+.fz-mc-header-icon {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: url("icons/customize.svg") center / 15px no-repeat, var(--fz-accent-gradient, var(--fz-mc-accent));
+  -moz-context-properties: fill;
+  fill: var(--fz-mc-accent-text);
+}
+
+.fz-mc-heading {
+  min-width: 0;
+}
+
+.fz-mc-title {
+  font-weight: 600;
+}
+
+.fz-mc-subtitle {
+  margin-top: 1px;
+  font-size: 0.9em;
+  opacity: 0.6;
+}
+
+.fz-mc-body {
+  display: flex;
+  gap: 8px;
+  height: min(480px, 62vh);
+  padding: 2px 4px 4px;
+}
+
+.fz-mc-col {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.fz-mc-col-menu {
+  width: 300px;
+}
+
+/* Hidden and Add: a panel beside the menu */
+.fz-mc-col-side {
+  width: 236px;
+  padding: 0 6px 6px;
+  border-radius: 6px;
+  background: color-mix(in srgb, currentColor 4%, transparent);
+  border: 1px solid var(--fz-mc-line);
+}
+
+.fz-mc-col-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  padding: 8px 6px 4px;
+  font-size: 0.85em;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.6;
+}
+
+.fz-mc-count:not(:empty) {
+  padding: 0 6px;
+  border-radius: 8px;
+  background: var(--fz-mc-active);
+  letter-spacing: 0;
+}
+
+.fz-mc-scroll {
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.fz-mc-menu-scroll {
+  flex: 1;
+}
+
+.fz-mc-hidden-scroll {
+  flex: 1;
+  min-height: 72px;
+  border: 1px dashed transparent;
+  border-radius: 6px;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+
+  .fz-mc-body[data-dragging] & {
+    border-color: var(--fz-mc-line);
+  }
+
+  &[data-over] {
+    border-color: var(--fz-mc-accent);
+    background: color-mix(in srgb, var(--fz-mc-accent) 10%, transparent);
+  }
+}
+
+.fz-mc-add-scroll {
+  flex: none;
+  max-height: 45%;
+}
+
+.fz-mc-empty {
+  margin: 4px 6px;
+  font-size: 0.9em;
+  line-height: 1.35;
+  opacity: 0.55;
+}
+
+.fz-mc-list {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.fz-mc-hidden-list > .fz-mc-row {
+  opacity: 0.75;
+
+  &:hover {
+    opacity: 1;
+  }
+}
+
+.fz-mc-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  padding: 0 8px 0 4px;
+  border-radius: 4px;
+  cursor: default;
+  user-select: none;
+
+  &:hover {
+    background: var(--fz-mc-hover);
+  }
+
+  &:active:not([data-dragging]) {
+    background: var(--fz-mc-active);
+  }
+
+  &[data-disabled] > .fz-mc-label {
+    opacity: 0.6;
+  }
+
+  &[data-submenu] > .fz-mc-label::after {
+    content: "  ›";
+    opacity: 0.6;
+  }
+
+  &[data-added] {
+    box-shadow: inset 2px 0 0 var(--fz-mc-accent);
+  }
+
+  &[data-dragging] {
+    position: relative;
+    z-index: 1;
+    background: var(--panel-background-color, var(--fz-popup-bg, Canvas));
+    box-shadow: 0 6px 16px rgb(0 0 0 / 0.3), 0 0 0 1px var(--fz-mc-line);
+    scale: 1.02;
+    cursor: grabbing;
+  }
+}
+
+.fz-mc-body[data-dragging] .fz-mc-row:not([data-dragging]):hover {
+  background: none;
+}
+
+.fz-mc-sep-row {
+  min-height: 18px;
+}
+
+.fz-mc-divider {
+  min-height: 9px;
+  padding: 0 10px;
+
+  &:hover {
+    background: none;
+  }
+
+  &::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--panel-separator-color, var(--fz-mc-line));
+  }
+}
+
+/* Six dots, shown on hover */
+.fz-mc-grip {
+  flex: none;
+  width: 8px;
+  height: 14px;
+  background: radial-gradient(circle, currentColor 1px, transparent 1.5px) 0 0 / 4px 4.6px;
+  opacity: 0;
+  cursor: grab;
+
+  .fz-mc-row:is(:hover, [data-dragging]) > & {
+    opacity: 0.45;
+  }
+}
+
+.fz-mc-icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  background: var(--menu-image, none) center / 16px no-repeat;
+  -moz-context-properties: fill, fill-opacity;
+  fill: currentColor;
+}
+
+.fz-mc-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.fz-mc-sep-line {
+  flex: 1;
+  height: 0;
+  border-top: 1px dashed currentColor;
+  opacity: 0.4;
+}
+
+.fz-mc-sep-icon {
+  height: 0;
+  border-top: 1px dashed currentColor;
+  opacity: 0.6;
+}
+
+.fz-mc-buttons {
+  flex: 1;
+  display: flex;
+  justify-content: space-between;
+  padding-inline-end: 16px;
+}
+
+.fz-mc-button-icon {
+  width: 24px;
+  background-size: 16px;
+}
+
+.fz-mc-x {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px !important;
+  background: url("icons/close.svg") center / 12px no-repeat !important;
+  -moz-context-properties: fill;
+  fill: currentColor;
+  opacity: 0.6;
+
+  &:hover {
+    background-color: var(--fz-mc-active) !important;
+    opacity: 1;
+  }
+}
+
+.fz-mc-x {
+  opacity: 0.45;
+
+  .fz-mc-row:hover > &:not(:hover) {
+    opacity: 0.75;
+  }
+}
+
+.fz-mc-restore {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px !important;
+  background: url("icons/edit-undo.svg") center / 13px no-repeat !important;
+  -moz-context-properties: fill;
+  fill: var(--fz-mc-accent);
+
+  &:hover {
+    background-color: color-mix(in srgb, var(--fz-mc-accent) 18%, transparent) !important;
+  }
+}
+
+/* Add: chips, clicked or dragged into the menu */
+.fz-mc-add-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 1px 2px 2px;
+}
+
+.fz-mc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 8px 0 6px !important;
+  border: 1px solid var(--fz-mc-line) !important;
+  border-radius: 6px !important;
+  background: var(--panel-background-color, var(--fz-popup-bg, Canvas)) !important;
+  cursor: grab;
+
+  &:hover:not(:disabled) {
+    background: var(--fz-mc-hover) !important;
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  &::before {
+    content: "+";
+    opacity: 0.55;
+  }
+
+  & > .fz-mc-sep-line {
+    flex: none;
+    width: 14px;
+  }
+
+  &[data-dragging] {
+    position: relative;
+    z-index: 2;
+    box-shadow: 0 6px 16px rgb(0 0 0 / 0.3);
+    cursor: grabbing;
+  }
+
+  &[data-placed] {
+    opacity: 0.35;
+    box-shadow: none;
+  }
+}
+
+.fz-mc-footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-sizing: border-box;
+  padding: 6px 6px 4px;
+}
+
+.fz-mc-spacer {
+  flex: 1;
+}
+
+.fz-mc-button {
+  min-width: 64px;
+  height: 26px;
+  padding: 0 12px !important;
+  border: 1px solid var(--fz-mc-line) !important;
+  border-radius: 5px !important;
+  background: var(--fz-mc-hover) !important;
+
+  &:hover:not(:disabled) {
+    background: var(--fz-mc-active) !important;
+  }
+
+  &:disabled {
+    opacity: 0.4;
+  }
+}
+
+.fz-mc-reset {
+  min-width: 0;
+  padding: 0 8px !important;
+  border-color: transparent !important;
+  background: none !important;
+}
+
+.fz-mc-done {
+  border-color: transparent !important;
+  background: var(--fz-mc-accent) !important;
+  color: var(--fz-mc-accent-text) !important;
+
+  &:hover {
+    background: color-mix(in srgb, var(--fz-mc-accent) 88%, currentColor) !important;
+  }
+}

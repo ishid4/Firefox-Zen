@@ -59,6 +59,8 @@ Then open `about:support`, click **Clear startup cache…**, and restart.
 | `firefox-zen.download-cue` | true | A new download flies to the Library button, which ripples, shows a progress ring and opens on Downloads (see [Downloads](#downloads)) |
 | `firefox-zen.download-cue.icon-seconds` | 7 | How long the Library button shows the downloads icon after a download starts (0-10, 0 = never) |
 | `firefox-zen.show-menu-icons` | true | Icons in context menus |
+| `firefox-zen.menu-customizer` | false | **Customize menu…** at the bottom of right-click menus (see [Customize menus](#customize-menus)) |
+| `firefox-zen.menu-customizer.menus` | {} | How each menu was customized: hidden, added and moved items (JSON by menu id); in settings files, kept by Reset to defaults |
 | `firefox-zen.mods.enabled` | [] | Ids of the [mods](#mods) that are on (JSON); `firefox-zen.mods.trusted` lists the scripts confirmed to run |
 | `firefox-zen.mods.safe-mode` | false | Load no mods on the next start (then clears itself) |
 | `firefox-zen.mods.auto-update-check` | true | Check mods for updates at startup and once a day while Firefox stays open (**Check daily update** in the Mods tab) |
@@ -204,6 +206,8 @@ the Firefox-Zen toolbar button (on its Settings tab), opens it over the page. Th
 sidebar expands and stays out while it's open, with the Library next to it
 (also with compact sidebar and expand-on-hover), and goes back to how it was
 when it closes. Esc, the button again, or clicking a tab closes it.
+Each view opens where you left it scrolled, after closing the Library or
+going to another view (until Firefox closes).
 
 **Spaces**: every space as a column with its folders and tabs, pinned tabs
 (Pins, with a 3/12 count) on top.
@@ -643,6 +647,40 @@ Touches people published, found where they apply.
   could show you someone's images, or send them what you type
   (`input[value^="a"] { background: url(…) }`). The bar says how many were
   removed.
+
+### Customize menus
+
+With **Customize menus** on (Settings → Browsing), every right-click menu of
+the window (the page's, a tab's, the toolbar's, bookmarks', the Library's…)
+ends in **Customize menu…** (kept last, even under items extensions add once
+the menu is open). Clicking it keeps the menu open and turns it into
+its own editor, Windows 11 style, in two columns:
+
+- **In the menu** lists the rows the menu shows. **Press and drag** a row (or
+  hold it, then release where it goes) to move it, Firefox's own items
+  included. Only items you moved are remembered, so the rest keep following
+  Firefox.
+- **Hidden**, beside it, holds what you took out. The × on a row, or a drag
+  to Hidden, hides it; ↺ on a hidden row, a click on it, or a drag back into
+  the menu shows it again. Hidden items stay hidden whatever Firefox does to
+  them; separators left first, last or doubled hide too.
+- **Add** has a chip per command: click to put it at the end, or drag it to
+  its place in the menu. A separator (first), new tab or window, reopen
+  closed tab, reload, duplicate, close or copy the link of the tab (in the tab
+  menu, the right-clicked one), bookmark, screenshot, print, find, full
+  screen, Downloads, the Library, Firefox-Zen or Firefox settings, or
+  add-ons. × deletes what you added.
+- **Done** applies the changes and shows the result in the same open menu.
+  **Cancel**, Esc or closing the menu drops them. **Restore default** puts
+  Firefox's menu back (applied with Done).
+- **Restore all to default**, under Customize menus in Settings, puts every
+  menu back at once and says how many are customized.
+
+The editor shows what the menu showed where it was opened: the page menu on a
+link has other items than on an image, and items changed elsewhere keep their
+change until a menu that shows them is edited. Menus are told apart by their
+id, so the few without one (and menus inside sidebar pages) don't get the
+entry. Items are kept by id, or by label when they have none.
 
 ### Address bar in sidebar
 

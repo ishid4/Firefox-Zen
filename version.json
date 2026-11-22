@@ -1,8 +1,13 @@
 {
-  "version": "1.9.1",
+  "version": "1.10.0",
   "repository": "https://github.com/ishid4/Firefox-Zen",
   "branch": "main",
   "history": [
+    {
+      "version": "1.10.0",
+      "date": "2026-11-22",
+      "notes": "New Customize menus setting (Settings → Browsing): every right-click menu ends in Customize menu…, which turns that menu into its own editor in place. Drag rows to reorder them, Firefox's own items included; × or a drag to the Hidden column hides an item and ↺ brings it back; chips under Add put commands like New tab, Copy page link or a separator at the end or wherever you drag them. Done applies it in the open menu, Restore default puts Firefox's menu back, and Restore all to default in Settings resets every menu. Customize menu… stays last even under items extensions add. The Library now opens each view where you left it scrolled, after closing it or switching views."
+    },
     {
       "version": "1.9.1",
       "date": "2026-11-21",
