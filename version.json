@@ -1,8 +1,13 @@
 {
-  "version": "1.11.0",
+  "version": "1.11.1",
   "repository": "https://github.com/ishid4/Firefox-Zen",
   "branch": "main",
   "history": [
+    {
+      "version": "1.11.1",
+      "date": "2026-11-27",
+      "notes": "Opening a private space no longer flashes Firefox's default window first (an expanded sidebar with a New Private Tab): the window shows your color scheme until its tabs and sidebar are in place, then fades in as it should look. The 💤 on unloaded tabs is smaller."
+    },
     {
       "version": "1.11.0",
       "date": "2026-11-27",

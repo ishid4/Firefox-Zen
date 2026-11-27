@@ -40,7 +40,7 @@
 //   or quitting forgets the key. "Clear and Close" empties it for good;
 //   deleting the space deletes its file.
 
-import { setInterval, clearInterval } from "resource://gre/modules/Timer.sys.mjs";
+import { setInterval, clearInterval, setTimeout, clearTimeout } from "resource://gre/modules/Timer.sys.mjs";
 import { AsyncShutdown } from "resource://gre/modules/AsyncShutdown.sys.mjs";
 
 const lazy = {};
@@ -361,6 +361,42 @@ function onWindowClosing(event) {
 }
 
 // Saves and closes an unlocked space's window; it stays unlocked, window-less.
+// A new window first paints Firefox's defaults (one New Tab, the sidebar
+// expanded) and only then gets the space's tabs and sidebar. Its content
+// stays hidden (theme/general.css, [fz-opening]) until that's done, then
+// fades in at once. Returns the function that shows it; it also shows by
+// itself after a few seconds, whatever happens.
+function hideWhileOpening(win) {
+  win.addEventListener(
+    "DOMContentLoaded",
+    () => win.document.documentElement.setAttribute("fz-opening", ""),
+    { once: true, capture: true }
+  );
+  let shown = false;
+  const show = () => {
+    if (shown || win.closed) {
+      return;
+    }
+    shown = true;
+    const root = win.document.documentElement;
+    if (!root.hasAttribute("fz-opening")) {
+      return;
+    }
+    root.removeAttribute("fz-opening");
+    root.setAttribute("fz-revealing", "");
+    setTimeout(() => root.removeAttribute("fz-revealing"), 300);
+  };
+  const failsafe = setTimeout(show, 4000);
+  // After the restored state has been laid out and painted once, hidden.
+  return () => {
+    clearTimeout(failsafe);
+    if (win.closed) {
+      return;
+    }
+    win.requestAnimationFrame(() => win.requestAnimationFrame(show));
+  };
+}
+
 async function hideWindow(id, entry) {
   const win = liveWindow(entry);
   if (!win) {
@@ -755,6 +791,7 @@ export const FzPrivateSpaces = {
         // Registered before it loads, so the window's spaces script sees it's
         // this space's window as soon as it starts.
         entry.window = win;
+        const reveal = hideWhileOpening(win);
         await new Promise(resolve => win.addEventListener("load", resolve, { once: true }));
         await win.delayedStartupPromise;
         await lazy.SessionStore.promiseInitialized;
@@ -766,8 +803,11 @@ export const FzPrivateSpaces = {
           if (select != null) {
             state.selected = select + 1;
           }
+          const restored = new Promise(resolve => win.addEventListener("SSWindowRestored", resolve, { once: true }));
           lazy.SessionStore.setWindowState(win, { windows: [state] }, true);
+          await Promise.race([restored, new Promise(resolve => setTimeout(resolve, 3000))]);
         }
+        reveal();
         entry.timer = setInterval(() => saveLogged(id, { flush: true }), SAVE_INTERVAL_MS);
         notifyChanged();
         return win;

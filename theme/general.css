@@ -327,6 +327,34 @@ toolbar .toolbarbutton-1 {
   }
 }
 
+/* A private space's window while it opens: hidden until its tabs and
+   sidebar are restored (JS/firefox-zen-private-spaces.sys.mjs), then faded in.
+   Meanwhile it's the color scheme's frame color. Every element, not only the
+   root's children: some (the Extensions button) set their own visibility. */
+:root[fz-opening] {
+  background: var(--fz-frame-bg) !important;
+
+  & * {
+    visibility: hidden !important;
+  }
+}
+
+:root[fz-revealing] > * {
+  animation: fz-window-reveal 160ms ease-out;
+}
+
+@keyframes fz-window-reveal {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[fz-revealing] > * {
+    animation: none;
+  }
+}
+
 /* Unload tabs: 💤 on the favicon of every unloaded tab */
 @media -moz-pref("firefox-zen.tab-unload") {
   .tabbrowser-tab[pending="true"] .tab-icon-stack {
@@ -337,12 +365,12 @@ toolbar .toolbarbutton-1 {
       position: absolute;
       /* From the favicon's start: the stack is wider than the 16px icon */
       inset: auto;
-      inset-block-start: -6px;
-      inset-inline-start: 8px;
+      inset-block-start: -4px;
+      inset-inline-start: 9px;
       width: auto;
       height: auto;
       white-space: nowrap;
-      font-size: 11px;
+      font-size: 9px;
       line-height: 1;
       pointer-events: none;
     }
