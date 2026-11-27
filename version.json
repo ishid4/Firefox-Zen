@@ -1,8 +1,13 @@
 {
-  "version": "1.10.1",
+  "version": "1.11.0",
   "repository": "https://github.com/ishid4/Firefox-Zen",
   "branch": "main",
   "history": [
+    {
+      "version": "1.11.0",
+      "date": "2026-11-27",
+      "notes": "New Unload tabs setting (Settings → Tabs & spaces): tabs you haven't used for the minutes you set unload by themselves, with Firefox's own unloading, and reload when you open them; it also turns on Firefox's unloading when memory runs low, with the free-memory limit you pick on Windows. Pinned tabs and tabs playing sound can stay loaded, and sites or pages you add never unload: type one in Settings, or right-click a tab → Never unload › and tick the page, a parent path or the domain. Unloaded tabs show 💤 on their icon, and the setting shows how many are unloaded, with a link to about:unloads."
+    },
     {
       "version": "1.10.1",
       "date": "2026-11-22",

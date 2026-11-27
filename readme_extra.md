@@ -45,6 +45,12 @@ Then open `about:support`, click **Clear startup cache…**, and restart.
 | `firefox-zen.window-border.width` | 6 | The window border's width in pixels (1-24) |
 | `firefox-zen.spaces` | false | Zen-style Spaces (see below) |
 | `firefox-zen.tab-sections` | true | Folders (and tabs you drag there) above a line, New Tab and new tabs below it; hover the sidebar for **Clear** (see below) |
+| `firefox-zen.tab-unload` | false | [Unload tabs](#unload-tabs) you haven't used for a while, and set Firefox's own low-memory unloader |
+| `firefox-zen.tab-unload.minutes` | 30 | Unload a tab after this many minutes unused (0-1440, 0 = only when memory is low); also `browser.tabs.min_inactive_duration_before_unload` |
+| `firefox-zen.tab-unload.low-memory` | true | Firefox's low-memory unloader (`browser.tabs.unloadOnLowMemory`) |
+| `firefox-zen.tab-unload.threshold-mb` | 200 | Windows: memory is low below this many MB of commit space (RAM + page file) free (`browser.low_commit_space_threshold_mb`, 50-16384) |
+| `firefox-zen.tab-unload.keep-pinned` / `.keep-audio` | true / true | Keep pinned tabs and tabs playing sound loaded |
+| `firefox-zen.tab-unload.exclude` | [] | Sites whose tabs never unload, subdomains and pages under them included (JSON list of hosts, or hosts with a path); in settings files, kept by Reset to defaults |
 | `firefox-zen.hide-sidebar-tools` | false | Hide Firefox's tools row at the bottom of the sidebar (Customize sidebar stays in the sidebar's right-click menu) |
 | `firefox-zen.sidebar-urlbar` | false | Toolbar + address bar at the top of the sidebar. With "Expand sidebar on hover" it stays there and shows when the sidebar expands; otherwise it goes back to the top while the sidebar is collapsed. Also back on top while customizing the toolbar |
 | `firefox-zen.floating-urlbar` | true | Open the address bar centered, like a command bar |
@@ -519,6 +525,37 @@ follow what you see; a folder dragged below the line goes back above it.
 Hovering the sidebar shows **↓ Clear** on the line: it closes every tab below
 the line in the current space (Firefox asks first when closing many tabs;
 Ctrl+Shift+T reopens them). Folders and pinned tabs stay.
+
+### Unload tabs
+
+Firefox unloads tabs by itself only when memory runs low (see
+`about:unloads`). Settings → Tabs & spaces → **Unload tabs** also unloads a
+tab once you haven't used it for the set minutes, the same way Firefox does:
+its state is saved for session restore, and the tab keeps its place, title
+and icon until you select it again. While it's on, every unloaded tab shows a
+💤 on its icon's corner.
+
+Never unloaded: the selected tab, the other half of a split view, a glance,
+tabs that are loading, in picture-in-picture or using the camera, microphone
+or screen sharing, pages that would ask before you leave them (unsaved
+forms), and tabs in private windows. Pinned tabs and tabs playing sound stay
+loaded too, unless you turn that off.
+
+**Excluded sites** never unload. Add them in Settings (type a site or paste
+an address) or from a tab's right-click menu: **Never unload ›** lists the
+tab's page and its parent paths, then its domains
+(`github.com/ishid4/firefox-zen/issues`, `github.com/ishid4/firefox-zen`, …,
+`github.com`); click one to tick it, again to untick it. An entry covers its
+subdomains and the pages under it: `google.com` keeps `mail.google.com` too,
+and `github.com/ishid4` keeps `github.com/ishid4/firefox-zen`. Pasting an
+address keeps its path, not the query (`?…`) or `#…`. Excluded tabs, and pinned tabs
+kept loaded, are marked `undiscardable`, so Firefox's low-memory unloader
+skips them as well.
+
+While Unload tabs is on, it writes Firefox's `browser.tabs.unloadOnLowMemory`,
+`browser.tabs.min_inactive_duration_before_unload` and (Windows)
+`browser.low_commit_space_threshold_mb`; turning it off clears them back
+to Firefox's defaults. Firefox reads the inactive duration once, at startup.
 
 ### Glance
 

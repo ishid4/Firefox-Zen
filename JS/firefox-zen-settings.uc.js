@@ -18,6 +18,7 @@
   const { FzMods } = ChromeUtils.importESModule("chrome://userscripts/content/firefox-zen-mods.sys.mjs");
   const { FzColors } = ChromeUtils.importESModule("chrome://userscripts/content/firefox-zen-colors.sys.mjs");
   const { FzSchemeCard } = ChromeUtils.importESModule("chrome://userscripts/content/firefox-zen-scheme-card.sys.mjs");
+  const { FzTabUnload } = ChromeUtils.importESModule("chrome://userscripts/content/firefox-zen-tab-unload.sys.mjs");
 
   // Options shown under a feature while it's on. Each reads and writes its own
   // pref; `default` is what an unset pref means to the feature's script.
@@ -95,6 +96,97 @@
     placeholder: "Optional",
     hint: "Optional, free from your virustotal.com account (API key in your profile menu). Downloads are checked through VirusTotal's own page either way; a key is used when the page can't answer, and lets you upload files VirusTotal doesn't know. Without one, those open VirusTotal's upload page.",
   };
+
+  // JS/firefox-zen-tab-unload.uc.js and .sys.mjs. The sys module writes
+  // Firefox's own unload prefs from these while Unload tabs is on. Shown in
+  // two groups, When and Keep loaded (headings), with a status line last.
+  const UNLOAD_MINUTES = {
+    type: "number",
+    pref: "tab-unload.minutes",
+    default: FzTabUnload.DEFAULTS.minutes,
+    min: 0,
+    max: 1440,
+    unit: "minutes  ·  0 = never",
+    label: "Not used for",
+  };
+
+  // Windows only: Firefox watches commit space (RAM + page file) there.
+  const UNLOAD_THRESHOLD = {
+    type: "number",
+    pref: "tab-unload.threshold-mb",
+    default: FzTabUnload.DEFAULTS.threshold,
+    min: 50,
+    max: 16384,
+    prefix: "below",
+    unit: "MB free",
+    label: "Memory is low below",
+  };
+
+  // Firefox's own unloader, least used tab first.
+  const UNLOAD_LOW_MEMORY = {
+    type: "switch",
+    pref: "tab-unload.low-memory",
+    default: FzTabUnload.DEFAULTS.lowMemory,
+    label: "Memory is low",
+    extra: FzTabUnload.IS_WINDOWS ? UNLOAD_THRESHOLD : null,
+  };
+
+  // Chips that each switch a pref.
+  const UNLOAD_KEEP = {
+    type: "toggles",
+    label: "Tabs",
+    items: [
+      { type: "switch", pref: "tab-unload.keep-pinned", default: FzTabUnload.DEFAULTS.keepPinned, label: "Pinned" },
+      { type: "switch", pref: "tab-unload.keep-audio", default: FzTabUnload.DEFAULTS.keepAudio, label: "Playing sound" },
+    ],
+  };
+
+  // In settings files and Undo; Reset to defaults keeps it, like saved schemes.
+  const UNLOAD_EXCLUDE = {
+    type: "sites",
+    pref: "tab-unload.exclude",
+    default: [],
+    keepOnReset: true,
+    label: "Sites",
+    placeholder: "Add a site or page, like youtube.com",
+    hint: "Covers subdomains and pages under it. Or right-click a tab: Never unload.",
+  };
+
+  // Unloaded now, in every window: no pref of its own.
+  const unloadedTabs = () =>
+    [...Services.wm.getEnumerator("navigator:browser")].flatMap(w => [...w.gBrowser.tabs]).filter(t => !t.linkedPanel)
+      .length;
+
+  const UNLOAD_STATUS = {
+    type: "action",
+    footer: true,
+    button: "about:unloads",
+    status: () => {
+      const n = unloadedTabs();
+      return `${n} ${n === 1 ? "tab" : "tabs"} unloaded now`;
+    },
+    enabled: () => true,
+    run: () => {
+      window.FirefoxZenLibrary?.close();
+      switchToTabHavingURI("about:unloads", true, {
+        triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(),
+      });
+    },
+  };
+
+  const UNLOAD_OPTIONS = [
+    { type: "heading", label: "Unload when" },
+    UNLOAD_MINUTES,
+    UNLOAD_LOW_MEMORY,
+    { type: "heading", label: "Keep loaded" },
+    UNLOAD_KEEP,
+    UNLOAD_EXCLUDE,
+    {
+      type: "note",
+      text: "Always kept: the tab you're on, split views, tabs using the camera or microphone, pages with unsaved forms, private windows.",
+    },
+    UNLOAD_STATUS,
+  ];
 
   // Applied here (applyBorderWidth), read by theme/general.css.
   const BORDER_WIDTH = {
@@ -269,6 +361,15 @@
           label: "Tab group folders",
           description: "Show tab groups as colored Arc-style folders.",
           preview: "folders",
+        },
+        {
+          pref: "tab-unload",
+          default: false,
+          label: "Unload tabs",
+          description: "Free memory by unloading tabs you haven't used for a while. They keep their place and reload when you open them.",
+          preview: "unload",
+          keywords: "unload discard suspend sleep memory ram inactive auto tab discard exclude whitelist about:unloads",
+          options: UNLOAD_OPTIONS,
         },
       ],
     },
@@ -458,11 +559,13 @@
   ];
 
   const SETTINGS = CATEGORIES.flatMap(c => c.settings).filter(s => !s.core);
-  const OPTIONS = CATEGORIES.flatMap(c => c.settings).flatMap(s => s.options ?? []);
+  // A setting's options, with the ones nested in a row (chips, an inline number)
+  const optionsOf = s => (s.options ?? []).flatMap(o => [o, ...(o.items ?? []), ...(o.extra ? [o.extra] : [])]);
+  const OPTIONS = CATEGORIES.flatMap(c => c.settings).flatMap(optionsOf);
   // Everything a settings file, Reset and Undo cover.
   // Saved schemes first, so a file's picked scheme exists when it's applied.
   // Options kept in a pref (not secret ones, not buttons)
-  const stored = o => !o.secret && o.type !== "action";
+  const stored = o => !!o.pref && !o.secret && o.type !== "action";
   const ALL = [SAVED_SCHEMES, MENU_LAYOUTS, ...SETTINGS, ...OPTIONS].filter(stored);
 
   // Renamed prefs: old name -> new name, and whether the meaning flipped.
@@ -554,6 +657,8 @@
           return o.default;
         }
       }
+      case "sites":
+        return FzTabUnload.excludedSites();
       case "text":
         return getString(o);
       case "switch":
@@ -600,6 +705,10 @@
       } else {
         Services.prefs.clearUserPref(PREF_BRANCH + o.pref);
       }
+    } else if (o.type === "sites") {
+      if (!FzTabUnload.saveExcludedSites(value)) {
+        return false;
+      }
     } else if (o.type === "switch") {
       if (typeof value !== "boolean") {
         return false;
@@ -621,12 +730,15 @@
 
   const isDefault = o => JSON.stringify(readValue(o)) === JSON.stringify(o.default);
 
+  // Options a row's Reset puts back: not lists you made (excluded sites).
+  const resettable = o => stored(o) && !o.keepOnReset;
+
   // A setting differs from its default, the feature or any of its options.
   const isModified = s =>
-    (!s.core && !isDefault(s)) || (s.options ?? []).some(o => stored(o) && !isDefault(o));
+    (!s.core && !isDefault(s)) || optionsOf(s).some(o => resettable(o) && !isDefault(o));
 
   function resetSetting(s) {
-    for (const o of [...(s.core ? [] : [s]), ...(s.options ?? []).filter(stored)]) {
+    for (const o of [...(s.core ? [] : [s]), ...optionsOf(s).filter(resettable)]) {
       writeValue(o, o.default);
     }
   }
@@ -927,6 +1039,14 @@
         mock.append(row(), row(), h("div", { class: "fz-mock-separator" }), row(), row());
         break;
       }
+      case "unload":
+        // Tabs that dim one after another; the first (selected) stays.
+        for (let i = 0; i < 4; i++) {
+          mock.append(
+            h("div", { class: "fz-mock-row" }, h("span", { class: "fz-mock-icon" }), h("span", { class: "fz-mock-line" }))
+          );
+        }
+        break;
       case "menu":
         for (let i = 0; i < 4; i++) {
           mock.append(
@@ -957,7 +1077,8 @@
   // ---- options (under a feature that's on) ----
   // Each returns { el, sync }; sync() re-reads the pref.
 
-  function buildNumber(o) {
+  // The field and its unit, without a label: also used inline in a switch row.
+  function buildNumberField(o) {
     const input = h("input", {
       type: "number",
       class: "fz-number",
@@ -984,13 +1105,25 @@
       }
     });
     const el = h(
+      "span",
+      { class: "fz-number-wrap" },
+      o.prefix && h("span", { class: "fz-option-unit", text: o.prefix }),
+      input,
+      h("span", { class: "fz-option-unit", text: o.unit })
+    );
+    return { el, input, sync };
+  }
+
+  function buildNumber(o) {
+    const field = buildNumberField(o);
+    const el = h(
       "div",
       { class: "fz-option" },
-      h("label", { class: "fz-option-label", text: o.label, onclick: () => input.focus() }),
-      h("span", { class: "fz-number-wrap" }, input, h("span", { class: "fz-option-unit", text: o.unit })),
+      h("label", { class: "fz-option-label", text: o.label, onclick: () => field.input.focus() }),
+      field.el,
       o.hint && h("p", { class: "fz-option-hint", text: o.hint })
     );
-    return { el, sync };
+    return { el, sync: field.sync };
   }
 
   function buildRange(o) {
@@ -1137,15 +1270,52 @@
       "aria-label": o.label,
       onchange: e => setOn(o, e.target.checked),
     });
+    // A number that only matters while the switch is on, in the same row.
+    const extra = o.extra && buildNumberField(o.extra);
     const el = h(
       "div",
       { class: "fz-option" },
       h("label", { class: "fz-option-label", text: o.label, onclick: () => input.click() }),
       input,
+      extra?.el,
       o.hint && h("p", { class: "fz-option-hint", text: o.hint })
     );
-    return { el, sync: () => (input.checked = getBool(o)) };
+    const sync = () => {
+      input.checked = getBool(o);
+      if (extra) {
+        extra.sync();
+        extra.input.disabled = !input.checked;
+        extra.el.toggleAttribute("data-disabled", !input.checked);
+      }
+    };
+    return { el, sync };
   }
+
+  // Chips that each switch a pref on and off.
+  function buildToggles(o) {
+    const chips = o.items.map(item =>
+      h("button", {
+        type: "button",
+        class: "fz-chip fz-toggle-chip",
+        text: item.label,
+        onclick: () => setOn(item, !getBool(item)),
+      })
+    );
+    const el = h(
+      "div",
+      { class: "fz-option" },
+      h("span", { class: "fz-option-label", text: o.label }),
+      h("span", { class: "fz-chips", role: "group", "aria-label": o.label }, ...chips),
+      o.hint && h("p", { class: "fz-option-hint", text: o.hint })
+    );
+    const sync = () => o.items.forEach((item, i) => chips[i].setAttribute("aria-pressed", getBool(item)));
+    return { el, sync };
+  }
+
+  // A small title over the options that follow it.
+  const buildHeading = o => ({ el: h("div", { class: "fz-option-heading", text: o.label }), sync() {} });
+
+  const buildNote = o => ({ el: h("p", { class: "fz-option-hint fz-option-note", text: o.text }), sync() {} });
 
   // A button with what it would act on, e.g. Restore all to default.
   function buildAction(o) {
@@ -1156,10 +1326,13 @@
       text: o.button,
       onclick: () => o.run(),
     });
+    if (o.footer) {
+      button.className = "fz-link";
+    }
     const el = h(
       "div",
-      { class: "fz-option" },
-      h("span", { class: "fz-option-label", text: o.label }),
+      { class: o.footer ? "fz-option fz-option-footer" : "fz-option" },
+      o.label && h("span", { class: "fz-option-label", text: o.label }),
       status,
       button,
       o.hint && h("p", { class: "fz-option-hint", text: o.hint })
@@ -1171,7 +1344,95 @@
     return { el, sync };
   }
 
+  // A list of sites: a field that adds one on Enter, and a chip per site
+  // with × to remove it. Only excluded sites use it (FzTabUnload).
+  function buildSites(o) {
+    const input = h("input", {
+      type: "text",
+      class: "fz-text",
+      placeholder: o.placeholder,
+      spellcheck: "false",
+      autocomplete: "off",
+      "aria-label": o.label,
+    });
+    const list = h("div", { class: "fz-sites", role: "list", "aria-label": o.label });
+
+    const setInvalid = invalid => {
+      input.toggleAttribute("data-invalid", invalid);
+      input.title = invalid ? "Not a site. Type a name like example.com, or paste an address." : "";
+    };
+
+    function add() {
+      const site = FzTabUnload.normalizeSite(input.value);
+      if (!input.value.trim()) {
+        setInvalid(false);
+        return;
+      }
+      if (!site) {
+        setInvalid(true);
+        return;
+      }
+      FzTabUnload.saveExcludedSites([...readValue(o), site]);
+      input.value = "";
+      setInvalid(false);
+    }
+
+    input.addEventListener("keydown", e => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        add();
+      } else if (e.key === "Escape" && input.value) {
+        // Clears the field first, then closes the Library.
+        e.stopPropagation();
+        input.value = "";
+        setInvalid(false);
+      }
+    });
+    input.addEventListener("input", () => setInvalid(false));
+
+    const chip = site =>
+      h(
+        "span",
+        { class: "fz-site", role: "listitem" },
+        h("img", { class: "fz-site-icon", src: `page-icon:https://${site.split("/")[0]}/`, alt: "", onerror: e => (e.target.hidden = true) }),
+        h("span", { class: "fz-site-name", text: site }),
+        h("button", {
+          type: "button",
+          class: "fz-site-remove",
+          title: `Remove ${site}`,
+          "aria-label": `Remove ${site}`,
+          onclick: () => FzTabUnload.saveExcludedSites(readValue(o).filter(s => s !== site)),
+        })
+      );
+
+    let shown = "";
+    const sync = () => {
+      const sites = readValue(o);
+      // Rebuilt only when the list changed, so the favicons don't flicker.
+      const key = sites.join("\n");
+      if (key !== shown) {
+        shown = key;
+        list.replaceChildren(...sites.map(chip));
+      }
+      list.hidden = !sites.length;
+    };
+
+    const el = h(
+      "div",
+      { class: "fz-option fz-sites-option" },
+      h("label", { class: "fz-option-label", text: o.label, onclick: () => input.focus() }),
+      input,
+      list,
+      o.hint && h("p", { class: "fz-option-hint", text: o.hint })
+    );
+    return { el, sync };
+  }
+
   const OPTION_BUILDERS = {
+    heading: buildHeading,
+    note: buildNote,
+    toggles: buildToggles,
+    sites: buildSites,
     action: buildAction,
     number: buildNumber,
     range: buildRange,
@@ -1204,7 +1465,7 @@
 
   // Lower-cased text a search matches against: everything the row shows.
   function searchText(s) {
-    const options = (s.options ?? []).flatMap(o => [o.label, o.button, o.unit, o.hint, ...(o.keys ?? []).map(k => k.label)]);
+    const options = optionsOf(s).flatMap(o => [o.label, o.button, o.unit, o.hint, o.text, o.placeholder, ...(o.keys ?? []).map(k => k.label)]);
     const layouts = s.layout ? LAYOUTS.flatMap(l => [l.group, l.label, l.hint]) : [];
     const schemes = s.colors ? FzColors.allSchemes().map(x => x.name) : [];
     return [s.label, s.description, s.keywords, ...(s.tips ?? []), ...options, ...layouts, ...schemes]
@@ -2805,6 +3066,12 @@
   Services.prefs.addObserver(VERTICAL_TABS_PREF, observer);
   // Switched spaces: the scheme picker shows the new one's
   window.addEventListener("FzSpacesChanged", sync);
+  // Unload tabs' count of unloaded tabs. A tab loading again gets its panel
+  // back (TabBrowserInserted).
+  const TAB_EVENTS = ["TabBrowserDiscarded", "TabBrowserInserted", "TabClose"];
+  for (const type of TAB_EVENTS) {
+    gBrowser.tabContainer.addEventListener(type, sync);
+  }
   // Firefox's sidebar button expands/collapses: keep the layout picker current.
   const expandedObserver = new MutationObserver(sync);
   const tabs = document.getElementById("tabbrowser-tabs");
@@ -2818,6 +3085,9 @@
       Services.prefs.removeObserver(VISIBILITY_PREF, observer);
       Services.prefs.removeObserver(VERTICAL_TABS_PREF, observer);
       window.removeEventListener("FzSpacesChanged", sync);
+      for (const type of TAB_EVENTS) {
+        gBrowser.tabContainer.removeEventListener(type, sync);
+      }
       expandedObserver.disconnect();
     },
     { once: true }

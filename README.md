@@ -30,6 +30,7 @@ a floating address bar, Glance previews and a built-in Library.
 - **Glance**: Alt+click a link to preview it in a floating window.
 - **Touches**: restyle any website: pick an element and change it, zap clutter away, or write CSS. Several per site, each with its own switch. Share one by link: others try it in one click, then keep it.
 - **Tab sections**: folders above a line, new tabs below it, one click to clear them.
+- **Unload tabs**: tabs you haven't used for a set time unload by themselves, with Firefox's own unloading; also sets Firefox's low-memory unloader. Excluded sites stay loaded.
 - **Compact mode**: hide the toolbar and sidebar until hovered.
 - **Mods**: add or change features without editing the theme.
 

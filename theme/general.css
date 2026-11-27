@@ -318,11 +318,41 @@ toolbar .toolbarbutton-1 {
 /* [TAB SIDEBAR ZONE] */
 /* Better indicator of unloaded tabs */
 .tabbrowser-tab[pending="true"] {
-  .tab-icon-stack {
+  /* The icons, not the stack: the stack's zzz badge stays readable */
+  .tab-icon-stack > * {
     opacity: 0.4;
   }
   .tab-label-container {
     opacity: 0.7;
+  }
+}
+
+/* Unload tabs: 💤 on the favicon of every unloaded tab */
+@media -moz-pref("firefox-zen.tab-unload") {
+  .tabbrowser-tab[pending="true"] .tab-icon-stack {
+    position: relative;
+
+    &::after {
+      content: "\1F4A4";
+      position: absolute;
+      /* From the favicon's start: the stack is wider than the 16px icon */
+      inset: auto;
+      inset-block-start: -6px;
+      inset-inline-start: 8px;
+      width: auto;
+      height: auto;
+      white-space: nowrap;
+      font-size: 11px;
+      line-height: 1;
+      pointer-events: none;
+    }
+
+    /* Horizontal tabs hide a missing favicon (vertical ones show a globe):
+       the badge takes its place */
+    #tabbrowser-tabs[orient="horizontal"] .tabbrowser-tab:not([pinned]) &:not(:has(.tab-icon-image[src]))::after {
+      position: static;
+      margin-inline-end: 4px;
+    }
   }
 }
 
