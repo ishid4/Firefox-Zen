@@ -47,3 +47,20 @@
     margin: 6px;
   }
 }
+
+/* Firefox's Downloads panel footer: "Open in Library" first and wide,
+ * Firefox's "Show all downloads" on its right
+ * (JS/firefox-zen-library.uc.js). */
+#fz-downloads-footer-row {
+  gap: 4px;
+
+  & > #downloadsHistory {
+    flex: none;
+  }
+
+  /* Firefox resets these on #downloadsHistory by id only. */
+  & > #fz-downloads-library {
+    border: 0 !important;
+    margin: 0 !important;
+  }
+}

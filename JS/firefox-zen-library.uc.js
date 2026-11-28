@@ -3070,6 +3070,31 @@
     },
   };
 
+  // Firefox's toolbar Downloads panel: its footer gets "Open in Library"
+  // (Downloads view) as the main button, with Firefox's own "Show all
+  // downloads" kept to its right. Looks: theme/downloads.css.
+  function addDownloadsPanelButton() {
+    const history = document.getElementById("downloadsHistory");
+    if (!history || document.getElementById("fz-downloads-library")) {
+      return;
+    }
+    const row = document.createXULElement("hbox");
+    row.id = "fz-downloads-footer-row";
+    const button = document.createXULElement("button");
+    button.id = "fz-downloads-library";
+    button.className = history.className;
+    button.setAttribute("label", "Open in Library");
+    button.setAttribute("flex", "1");
+    button.setAttribute("pack", "start");
+    button.addEventListener("command", () => {
+      window.DownloadsPanel?.hidePanel();
+      open("downloads");
+    });
+    history.replaceWith(row);
+    history.removeAttribute("flex");
+    row.append(button, history);
+  }
+
   window.FirefoxZenLibrary = { isOpen, open, close, toggle, view: () => view, sidebarExpanded, setSidebarExpanded };
 
   async function start() {
@@ -3120,6 +3145,7 @@
       }
     });
     window.addEventListener("resize", place);
+    addDownloadsPanelButton();
     // Clicking a tab in the sidebar means "show me the page".
     document.getElementById("tabbrowser-tabs")?.addEventListener("mousedown", e => {
       if (root && e.button === 0 && e.target.closest?.(".tabbrowser-tab")) {
